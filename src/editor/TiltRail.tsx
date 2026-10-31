@@ -24,6 +24,10 @@ export function TiltRail() {
   const [draft, setDraft] = useState<string | null>(null)
   // While dragging or holding, show where the tilt is going rather than the spring catching up
   const shown = source === 'hold' ? target : angle
+  const endDrag = () => {
+    drag.current = null
+    setDragging(false)
+  }
 
   return (
     <Panel className="absolute top-1/2 left-3 flex w-12 -translate-y-1/2 flex-col items-center gap-1.5 rounded-[calc(var(--radius)+0.375rem+1px)] p-1.5">
@@ -74,6 +78,8 @@ export function TiltRail() {
           backgroundPosition: `0 ${-shown / DEG_PER_PX}px`,
         }}
         onPointerDown={(e) => {
+          // Only the primary button drags; a right-click opens a context menu and never sends pointerup
+          if (e.button !== 0) return
           e.currentTarget.setPointerCapture(e.pointerId)
           const start = useTilt.getState().source === 'hold' ? useTilt.getState().target : useTilt.getState().angle
           drag.current = { y: e.clientY, start }
@@ -82,13 +88,14 @@ export function TiltRail() {
         }}
         onPointerMove={(e) => {
           if (!drag.current) return
+          // A release that never reached us (outside the window, a lost capture): stop following the pointer
+          if (e.buttons === 0) return endDrag()
           // Dragging up tilts up
           holdAt(drag.current.start + (drag.current.y - e.clientY) * DEG_PER_PX)
         }}
-        onPointerUp={() => {
-          drag.current = null
-          setDragging(false)
-        }}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onLostPointerCapture={endDrag}
         onDoubleClick={() => holdAt(0)}
         onKeyDown={(e) => {
           const step = e.shiftKey ? 5 : 1

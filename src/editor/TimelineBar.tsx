@@ -196,7 +196,7 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
           style={{ width: x(totalLength) + PAD }}
           onPointerDown={(e) => {
             const el = e.target as HTMLElement
-            if (el.closest('button') || el.closest('[role=menu]')) return
+            if (e.button !== 0 || el.closest('button') || el.closest('[role=menu]')) return
             e.currentTarget.setPointerCapture(e.pointerId)
             const handle = el.closest<HTMLElement>('[data-resize]')
             const frame = frames.find((f) => f.id === handle?.dataset.resize)
@@ -209,6 +209,11 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
           }}
           onPointerMove={(e) => {
             const g = gesture.current
+            // The release never reached us: stop following the pointer
+            if (g && e.buttons === 0) {
+              gesture.current = null
+              return
+            }
             if (g?.mode === 'scrub') scrubTo(e.clientX)
             if (g?.mode === 'resize' && noteRef) {
               const length = clamp(Math.round(g.startLength + (e.clientX - g.startX) / pxPerUnit), LENGTH_LIMITS.min, LENGTH_LIMITS.max)
@@ -216,6 +221,12 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
             }
           }}
           onPointerUp={() => {
+            gesture.current = null
+          }}
+          onPointerCancel={() => {
+            gesture.current = null
+          }}
+          onLostPointerCapture={() => {
             gesture.current = null
           }}
         >
