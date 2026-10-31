@@ -1,0 +1,143 @@
+{
+  "id": "82e5f8ec-e552-4bdf-a578-cb3c6a509001",
+  "name": "Silly bird demo",
+  "createdAt": 1793424104623,
+  "updatedAt": 1793424104623,
+  "notes": [
+    {
+      "id": "bba83ba4-5295-44ec-a0b6-77ca5b7c2a20",
+      "name": "Demo 1",
+      "x": 0,
+      "y": 0,
+      "widthMm": 134,
+      "heightMm": 68,
+      "background": "solid",
+      "color": "#DBECC6",
+      "thread": {
+        "widthMm": 4,
+        "direction": "vertical",
+        "positionMm": 101,
+        "imageGapMm": 0,
+        "windows": {
+          "enabled": true,
+          "sections": [
+            {
+              "id": "07be72ef-9149-47af-b5e3-0a68c75bb306",
+              "startMm": 5,
+              "endMm": 17
+            },
+            {
+              "id": "1adb5ac1-2f75-4b95-9486-68b5c80e3493",
+              "startMm": 24,
+              "endMm": 32
+            },
+            {
+              "id": "a76a5a72-7f6f-4eb2-a175-2c37d42c69a2",
+              "startMm": 40,
+              "endMm": 62
+            }
+          ]
+        }
+      },
+      "frames": [
+        {
+          "id": "e409c98f-1369-4b6e-8762-0bb0309e3f11",
+          "kind": "image",
+          "color": "#ffffff",
+          "imageId": "42549f70-8b95-4989-942b-4205405d6027",
+          "name": "1 wee",
+          "length": 10
+        },
+        {
+          "id": "b66734d2-3009-4424-a7e8-9f68c36e5601",
+          "kind": "image",
+          "color": "#ffffff",
+          "imageId": "73cf3ad8-3909-4bfb-9f19-cc05fff30ece",
+          "name": "2 flap",
+          "length": 10
+        },
+        {
+          "id": "87661b44-a462-48a9-a94c-0a971f3e3b64",
+          "kind": "image",
+          "color": "#ffffff",
+          "imageId": "e4e551e8-132d-462a-8a6f-02c781d0a240",
+          "name": "3 FLAP",
+          "length": 10
+        },
+        {
+          "id": "634b7bca-d168-4525-b990-35fbcca8eb2b",
+          "kind": "image",
+          "color": "#ffffff",
+          "imageId": "1945fc81-6d68-499c-a297-7609be97793f",
+          "name": "4 flap",
+          "length": 10
+        },
+        {
+          "id": "632dafbb-60ca-44e0-905d-fe4e1b94659e",
+          "kind": "image",
+          "color": "#ffffff",
+          "imageId": "8a04476e-c89f-48cb-b6d9-7c021329c313",
+          "name": "5 wee!",
+          "length": 10
+        }
+      ],
+      "tilt": {
+        "speed": 1,
+        "curve": "smooth",
+        "holdSeconds": 0,
+        "cycleDeg": 25,
+        "transition": 0.3
+      }
+    },
+    {
+      "id": "d66ecebf-9be9-468b-a265-6d257bfa8891",
+      "name": "Demo 2",
+      "x": 154,
+      "y": 0,
+      "widthMm": 68,
+      "heightMm": 134,
+      "background": "solid",
+      "color": "#CDBBE6",
+      "thread": {
+        "widthMm": 5,
+        "direction": "horizontal",
+        "positionMm": 34,
+        "imageGapMm": 0,
+        "windows": {
+          "enabled": false,
+          "sections": []
+        }
+      },
+      "frames": [
+        {
+          "id": "5164e3b9-58d3-4d55-aeae-96928f3a8073",
+          "kind": "color",
+          "color": "#F26B5B",
+          "name": "Coral",
+          "length": 10
+        },
+        {
+          "id": "7f9cc6f0-45c7-459c-9c60-f107c857244f",
+          "kind": "color",
+          "color": "#F7C948",
+          "name": "Sun",
+          "length": 10
+        },
+        {
+          "id": "a7913bd6-710c-4e83-8466-1967bb4c64c6",
+          "kind": "color",
+          "color": "#1F9E89",
+          "name": "Teal",
+          "length": 10
+        }
+      ],
+      "tilt": {
+        "speed": 1,
+        "curve": "smooth",
+        "holdSeconds": 0,
+        "cycleDeg": 25,
+        "transition": 0.3
+      }
+    }
+  ]
+}

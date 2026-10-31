@@ -1,6 +1,5 @@
-import { migrateWindows } from './thread'
 import { storeImage } from './images'
-import { createNote, createProject } from './notes'
+import { DEFAULT_TILT, createNote, createProject } from './notes'
 import type { Frame, Project } from './types'
 
 const SKIES = ['#FFD166', '#F4A261', '#EF6F8C', '#B07BE0', '#6FB7FF']
@@ -77,9 +76,14 @@ async function drawBird(i: number): Promise<Blob> {
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not draw'))), 'image/png'))
 }
 
-/** A ready-made project with a five-frame flapping bird on a windowed thread */
+/**
+ * The demo used when the shared template can't be loaded. It matches the published template
+ * (supabase/demo/demo-template.json): Demo 1 is a landscape note with the bird on a windowed vertical
+ * thread, Demo 2 a portrait note with three colour frames on a continuous horizontal thread.
+ */
 export async function createDemoProject(): Promise<Project> {
-  const frames: Frame[] = await Promise.all(
+  const tilt = { ...DEFAULT_TILT, cycleDeg: 25, transition: 0.3 }
+  const birdFrames: Frame[] = await Promise.all(
     WORDS.map(async (word, i) => ({
       id: crypto.randomUUID(),
       kind: 'image' as const,
@@ -89,16 +93,35 @@ export async function createDemoProject(): Promise<Project> {
       length: 10,
     })),
   )
-  const note = createNote({ name: 'Flappy 25', x: 0, y: 0, widthMm: 68, heightMm: 134, color: '#8A4F9E' })
+  const demo1 = createNote({ name: 'Demo 1', x: 0, y: 0, widthMm: 134, heightMm: 68, color: '#DBECC6' })
+  const demo2 = createNote({ name: 'Demo 2', x: 154, y: 0, widthMm: 68, heightMm: 134, color: '#CDBBE6' })
+  const window = (startMm: number, endMm: number) => ({ id: crypto.randomUUID(), startMm, endMm })
+  const colorFrames: Frame[] = [
+    ['Coral', '#F26B5B'],
+    ['Sun', '#F7C948'],
+    ['Teal', '#1F9E89'],
+  ].map(([name, color]) => ({ id: crypto.randomUUID(), kind: 'color' as const, color, name, length: 10 }))
+
   return {
     ...createProject('Silly bird demo'),
     notes: [
       {
-        ...note,
-        frames,
-        // A 6 mm thread repeats the 2:3 bird every 9 mm, so 9 mm windows show one bird each
-        thread: { ...note.thread, widthMm: 6, imageGapMm: 0, windows: migrateWindows({ enabled: true, windowMm: 9, gapMm: 9, offsetMm: 0 }, note.heightMm) },
-        tilt: { ...note.tilt, cycleDeg: 30, transition: 0.3 },
+        ...demo1,
+        frames: birdFrames,
+        // Three windows of different lengths on a thread right of centre
+        thread: {
+          ...demo1.thread,
+          widthMm: 4,
+          positionMm: 101,
+          windows: { enabled: true, sections: [window(5, 17), window(24, 32), window(40, 62)] },
+        },
+        tilt,
+      },
+      {
+        ...demo2,
+        frames: colorFrames,
+        thread: { ...demo2.thread, widthMm: 5, direction: 'horizontal', positionMm: 34, windows: { enabled: false, sections: [] } },
+        tilt,
       },
     ],
   }
