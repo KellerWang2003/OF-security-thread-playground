@@ -149,20 +149,10 @@ export function Canvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus?.token])
 
+  // Editing windows pauses playback but leaves the view where it is, so you edit at the zoom you chose
   useEffect(() => {
-    if (!editingWindows || !selected || !size) return
+    if (!editingWindows || !selected) return
     setTilt({ source: 'slider', target: useTilt.getState().angle })
-    const v = viewRef.current
-    if (!v) return
-    const zoom = Math.max(1, v.zoom)
-    const s = zoom * PX_PER_MM
-    const horizontal = selected.thread.direction === 'horizontal'
-    // Centre the thread in the canvas area to the left of the inspector.
-    setView({ zoom,
-      x: (size.width - 268) / 2 - (selected.x + (horizontal ? selected.widthMm / 2 : selected.thread.positionMm)) * s,
-      y: (FIT_INSETS.top + size.height - FIT_INSETS.bottom) / 2 - (selected.y + (horizontal ? selected.thread.positionMm : selected.heightMm / 2)) * s,
-    })
-    // Only entering the tool recentres; resizing windows must not move the canvas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingWindows, selectedId])
 
