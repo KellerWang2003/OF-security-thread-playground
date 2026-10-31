@@ -1,3 +1,4 @@
+import { recordEdit, historyStep, reconcileHistory, resetHistory } from './history'
 import { useWorkspace, putProject, editorProject } from '../cloud/workspace'
 import { copyImage, removeImage } from './images'
 import { nextNotePosition } from './notes'
@@ -23,7 +24,9 @@ const actions = {
   add: (project: Project) => putProject(project),
   update: (id: string, change: (project: Project) => Project) => {
     const project = editorProject(id)
-    if (project) putProject({ ...change(project), updatedAt: Date.now() })
+    if (!project) return
+    const next = change(project)
+    if (recordEdit(project, next)) putProject({ ...next, updatedAt: Date.now() })
   },
   duplicate: async (id: string) => {
     const workspace = useWorkspace.getState().workspace
@@ -50,6 +53,24 @@ export const useProjects = Object.assign(
     useWorkspace(selector ?? ((state) => state as T)),
   { getState: () => ({ ...useWorkspace.getState(), ...actions }) },
 )
+
+// History is session-local and is invalidated if the cloud replaces a project.
+const unsubscribeHistory = useWorkspace.subscribe((state, previous) => {
+  if (state.workspace !== previous.workspace) resetHistory()
+  reconcileHistory([...state.projects, ...(state.demoPreview ? [state.demoPreview] : [])])
+})
+if (import.meta.hot) import.meta.hot.dispose(unsubscribeHistory)
+
+export function undoProject(id: string) {
+  const project = editorProject(id)
+  const restored = project && historyStep(project, 'undo')
+  if (restored) putProject(restored)
+}
+export function redoProject(id: string) {
+  const project = editorProject(id)
+  const restored = project && historyStep(project, 'redo')
+  if (restored) putProject(restored)
+}
 
 export const updateProject = (id: string, change: (project: Project) => Project) =>
   useProjects.getState().update(id, change)

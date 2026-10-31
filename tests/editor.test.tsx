@@ -110,4 +110,26 @@ describe('username workspace editor', () => {
     expect(useTilt.getState().source).toBe('slider')
   })
 
+  it('supports toolbar and keyboard undo/redo in the temporary editor', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'undo-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await screen.findByPlaceholderText('Untitled project')
+    await user.click(screen.getByRole('button', { name: 'Demo', exact: true }))
+    await screen.findByRole('button', { name: 'Exit demo' })
+    expect((screen.getByRole('button', { name: 'Undo', exact: true }) as HTMLButtonElement).disabled).toBe(true)
+    const name = screen.getByRole('textbox', { name: 'Project name' }) as HTMLInputElement
+    await user.clear(name)
+    await user.type(name, 'Changed demo')
+    await user.click(screen.getByRole('button', { name: 'Undo', exact: true }))
+    expect(name.value).toBe('Demo fixture')
+    fireEvent.keyDown(window, { key: 'z', code: 'KeyZ', metaKey: true, shiftKey: true })
+    expect(name.value).toBe('Changed demo')
+    fireEvent.keyDown(window, { key: 'z', code: 'KeyZ', ctrlKey: true })
+    expect(name.value).toBe('Demo fixture')
+    fireEvent.keyDown(window, { key: 'y', code: 'KeyY', ctrlKey: true })
+    expect(name.value).toBe('Changed demo')
+    expect(saves).not.toHaveBeenCalled()
+  })
+
 })

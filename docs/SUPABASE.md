@@ -42,6 +42,12 @@ Device caches, artwork, and outboxes are separated by workspace; each browser ta
 
 This is local recovery after the app has loaded, not an installable offline app: a fresh page load still needs the frontend assets, and artwork not cached on that device needs a connection. Clearing browser data removes local drafts; completed cloud saves remain in Supabase.
 
+## Undo and redo
+
+The editor retains up to 100 project snapshots in memory per project during the current workspace session. Undo/redo restores banknotes, positions, frames, image references, project names, and settings through the same cloud save path as an ordinary edit. Playback, selection, and canvas zoom/pan do not create history entries. Project creation/deletion from the project list is outside editor undo history.
+
+Drag/scrub gestures are single steps; consecutive typing in the same field is grouped. New edits discard the redo branch. A different cloud project version clears stale history so undo cannot overwrite another device's newer work. Signing out, reloading, or discarding the demo clears its history. Artwork retention allows removed/replaced images to be restored without re-uploading the originals.
+
 ## Importing existing browser projects
 
 On the project list, **Import browser projects** copies original projects and their artwork into the selected workspace. Original IndexedDB records and images remain untouched. Each source project gets a stable target ID in that workspace, so interrupted imports retry without duplicates. Images are uploaded before the imported project is considered saved.

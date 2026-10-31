@@ -2,9 +2,9 @@ import 'fake-indexeddb/auto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createNote, createProject } from '../src/lib/notes'
 import * as legacy from '../src/lib/db'
-import { openWorkspace, closeWorkspace, importBrowserProjects, useWorkspace, putProject, openDemoPreview, clearDemoPreview, hasPendingSaves } from '../src/cloud/workspace'
+import { openWorkspace, closeWorkspace, importBrowserProjects, useWorkspace, putProject, openDemoPreview, clearDemoPreview, hasPendingSaves, retrySync } from '../src/cloud/workspace'
 import { readArtwork, readCache } from '../src/cloud/cache'
-import { updateNote, findNote } from '../src/lib/store'
+import { updateNote, findNote, updateProject, undoProject, redoProject } from '../src/lib/store'
 import { createRepository } from '../src/cloud/repository'
 
 vi.mock('../src/cloud/repository', async (importOriginal) => {
@@ -111,6 +111,35 @@ describe('username workspaces and browser import', () => {
     const fresh = await openDemoPreview()
     expect(fresh.notes[0].name).toBe('Demo banknote')
     expect(fresh.id).not.toBe(copy.id)
+  })
+
+  it('autosaves undo and redo as normal cloud changes and resets history on workspace change', async () => {
+    const project = createProject('Before edit')
+    const saved: string[] = []
+    vi.mocked(createRepository).mockReturnValueOnce({
+      list: async () => [],
+      save: async (record) => {
+        saved.push(record.project.name)
+        return { project: record.project, revision: record.revision, deleted: record.deleted }
+      },
+    })
+    await openWorkspace('history-save-test')
+    putProject(project)
+    await retrySync()
+    updateProject(project.id, (current) => ({ ...current, name: 'After edit' }))
+    await retrySync()
+    undoProject(project.id)
+    expect(useWorkspace.getState().projects[0].name).toBe('Before edit')
+    await retrySync()
+    redoProject(project.id)
+    expect(useWorkspace.getState().projects[0].name).toBe('After edit')
+    await retrySync()
+    expect(saved).toEqual(['Before edit', 'After edit', 'Before edit', 'After edit'])
+    expect((await readCache('history-save-test'))[0].project.name).toBe('After edit')
+    closeWorkspace()
+    await openWorkspace('history-other-workspace')
+    undoProject(project.id)
+    expect(useWorkspace.getState().projects).toEqual([])
   })
 
 })

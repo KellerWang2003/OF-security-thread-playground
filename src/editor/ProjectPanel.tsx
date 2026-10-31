@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft, Copy, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, Copy, Plus, Redo2, Trash2, Undo2 } from 'lucide-react'
 import { useState } from 'react'
 import {
   AlertDialog,
@@ -18,7 +18,8 @@ import { IconButton, Panel } from '../components/controls'
 import { CloudStatus } from '../components/CloudStatus'
 import { runAction, reportError } from '../cloud/notices'
 import { NoteView } from '../components/NoteView'
-import { duplicateNote, removeNote, updateNote, updateProject } from '../lib/store'
+import { duplicateNote, removeNote, updateNote, updateProject, undoProject, redoProject } from '../lib/store'
+import { useHistory } from '../lib/history'
 import type { Note, Project } from '../lib/types'
 
 const THUMB = 28
@@ -37,17 +38,22 @@ export function ProjectPanel({
   onSelect: (noteId: string) => void
   onAdd: () => void
 }) {
+  const history = useHistory((state) => state.entries[project.id])
   const [open, setOpen] = useState(true)
   const [renaming, setRenaming] = useState<string>()
   const [deleting, setDeleting] = useState<Note>()
 
   return (
     <Panel className="absolute top-3 left-3 flex max-h-[calc(100%-120px)] w-[248px] flex-col">
-      <div className="flex items-center gap-1 p-1.5">
+      <div className="flex items-center justify-between gap-1 p-1.5">
         <Button variant="ghost" size="sm" className="px-1.5" onClick={() => (location.hash = '')}>
           <ChevronLeft />
           {isDemo ? 'Exit demo' : 'Projects'}
         </Button>
+        <div className="flex items-center gap-0.5">
+          <IconButton label="Undo" title="Undo (⌘/Ctrl+Z)" disabled={!history?.past.length} onClick={() => undoProject(project.id)}><Undo2 /></IconButton>
+          <IconButton label="Redo" title="Redo (⌘/Ctrl+Shift+Z)" disabled={!history?.future.length} onClick={() => redoProject(project.id)}><Redo2 /></IconButton>
+        </div>
       </div>
       <div className="flex items-center gap-2 pb-1.5 pl-1.5 pr-3">
         <Input

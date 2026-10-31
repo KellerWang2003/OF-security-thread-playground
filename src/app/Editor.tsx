@@ -1,3 +1,5 @@
+import { undoProject, redoProject } from '../lib/store'
+import { beginHistoryGroup, endHistoryGroup, breakHistoryGroup } from '../lib/history'
 import { togglePlayback } from '../tilt/tilt'
 import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -51,6 +53,33 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     return () => window.removeEventListener('keydown', onSpace, { capture: true })
   }, [])
 
+  useEffect(() => {
+    const onHistory = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return
+      const key = event.key.toLowerCase()
+      if (key !== 'z' && key !== 'y') return
+      const element = event.target instanceof Element ? event.target : null
+      // Text fields keep native text undo while they are being edited.
+      if (element?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return
+      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return
+      event.preventDefault()
+      if (key === 'y' || event.shiftKey) redoProject(project.id)
+      else undoProject(project.id)
+    }
+    const endGesture = () => endHistoryGroup(project.id)
+    window.addEventListener('keydown', onHistory)
+    window.addEventListener('pointerup', endGesture)
+    window.addEventListener('pointercancel', endGesture)
+    window.addEventListener('blur', endGesture)
+    return () => {
+      window.removeEventListener('keydown', onHistory)
+      window.removeEventListener('pointerup', endGesture)
+      window.removeEventListener('pointercancel', endGesture)
+      window.removeEventListener('blur', endGesture)
+      endGesture()
+    }
+  }, [project.id])
+
   const note = project.notes.find((n) => n.id === selectedId)
   const noteRef = note ? { projectId: project.id, noteId: note.id } : undefined
 
@@ -60,7 +89,13 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   }
 
   return (
-    <div className="relative flex h-full bg-muted/40">
+    <div className="relative flex h-full bg-muted/40"
+      onPointerDownCapture={(event) => {
+        if (!(event.target instanceof Element) || !event.target.closest('input, textarea, [contenteditable]')) beginHistoryGroup(project.id)
+      }}
+      onFocusCapture={() => breakHistoryGroup(project.id)}
+      onBlurCapture={() => breakHistoryGroup(project.id)}
+    >
       {isEmpty ? (
         <div className="flex flex-1 items-center justify-center">
           <Button onClick={() => setAdding(true)}>

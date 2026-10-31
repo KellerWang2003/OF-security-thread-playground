@@ -53,6 +53,10 @@ src/
   lib/          types, defaults and migrations, legacy IndexedDB import, editor actions, frame maths, demo
 ```
 
+## Undo and redo
+
+Undo/redo buttons sit beside Projects in the editor. Use ⌘/Ctrl+Z to undo, ⌘/Ctrl+Shift+Z to redo, or Ctrl+Y to redo. History covers project names, banknotes, artwork, thread settings, and timeline edits. Continuous drags and scrubs are grouped into one step; text fields retain native text undo while focused. Restored edits autosave normally. Each project keeps up to 100 steps for the current session, including temporary demos.
+
 ## Checks
 
 ```bash
