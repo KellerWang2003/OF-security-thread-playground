@@ -59,7 +59,9 @@ export function Editor({ project }: { project: Project }) {
       )}
 
       <ProjectPanel project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} />
-      {!isEmpty && <TimelineBar note={note} noteRef={noteRef} besidePanel={note !== undefined} />}
+      {!isEmpty && (
+        <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
+      )}
       {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} />}
 
       {adding && (

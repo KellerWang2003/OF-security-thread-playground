@@ -6,6 +6,7 @@ export const MAX_FRAMES = 5
 export const DEFAULT_LENGTH = 10
 export const LENGTH_LIMITS = { min: 1, max: 100 }
 export const CYCLE_LIMITS = { min: 2, max: 120 }
+export const DEFAULT_TILT = { cycleDeg: 30, transition: 0 }
 export const THREAD_WIDTH = { min: 3, max: 6, step: 0.5 }
 export const NOTE_SIZE = { min: 20, max: 250 }
 export const FRAME_COLORS = ['#D9A441', '#2E9C8F', '#C2456B', '#4A6FD1', '#7C4DBA']
@@ -56,7 +57,7 @@ export function createNote({
     color,
     thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, tileMm: 10, windows: DEFAULT_WINDOWS },
     frames: [colorFrame(0), colorFrame(1)],
-    tilt: { cycleDeg: 30, transition: 0 },
+    tilt: DEFAULT_TILT,
   }
 }
 

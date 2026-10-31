@@ -13,8 +13,8 @@ import { IconButton, Panel, ScrubField } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
 import { clamp, frameMix, frameSpans } from '../lib/frames'
 import { pickFiles } from '../lib/images'
-import { CYCLE_LIMITS, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
-import { updateNote } from '../lib/store'
+import { CYCLE_LIMITS, DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
+import { updateProject } from '../lib/store'
 import type { Frame, Note } from '../lib/types'
 import { setTilt, useTilt } from '../tilt/tilt'
 import { addColorFrame, addImageFrames, deleteFrame, moveFrame, replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
@@ -33,10 +33,22 @@ const PAD = 12
 const ZOOM = { min: 3, max: 40, initial: 10 }
 
 /**
- * Bottom of the canvas: play and pause; with a banknote selected the panel widens to show that
- * banknote's frame settings and frames.
+ * Bottom of the canvas: play and pause and the project's cycle and fade, always; with a banknote
+ * selected the panel widens to show that banknote's frames.
  */
-export function TimelineBar({ note, noteRef, besidePanel }: { note?: Note; noteRef?: NoteRef; besidePanel: boolean }) {
+export function TimelineBar({
+  projectId,
+  notes,
+  note,
+  noteRef,
+  besidePanel,
+}: {
+  projectId: string
+  notes: Note[]
+  note?: Note
+  noteRef?: NoteRef
+  besidePanel: boolean
+}) {
   const { angle, source, target } = useTilt()
   const playing = source === 'wobble'
 
@@ -57,22 +69,21 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note?: Note; noteR
         {playing ? <Pause /> : <Play />}
       </IconButton>
 
-      {note && noteRef && (
-        <>
-          <FrameSettings note={note} noteRef={noteRef} />
-          <FrameTrack note={note} noteRef={noteRef} />
-        </>
-      )}
+      <FrameSettings projectId={projectId} tilt={(note ?? notes.at(0))?.tilt ?? DEFAULT_TILT} />
+      {note && noteRef && <FrameTrack note={note} noteRef={noteRef} />}
     </Panel>
   )
 }
 
-/** The selected banknote's frame settings: degrees of tilt for one full cycle, and the crossfade */
-function FrameSettings({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
-  const { tilt } = note
+/**
+ * Degrees of tilt for one full cycle, and the crossfade. They are the same for every banknote in the
+ * project, so a change applies to all of them.
+ */
+function FrameSettings({ projectId, tilt }: { projectId: string; tilt: Note['tilt'] }) {
   const setTiltSettings = (patch: Partial<Note['tilt']>) =>
-    updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, tilt: { ...n.tilt, ...patch } }))
-  return (      <div className="flex w-[148px] shrink-0 flex-col justify-center gap-1.5">
+    updateProject(projectId, (p) => ({ ...p, notes: p.notes.map((n) => ({ ...n, tilt: { ...n.tilt, ...patch } })) }))
+  return (
+    <div className="flex w-[148px] shrink-0 flex-col justify-center gap-1.5">
       <ScrubField
         label="Cycle"
         title="Degrees of tilt for one full cycle of the frames"

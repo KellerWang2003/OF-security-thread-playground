@@ -38,12 +38,14 @@ export function AddNoteDialog({
           className="contents"
           onSubmit={(e) => {
             e.preventDefault()
-            const note = createNote({
+            const created = createNote({
               name: name.trim() || `Banknote ${notes.length + 1}`,
               ...nextNotePosition(notes),
               ...size,
               color,
             })
+            // Cycle and fade are shared by every banknote in the project
+            const note = last ? { ...created, tilt: last.tilt } : created
             addNote(projectId, note)
             onAdded(note.id)
             onOpenChange(false)
