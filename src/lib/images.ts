@@ -53,6 +53,23 @@ export function useImageUrl(id: string | undefined) {
   return urls.get(id) ?? (loaded?.id === id ? loaded.url : undefined)
 }
 
+/** Height ÷ width of an image file, read from the image itself (works for SVG too) */
+export function imageAspect(file: Blob): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve(img.naturalWidth > 0 ? img.naturalHeight / img.naturalWidth : undefined)
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      resolve(undefined)
+    }
+    img.src = url
+  })
+}
+
 /** Opens the system file picker without needing a hidden input in the tree */
 export function pickFiles({ multiple = false } = {}): Promise<File[]> {
   return new Promise((resolve) => {

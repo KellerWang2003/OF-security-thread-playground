@@ -56,7 +56,7 @@ export function ScrubField({
       )}
     >
       <span
-        className="flex h-full w-7 shrink-0 cursor-ew-resize touch-none items-center justify-center text-xs text-muted-foreground select-none"
+        className="flex h-full min-w-7 shrink-0 cursor-ew-resize touch-none items-center justify-center px-2 text-xs text-muted-foreground select-none"
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId)
           setScrub({ x: e.clientX, start: value })

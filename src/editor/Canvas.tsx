@@ -28,7 +28,7 @@ interface View {
 type Gesture =
   | { mode: 'pan'; startX: number; startY: number; view: View; onBackground: boolean }
   | { mode: 'move'; noteId: string; startX: number; startY: number; noteX: number; noteY: number }
-  | { mode: 'tilt'; startX: number; startY: number; start: number; axis: Note['tilt']['axis']; range: number }
+  | { mode: 'tilt'; startX: number; startY: number; start: number; range: number }
 
 function fitView(notes: Note[], size: { width: number; height: number }): View {
   const minX = Math.min(...notes.map((n) => n.x))
@@ -200,7 +200,6 @@ export function Canvas({
             startX: e.clientX,
             startY: e.clientY,
             start,
-            axis: note.tilt.axis,
             range: note.tilt.rangeDeg,
           }
           setTilt({ source: 'drag', target: start })
@@ -219,8 +218,8 @@ export function Canvas({
           updateNote(projectId, g.noteId, (n) => ({ ...n, x: snap(g.noteX + dx / scale), y: snap(g.noteY + dy / scale) }))
         } else {
           // About 160 px of drag sweeps half the range
-          const delta = g.axis === 'vertical' ? -dy : dx
-          setTilt({ target: clamp(g.start + (delta * g.range) / 160, -g.range, g.range) })
+          // Lenticular lenses respond to tilting back and forth, so only vertical drags tilt
+          setTilt({ target: clamp(g.start - (dy * g.range) / 160, -g.range, g.range) })
         }
       }}
       onPointerUp={(e) => {
@@ -274,7 +273,7 @@ export function Canvas({
                 className={cn(
                   'rounded-[2px] outline-offset-4',
                   isSelected ? 'outline-2 outline-primary/50' : 'outline-0',
-                  !spaceDown && (note.tilt.axis === 'vertical' ? 'cursor-ns-resize' : 'cursor-ew-resize'),
+                  !spaceDown && 'cursor-ns-resize',
                 )}
               >
                 <NoteView note={note} scale={scale} angle={angle} perspective={perspective} sheen={sheen} />

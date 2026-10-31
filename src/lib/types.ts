@@ -1,9 +1,3 @@
-/** vertical = tilting the note back and forth (horizontal lenses); horizontal = side to side (vertical lenses) */
-export type TiltAxis = 'vertical' | 'horizontal'
-
-/** stretch = one image runs the full thread length; repeat = a shorter tile repeats down the thread */
-export type FrameFit = 'stretch' | 'repeat'
-
 export interface Frame {
   id: string
   kind: 'color' | 'image'
@@ -14,14 +8,28 @@ export interface Frame {
 
 export interface ThreadSettings {
   widthMm: number
-  /** Thread centre, measured from the note's left edge */
-  xMm: number
-  fit: FrameFit
+  /** Which way the thread runs across the note */
+  direction: 'vertical' | 'horizontal'
+  /** Thread centre: from the left edge for a vertical thread, from the top edge for a horizontal one */
+  positionMm: number
+  /**
+   * Length of the section of each frame image that repeats down the thread. Images are scaled to the
+   * thread's width at their own aspect ratio and cropped to this length, the same for every frame.
+   */
   tileMm: number
+  windows: ThreadWindows
+}
+
+/** A windowed thread is woven into the paper: it shows in windows separated by covered bridges */
+export interface ThreadWindows {
+  enabled: boolean
+  windowMm: number
+  gapMm: number
+  /** Shifts the windows along the thread, from the note's top edge */
+  offsetMm: number
 }
 
 export interface TiltSettings {
-  axis: TiltAxis
   /** The frames cycle once from -rangeDeg to +rangeDeg, a full cycle of 2 × rangeDeg */
   rangeDeg: number
   /** 0 = hard cut between frames, 1 = crossfade across the whole slice */

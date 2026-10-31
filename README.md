@@ -11,9 +11,9 @@ npm run dev
 
 - **Projects:** create (just a name), open, rename, duplicate and delete. Everything autosaves to the browser's IndexedDB, including uploaded images; nothing leaves your machine.
 - **Notes:** a project holds any number of notes, like pages in a document. Each has its own name, size in mm, colour, optional face artwork, thread, frames and tilt settings. Add, duplicate and delete them from the left panel.
-- **Thread:** width 3 to 6 mm, position from the left edge, frames stretched full length or repeated as a tile.
+- **Thread:** vertical or horizontal, width 3 to 6 mm, position across the note, and windows (open length, gap, offset). Frame images keep their aspect ratio at the thread's width and repeat along it; one repeat height applies to every frame and is set from the first upload.
 - **Frames:** upload, reorder, replace, rename and delete; colour frames as placeholders. Drop images on the note to add them.
-- **Canvas:** every note of a project sits on one canvas. Scroll or space-drag to pan, pinch or ⌘-scroll to zoom (100% is about true size), drag a note's label to move it, and use the zoom controls to fit everything.
+- **Canvas:** every note of a project sits on one canvas. Scroll or space-drag to pan, pinch or ⌘-scroll to zoom (100% is about true size), drag a note's label to move it. Tilting is back and forth only (the way a lenticular thread with horizontal lenses responds), and use the zoom controls to fit everything.
 - **Tilt:** drag on a note, auto-wobble or an angle slider; back and forth or side to side; range, crossfade, perspective and a moving highlight.
 
 ## Layout of the editor

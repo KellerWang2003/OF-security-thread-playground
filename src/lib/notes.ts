@@ -1,4 +1,4 @@
-import type { Frame, Note, Project } from './types'
+import type { Frame, Note, Project, ThreadWindows } from './types'
 
 export const MIN_FRAMES = 2
 export const MAX_FRAMES = 5
@@ -6,6 +6,7 @@ export const THREAD_WIDTH = { min: 3, max: 6, step: 0.5 }
 export const NOTE_SIZE = { min: 20, max: 250 }
 export const FRAME_COLORS = ['#D9A441', '#2E9C8F', '#C2456B', '#4A6FD1', '#7C4DBA']
 export const DEFAULT_NOTE = { widthMm: 150, heightMm: 70, color: '#5B6B8C' }
+export const DEFAULT_WINDOWS: ThreadWindows = { enabled: true, windowMm: 8, gapMm: 6, offsetMm: 0 }
 /** Space left between notes when they are placed on the canvas */
 export const NOTE_GAP = 20
 
@@ -48,9 +49,9 @@ export function createNote({
     heightMm,
     background: 'solid',
     color,
-    thread: { widthMm: 4, xMm: widthMm / 2, fit: 'stretch', tileMm: 10 },
+    thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, tileMm: 10, windows: DEFAULT_WINDOWS },
     frames: [colorFrame(0), colorFrame(1)],
-    tilt: { axis: 'vertical', rangeDeg: 30, transition: 0 },
+    tilt: { rangeDeg: 30, transition: 0 },
   }
 }
 
@@ -77,7 +78,17 @@ export function migrateProject(raw: unknown): Project {
   const placed: Note[] = []
   for (const raw of notes) {
     // Older notes had no background mode; an uploaded face meant an image background
-    const n: Note = { ...raw, background: raw.background ?? (raw.faceImageId ? 'image' : 'solid') }
+    const n: Note = {
+      ...raw,
+      background: raw.background ?? (raw.faceImageId ? 'image' : 'solid'),
+      thread: {
+        widthMm: raw.thread.widthMm,
+        direction: raw.thread.direction ?? 'vertical',
+        positionMm: raw.thread.positionMm ?? (raw.thread as { xMm?: number }).xMm ?? raw.widthMm / 2,
+        tileMm: raw.thread.tileMm ?? 10,
+        windows: raw.thread.windows ?? DEFAULT_WINDOWS,
+      },
+    }
     placed.push(Number.isFinite(n.x) && Number.isFinite(n.y) ? n : { ...n, ...nextNotePosition(placed) })
   }
   return { ...rest, notes: placed }

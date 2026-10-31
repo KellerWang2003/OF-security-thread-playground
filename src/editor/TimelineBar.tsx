@@ -10,11 +10,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
-import { FrameFill } from '../components/NoteView'
+import { FrameThumb } from '../components/NoteView'
 import { clamp, formatDeg, frameMix } from '../lib/frames'
 import { pickFiles } from '../lib/images'
 import { MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
-import type { Note, TiltAxis } from '../lib/types'
+import type { Note } from '../lib/types'
 import { setTilt, useTilt } from '../tilt/tilt'
 import { addColorFrame, addImageFrames, deleteFrame, moveFrame, replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
 
@@ -27,27 +27,14 @@ function pickColor(initial: string, onPick: (color: string) => void) {
   input.click()
 }
 
-/**
- * The note seen edge-on, so you can tell which way it is tilting: from the side for back-and-forth
- * tilts (the dot is the top edge), from above for side-to-side tilts (the dot is the right edge).
- */
-function TiltIndicator({ angle, axis }: { angle: number; axis: TiltAxis }) {
-  const rotation = axis === 'vertical' ? angle : -angle
+/** The note seen edge-on from the side, so you can tell which way it is tilting; the dot is its top edge */
+function TiltIndicator({ angle }: { angle: number }) {
   return (
     <svg viewBox="-16 -16 32 32" className="size-8 shrink-0 text-foreground" aria-hidden>
       <circle r="15" className="fill-muted" />
-      <g transform={`rotate(${rotation})`}>
-        {axis === 'vertical' ? (
-          <>
-            <line x1="0" y1="-10" x2="0" y2="10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-            <circle cx="0" cy="-10" r="2.5" fill="currentColor" />
-          </>
-        ) : (
-          <>
-            <line x1="-10" y1="0" x2="10" y2="0" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-            <circle cx="10" cy="0" r="2.5" fill="currentColor" />
-          </>
-        )}
+      <g transform={`rotate(${angle})`}>
+        <line x1="0" y1="-10" x2="0" y2="10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+        <circle cx="0" cy="-10" r="2.5" fill="currentColor" />
       </g>
     </svg>
   )
@@ -61,7 +48,7 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
   const track = useRef<HTMLDivElement>(null)
   const scrubbing = useRef(false)
   const { angle, source, target } = useTilt()
-  const { frames, tilt, thread } = note
+  const { frames, tilt } = note
   const range = tilt.rangeDeg
   const { current } = frameMix(angle, range, frames.length, tilt.transition)
   const playing = source === 'wobble'
@@ -85,7 +72,7 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
           >
             {playing ? <Pause /> : <Play />}
           </IconButton>
-          <TiltIndicator angle={angle} axis={tilt.axis} />
+          <TiltIndicator angle={angle} />
         </div>
         <span className="text-xs font-medium tabular-nums">{formatDeg(angle)}</span>
       </div>
@@ -114,7 +101,7 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
               i === current && 'ring-2 ring-primary/60',
             )}
           >
-            <FrameFill frame={frame} fit={thread.fit} tilePx={20} />
+            <FrameThumb frame={frame} />
             <span className="absolute top-1 left-1.5 rounded bg-background/80 px-1 text-[10px] font-medium tabular-nums">
               {i + 1}
             </span>
