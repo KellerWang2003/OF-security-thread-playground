@@ -16,6 +16,9 @@ import {
   firstReveal,
   frameAt,
   slotOrder,
+  slotAt,
+  slotEdges,
+  minCycleToHide,
   lensFrom,
   reachFraction,
   repeatFit,
@@ -40,6 +43,8 @@ interface Settings {
   count: number
   reach: number
   aircraft: boolean[]
+  /** Relative length of each frame on the timeline */
+  lengths: number[]
   direction: 'vertical' | 'horizontal'
   widthMm: number
   /** Image width ÷ height; images stay upright */
@@ -64,6 +69,7 @@ const BASE: Settings = {
   count: 5,
   reach: 30,
   aircraft: [false, false, false, true, true],
+  lengths: [1, 1, 1, 1, 1],
   direction: 'vertical',
   widthMm: 5,
   aspect: 1,
@@ -78,10 +84,11 @@ const BASE: Settings = {
 }
 
 const PRESETS: { id: string; label: string; title: string; patch: Partial<Settings> }[] = [
-  { id: 'today', label: 'Today', title: 'Horizontal lens: only up/down animates', patch: { xOn: false, yOn: true, cycleY: 64, flatAt: 'start', aircraft: [false, false, false, false, false] } },
-  { id: '45', label: '45°', title: 'Both tilts play the sequence at the same speed', patch: { xOn: true, yOn: true, cycleX: 64, cycleY: 64, flatAt: 'centre', aircraft: [false, false, true, false, true] } },
-  { id: 'steep', label: 'Steep', title: 'About 79°: a sideways tilt of about 19° reaches the aircraft; up/down never does, even at 90°', patch: { xOn: true, yOn: true, cycleX: 60, cycleY: 320, flatAt: 'pingpong', count: 5, aircraft: [false, false, false, true, true] } },
-  { id: 'vertical', label: 'Vertical', title: 'Vertical lens: only left/right animates', patch: { xOn: true, yOn: false, cycleX: 64, flatAt: 'start', aircraft: [false, false, false, false, false] } },
+  { id: 'today', label: 'Today', title: 'Horizontal lens: only up/down animates', patch: { xOn: false, yOn: true, cycleY: 64, flatAt: 'start', aircraft: [false, false, false, false, false], lengths: [1, 1, 1, 1, 1] } },
+  { id: '45', label: '45°', title: 'Both tilts play the sequence at the same speed', patch: { xOn: true, yOn: true, cycleX: 64, cycleY: 64, flatAt: 'centre', aircraft: [false, false, true, false, true], lengths: [1, 1, 1, 1, 1] } },
+  { id: 'steep', label: 'Steep', title: 'About 79°: a sideways tilt of about 19° reaches the aircraft; up/down never does, even at 90°', patch: { xOn: true, yOn: true, cycleX: 60, cycleY: 320, flatAt: 'pingpong', count: 5, aircraft: [false, false, false, true, true], lengths: [1, 1, 1, 1, 1] } },
+  { id: '3+2', label: '3 + 2', title: 'Up/down shows frames 2–4 only, even at 90°; left/right runs 1 to 5', patch: { xOn: true, yOn: true, cycleX: 90, cycleY: 301, flatAt: 'across', count: 5, aircraft: [true, false, false, false, true], lengths: [1, 1, 1, 1, 1] } },
+  { id: 'vertical', label: 'Vertical', title: 'Vertical lens: only left/right animates', patch: { xOn: true, yOn: false, cycleX: 64, flatAt: 'start', aircraft: [false, false, false, false, false], lengths: [1, 1, 1, 1, 1] } },
 ]
 
 const fmt = (v: number, digits = 1) => (Number.isFinite(v) ? (Math.round(v * 10 ** digits) / 10 ** digits).toString() : '∞')
@@ -98,8 +105,9 @@ export function LensLab() {
   )
   const aircraft = useMemo(() => s.aircraft.slice(0, s.count), [s.aircraft, s.count])
   const frameFor = useCallback(
-    (x: number, y: number) => frameAt(cycleFraction(acrossTilt(lens, x, y), lens.cycleDeg, s.flatAt, s.count), s.count, s.flatAt),
-    [lens, s.flatAt, s.count],
+    (x: number, y: number) =>
+      frameAt(cycleFraction(acrossTilt(lens, x, y), lens.cycleDeg, s.flatAt, s.count, s.lengths), s.count, s.flatAt, s.lengths),
+    [lens, s.flatAt, s.count, s.lengths],
   )
 
   // Sweeps, like the editor's playback: from flat through the frames and back to flat. When the frames run
@@ -111,7 +119,7 @@ export function LensLab() {
     let raf = 0
     const start = performance.now()
     const period = 3
-    const flat = flatFraction(s.flatAt, s.count)
+    const flat = flatFraction(s.flatAt, s.count, s.lengths)
     const extent = (axis: 'x' | 'y', side: 1 | -1) => {
       const cycle = axis === 'x' ? (s.xOn ? s.cycleX : null) : (s.yOn ? s.cycleY : null)
       const sign = axisDirection(lens, axis) || 1
@@ -132,7 +140,7 @@ export function LensLab() {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [sweep, s.reach, s.xOn, s.yOn, s.cycleX, s.cycleY, s.flatAt, s.count, lens])
+  }, [sweep, s.reach, s.xOn, s.yOn, s.cycleX, s.cycleY, s.flatAt, s.count, s.lengths, lens])
 
   return (
     <div className="h-full overflow-auto bg-muted/30">
@@ -246,13 +254,15 @@ function Controls({ s, set, lens }: { s: Settings; set: (p: Partial<Settings>) =
   const bothOff = !s.xOn && !s.yOn
   const hidden = s.aircraft.slice(0, s.count)
   const anyHidden = hidden.some(Boolean)
-  const revealX = anyHidden && !bothOff ? firstReveal(lens, 'x', hidden, s.count, s.flatAt) : null
-  const revealY = anyHidden && !bothOff ? firstReveal(lens, 'y', hidden, s.count, s.flatAt) : null
+  const layout = { count: s.count, flatAt: s.flatAt, lengths: s.lengths }
+  const revealX = anyHidden && !bothOff ? firstReveal(lens, 'x', hidden, layout) : null
+  const revealY = anyHidden && !bothOff ? firstReveal(lens, 'y', hidden, layout) : null
+  const minHide = anyHidden ? minCycleToHide(hidden, layout) : null
   const revealText = (v: number | null) => (v == null ? 'never' : `${fmt(v, 0)}°`)
   return (
     <Panel className="flex h-fit flex-col lg:sticky lg:top-4">
       <Group title="Presets">
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5">
           {PRESETS.map((p) => (
             <Button key={p.id} size="sm" variant="outline" title={p.title} onClick={() => set(p.patch)}>
               {p.label}
@@ -266,11 +276,40 @@ function Controls({ s, set, lens }: { s: Settings; set: (p: Partial<Settings>) =
         <InlineField label="Lean" title="Which way the ridges slant">
           <Segmented value={String(s.lean)} options={[{ value: '1', label: '/' }, { value: '-1', label: '\\' }]} onChange={(v) => set({ lean: v === '1' ? 1 : -1 })} />
         </InlineField>
-        <InlineField label="Frames run" title="Flat always shows frame 1. One way: 1 to 5 in one tilt direction. Outward: 2, 3 one way and 4, 5 the other. Ping-pong: 1 to 5 both ways, then back down past the cycle">
-          <Segmented value={s.flatAt} options={[{ value: 'start', label: 'One way' }, { value: 'centre', label: 'Outward' }, { value: 'pingpong', label: 'Ping-pong' }]} onChange={(flatAt) => set({ flatAt })} />
+        <InlineField label="Frames run" title="How the frames are laid out along the cycle">
+          <div className="grid grid-cols-2 gap-1">
+            {(
+              [
+                ['start', 'One way', 'Flat on frame 1; 1 to 5 in one direction'],
+                ['across', 'Across', 'Flat in the middle; 1 to 5 from one side to the other'],
+                ['centre', 'Outward', 'Flat on frame 1; 2, 3 one way, 4, 5 the other'],
+                ['pingpong', 'Ping-pong', 'Flat on frame 1; 1 to 5 both ways, then back down'],
+              ] as const
+            ).map(([value, label, title]) => (
+              <Button key={value} size="sm" title={title} variant={s.flatAt === value ? 'default' : 'outline'} onClick={() => set({ flatAt: value })}>
+                {label}
+              </Button>
+            ))}
+          </div>
         </InlineField>
         <InlineField label="Frames">
           <Segmented value={String(s.count)} options={[2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) }))} onChange={(v) => set({ count: Number(v) })} />
+        </InlineField>
+        <InlineField label="Lengths" title="Each frame's relative length on the timeline">
+          <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${s.count}, minmax(0, 1fr))` }}>
+            {Array.from({ length: s.count }, (_, i) => (
+              <ScrubField
+                key={i}
+                className="[&>span]:min-w-5 [&>span]:px-1"
+                label={i + 1}
+                value={s.lengths[i] ?? 1}
+                onChange={(v) => set({ lengths: Array.from({ length: 5 }, (_, j) => (j === i ? v : (s.lengths[j] ?? 1))) })}
+                min={0.1}
+                max={5}
+                step={0.1}
+              />
+            ))}
+          </div>
         </InlineField>
         <InlineField label="Aircraft in" title="Frames that also show the hidden aircraft">
           <div className="flex gap-1.5">
@@ -304,6 +343,12 @@ function Controls({ s, set, lens }: { s: Settings; set: (p: Partial<Settings>) =
                 <span>↔ {revealText(revealX)}</span>
                 <span className={revealY == null ? 'text-emerald-600' : undefined}>↕ {revealText(revealY)}</span>
               </div>
+              {minHide != null && (
+                <div className="mt-2 flex items-center justify-between gap-2" title="Smallest ↕ Cycle that keeps every aircraft frame out of view for up/down, all the way to 90°">
+                  <span className="text-muted-foreground">↕ never needs ↕ Cycle over <span className="font-medium text-foreground tabular-nums">{fmt(minHide)}°</span></span>
+                  <Button size="sm" variant="outline" onClick={() => set({ yOn: true, cycleY: Math.floor(minHide) + 1 })}>Use</Button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -503,8 +548,9 @@ function Timeline({ lens, s, tilt, aircraft }: { lens: Lens; s: Settings; tilt: 
   const VW = 1000
   const left = 24
   const right = 24
-  const flat = flatFraction(s.flatAt, s.count)
+  const flat = flatFraction(s.flatAt, s.count, s.lengths)
   const order = slotOrder(s.count, s.flatAt)
+  const edges = slotEdges(s.count, s.flatAt, s.lengths)
   // Reaches in cycles, not capped: a tilt can run past the cycle and the frames repeat
   const rx = reachFraction(s.reach, s.xOn ? s.cycleX : null)
   const ry = reachFraction(s.reach, s.yOn ? s.cycleY : null)
@@ -519,7 +565,6 @@ function Timeline({ lens, s, tilt, aircraft }: { lens: Lens; s: Settings; tilt: 
   const trackY = 120
   const trackH = 56
   const cycles = Array.from({ length: hi - lo }, (_, i) => lo + i)
-  const boxW = (X(1) - X(0)) / order.length
 
   const bracket = (reach: number, y: number, color: string, name: string, axis: 'x' | 'y') => {
     if (reach <= 0) return null
@@ -552,14 +597,15 @@ function Timeline({ lens, s, tilt, aircraft }: { lens: Lens; s: Settings; tilt: 
       {cycles.map((k) => (
         <g key={k} opacity={k === 0 ? 1 : 0.5}>
           {order.map((i, slot) => {
-            const a = k + slot / order.length
-            const b = k + (slot + 1) / order.length
+            const a = k + (edges.at(slot) ?? 0)
+            const b = k + (edges.at(slot + 1) ?? 1)
             const cx = (X(a) + X(b)) / 2
+            const wide = X(b) - X(a) > 90
             return (
               <g key={i}>
                 <rect x={X(a) + 2} y={trackY} width={X(b) - X(a) - 4} height={trackH} rx={8} fill={frameFill(i)} stroke="currentColor" strokeOpacity={0.25} />
-                <text x={cx} y={trackY + (aircraft[i] ? 25 : 33)} textAnchor="middle" fontSize={14} fill="currentColor">{boxW > 90 ? `Frame ${i + 1}` : i + 1}</text>
-                {aircraft[i] && <text x={cx} y={trackY + 43} textAnchor="middle" fontSize={12} fill="currentColor" fillOpacity={0.7}>{boxW > 90 ? '+ aircraft' : '✈'}</text>}
+                <text x={cx} y={trackY + (aircraft[i] ? 25 : 33)} textAnchor="middle" fontSize={14} fill="currentColor">{wide ? `Frame ${i + 1}` : i + 1}</text>
+                {aircraft[i] && <text x={cx} y={trackY + 43} textAnchor="middle" fontSize={12} fill="currentColor" fillOpacity={0.7}>{wide ? '+ aircraft' : '✈'}</text>}
               </g>
             )
           })}
@@ -591,6 +637,7 @@ function PrintView({ lens, s, aircraft }: { lens: Lens; s: Settings; aircraft: b
   const canvas = useRef<HTMLCanvasElement>(null)
   const { imgLen } = threadCopies(s)
   const order = useMemo(() => slotOrder(s.count, s.flatAt), [s.count, s.flatAt])
+  const edges = useMemo(() => slotEdges(s.count, s.flatAt, s.lengths), [s.count, s.flatAt, s.lengths])
   const copyW = s.direction === 'vertical' ? s.widthMm : imgLen
   const copyH = s.direction === 'vertical' ? imgLen : s.widthMm
   const maxW = 560
@@ -621,7 +668,7 @@ function PrintView({ lens, s, aircraft }: { lens: Lens; s: Settings; aircraft: b
       for (let x = 0; x < w; x++) {
         const u = x * sin + y * cos
         const m = ((u % P) + P) % P
-        const strip = order[Math.min(order.length - 1, Math.floor((m / P) * order.length))]
+        const strip = order[slotAt(m / P, edges)]
         const i = (y * w + x) * 4
         const src = frames[strip]
         const edge = s.ridges && m < 1
@@ -632,7 +679,7 @@ function PrintView({ lens, s, aircraft }: { lens: Lens; s: Settings; aircraft: b
       }
     }
     ctx.putImageData(out, 0, 0)
-  }, [lens, s.count, s.zoomPx, s.ridges, w, h, aircraft, order])
+  }, [lens, s.count, s.zoomPx, s.ridges, w, h, aircraft, order, edges])
 
   return (
     <div className="flex flex-col gap-3">

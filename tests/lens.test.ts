@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { firstReveal, slotOrder, acrossTilt, axisDirection, coverageAt, cyclesFrom, cycleFraction, fittingRepeat, frameAt, lensFrom, repeatFit, samplesAcrossWidth } from '../src/lib/lens'
+import { minCycleToHide, firstReveal, slotOrder, acrossTilt, axisDirection, coverageAt, cyclesFrom, cycleFraction, fittingRepeat, frameAt, lensFrom, repeatFit, samplesAcrossWidth } from '../src/lib/lens'
 
 describe('lens maths', () => {
   it('turns two tilt cycles into a lens and back', () => {
@@ -69,7 +69,23 @@ describe('ping-pong and reveal check', () => {
   it('keeps up/down away from the aircraft even at 90° on the Steep preset', () => {
     const lens = lensFrom({ cycleX: 60, cycleY: 320, lean: 1 })
     const aircraft = [false, false, false, true, true]
-    expect(firstReveal(lens, 'y', aircraft, 5, 'pingpong')).toBeNull()
-    expect(firstReveal(lens, 'x', aircraft, 5, 'pingpong')).toBeLessThan(25)
+    expect(firstReveal(lens, 'y', aircraft, { count: 5, flatAt: 'pingpong' })).toBeNull()
+    expect(firstReveal(lens, 'x', aircraft, { count: 5, flatAt: 'pingpong' })).toBeLessThan(25)
+  })
+})
+
+describe('three frames up/down, five sideways', () => {
+  const hidden = [true, false, false, false, true]
+  it('needs an up/down cycle over 300° with equal frames', () => {
+    expect(minCycleToHide(hidden, { count: 5, flatAt: 'across' })).toBeCloseTo(300)
+  })
+  it('needs less when the edge frames are shorter', () => {
+    // Frames 1 and 5 at half length: 1 + 1 + 1 out of 4 for the middle, edges at 0.5/4 each
+    expect(minCycleToHide(hidden, { count: 5, flatAt: 'across', lengths: [0.5, 1, 1, 1, 0.5] })).toBeCloseTo(240)
+  })
+  it('never shows frames 1 or 5 up/down just above that cycle', () => {
+    const lens = lensFrom({ cycleX: 90, cycleY: 301, lean: 1 })
+    expect(firstReveal(lens, 'y', hidden, { count: 5, flatAt: 'across' })).toBeNull()
+    expect(firstReveal(lens, 'x', hidden, { count: 5, flatAt: 'across' })).toBeCloseTo(27, 0)
   })
 })

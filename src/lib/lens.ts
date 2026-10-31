@@ -54,23 +54,25 @@ export function acrossTilt(lens: Lens, x: number, y: number) {
 }
 
 /**
- * How the frames run from flat. Every option shows frame 1 when the banknote is flat.
+ * How the frames run from flat.
  * - 'start': frame 1 starts at flat and the frames run one way (today's lenses): 1, 2, 3, 4, 5.
  * - 'centre' (Outward): flat sits in the middle of frame 1 and the frames run outward both ways: tilting
  *   one way gives 2, 3, the other way 4, 5. Along the cycle that reads 5, 4, 1, 2, 3, so running past the
  *   cycle jumps from 3 straight to 5.
  * - 'pingpong': the cycle runs 1, 2, 3, 4, 5, 4, 3, 2 and repeats, so both directions play 1 to 5 and
  *   tilting past the cycle plays back down smoothly, with no jump. Middle frames appear twice per cycle.
+ * - 'across': the frames run 1 to 5 once, with flat in the middle of the cycle (frame 3 of 5). Tilting
+ *   one way runs down to 1, the other way up to 5.
  */
-export type FlatAt = 'start' | 'centre' | 'pingpong'
+export type FlatAt = 'start' | 'centre' | 'pingpong' | 'across'
 
 /** Frames on the backward side of frame 1 when they run outward */
 const backwardCount = (count: number) => Math.floor((count - 1) / 2)
 
-/** The frame (0-based) in each slot along one cycle; slots are equal in width */
+/** The frame (0-based) in each slot along one cycle */
 export function slotOrder(count: number, flatAt: FlatAt) {
   const frames = Array.from({ length: count }, (_, i) => i)
-  if (flatAt === 'start' || count < 2) return frames
+  if (flatAt === 'start' || flatAt === 'across' || count < 2) return frames
   if (flatAt === 'pingpong') {
     // count − 2 frames behind frame 1 (counting back down), then frame 1 up to the last
     return Array.from({ length: 2 * count - 2 }, (_, i) => Math.abs(i - (count - 2)))
@@ -82,55 +84,107 @@ export function slotOrder(count: number, flatAt: FlatAt) {
   return [...backward, 0, ...forward]
 }
 
-/** Where flat sits in the cycle, 0 to 1: at the start of frame 1, or in its middle */
-export function flatFraction(flatAt: FlatAt, count: number) {
-  if (flatAt === 'start') return 0
+/**
+ * Slot edges along one cycle, 0 to 1 (one more entry than slots). Each slot is as wide as its frame's
+ * relative length (all 1 by default), like frame lengths on the editor's timeline.
+ */
+export function slotEdges(count: number, flatAt: FlatAt, lengths?: number[]) {
   const order = slotOrder(count, flatAt)
-  return (order.indexOf(0) + 0.5) / Math.max(1, order.length)
+  const widths = order.map((f) => Math.max(0.01, lengths?.[f] ?? 1))
+  const total = widths.reduce((a, b) => a + b, 0)
+  const edges = [0]
+  for (const w of widths) edges.push((edges.at(-1) ?? 0) + w / total)
+  edges[edges.length - 1] = 1
+  return edges
+}
+
+/** Where flat sits in the cycle, 0 to 1 */
+export function flatFraction(flatAt: FlatAt, count: number, lengths?: number[]) {
+  if (flatAt === 'start') return 0
+  if (flatAt === 'across') return 0.5
+  const order = slotOrder(count, flatAt)
+  const edges = slotEdges(count, flatAt, lengths)
+  const i = order.indexOf(0)
+  return ((edges.at(i) ?? 0) + (edges.at(i + 1) ?? 1)) / 2
 }
 
 const wrap01 = (v: number) => ((v % 1) + 1) % 1
 
 /** Position in the cycle (0 to 1, looping) for a tilt across the ridges */
-export function cycleFraction(s: number, cycleDeg: number, flatAt: FlatAt, count: number) {
-  const flat = flatFraction(flatAt, count)
+export function cycleFraction(s: number, cycleDeg: number, flatAt: FlatAt, count: number, lengths?: number[]) {
+  const flat = flatFraction(flatAt, count, lengths)
   if (cycleDeg <= 0) return flat
   const raw = flat + s / cycleDeg
   // Like the editor, the cycle's own end shows the last frame; only angles beyond it loop
   return raw >= 0 && raw <= 1 ? raw : wrap01(raw)
 }
 
-/** Which of `slots` equal slots along the cycle a position falls in */
-export const slotAt = (fraction: number, slots: number) =>
-  Math.min(slots - 1, Math.floor((fraction === 1 ? 1 : wrap01(fraction)) * slots))
+/** Which slot a cycle position falls in, given the slot edges */
+export function slotAt(fraction: number, edges: number[]) {
+  const f = fraction === 1 ? 1 : wrap01(fraction)
+  const slots = edges.length - 1
+  for (let i = 0; i < slots - 1; i++) if (f < (edges.at(i + 1) ?? 1)) return i
+  return slots - 1
+}
 
 /** Which frame (0-based) shows at a cycle position */
-export function frameAt(fraction: number, count: number, flatAt: FlatAt) {
+export function frameAt(fraction: number, count: number, flatAt: FlatAt, lengths?: number[]) {
   const order = slotOrder(count, flatAt)
-  return order[slotAt(fraction, order.length)] ?? 0
+  return order[slotAt(fraction, slotEdges(count, flatAt, lengths))] ?? 0
+}
+
+export interface Layout {
+  count: number
+  flatAt: FlatAt
+  lengths?: number[]
 }
 
 /**
  * The smallest tilt (in either direction along one axis, up to `maxDeg`) that shows any frame in `hidden`,
  * or null if that tilt never shows one. Used to check that, say, up/down can never reveal the aircraft.
  */
-export function firstReveal(
-  lens: Lens,
-  axis: 'x' | 'y',
-  hidden: boolean[],
-  count: number,
-  flatAt: FlatAt,
-  maxDeg = 90,
-  step = 0.25,
-) {
+export function firstReveal(lens: Lens, axis: 'x' | 'y', hidden: boolean[], layout: Layout, maxDeg = 90, step = 0.25) {
+  const { count, flatAt, lengths } = layout
   for (let t = 0; t <= maxDeg + 1e-9; t += step) {
     for (const sign of [1, -1]) {
       const v = sign * t
       const s = axis === 'x' ? acrossTilt(lens, v, 0) : acrossTilt(lens, 0, v)
-      if (hidden[frameAt(cycleFraction(s, lens.cycleDeg, flatAt, count), count, flatAt)]) return t
+      if (hidden[frameAt(cycleFraction(s, lens.cycleDeg, flatAt, count, lengths), count, flatAt, lengths)]) return t
     }
   }
   return null
+}
+
+/**
+ * How far flat is from the nearest hidden frame, as a fraction of the cycle (either direction, looping).
+ * A tilt whose cycle is C reaches it at that fraction × C, so a tilt never reveals it below
+ * maxDeg ÷ fraction. Null when nothing is hidden or flat itself is hidden.
+ */
+export function hiddenDistance(hidden: boolean[], layout: Layout) {
+  const { count, flatAt, lengths } = layout
+  const order = slotOrder(count, flatAt)
+  const edges = slotEdges(count, flatAt, lengths)
+  const flat = flatFraction(flatAt, count, lengths)
+  let best: number | null = null
+  order.forEach((f, i) => {
+    if (!hidden[f]) return
+    const a = edges.at(i) ?? 0
+    const b = edges.at(i + 1) ?? 1
+    if (flat >= a && flat < b) {
+      best = 0
+      return
+    }
+    // Distance to the slot's nearer edge, either way round the loop
+    const d = Math.min(...[a, b].map((e) => Math.min(Math.abs(e - flat), 1 - Math.abs(e - flat))))
+    if (best == null || d < best) best = d
+  })
+  return best
+}
+
+/** The smallest cycle for one tilt that still keeps the hidden frames out of view up to `maxDeg` */
+export function minCycleToHide(hidden: boolean[], layout: Layout, maxDeg = 90) {
+  const d = hiddenDistance(hidden, layout)
+  return d == null || d <= 0 ? null : maxDeg / d
 }
 
 /**
