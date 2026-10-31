@@ -11,7 +11,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,16 +57,31 @@ export function ProjectList() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto grid max-w-6xl gap-8 px-6 py-8 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="mx-auto max-w-6xl px-6 py-8">
           <main className="flex min-w-0 flex-col gap-4">
             <div className="flex items-center justify-between gap-4">
               <h1 className="font-heading text-lg font-semibold">
                 Projects <span className="font-normal text-muted-foreground tabular-nums">{projects.length}</span>
               </h1>
-              <Button onClick={() => setCreating(true)}>
-                <Plus />
-                New project
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      await openDemoPreview()
+                    } catch (error) {
+                      reportError(error)
+                    }
+                  }}
+                >
+                  <Bird />
+                  Demo
+                </Button>
+                <Button onClick={() => setCreating(true)}>
+                  <Plus />
+                  New project
+                </Button>
+              </div>
             </div>
 
             {legacyProjects.length > 0 && (
@@ -100,10 +115,6 @@ export function ProjectList() {
               </button>
             )}
           </main>
-
-          <aside className="flex flex-col gap-3">
-            <DemoCard />
-          </aside>
         </div>
       </div>
 
@@ -139,36 +150,6 @@ function AccountMenu() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  )
-}
-
-function DemoCard() {
-  return (
-    <Card className="gap-3 rounded-lg py-0">
-      <div className="flex h-28 items-center justify-center gap-2 bg-muted/60">
-        <span className="h-16 w-28 rounded-sm bg-[#DBECC6] shadow-sm [background-image:linear-gradient(90deg,transparent_74%,#8A8F80_74%,#8A8F80_77%,transparent_77%)]" />
-        <span className="h-20 w-10 rounded-sm bg-[#CDBBE6] shadow-sm [background-image:linear-gradient(180deg,transparent_22%,#F26B5B_22%,#F26B5B_28%,transparent_28%)]" />
-      </div>
-      <CardContent className="flex flex-col gap-3 px-4 pb-4">
-        <div>
-          <div className="text-sm font-medium">Demo</div>
-          <div className="text-xs text-muted-foreground">Two sample banknotes. Changes aren’t saved.</div>
-        </div>
-        <Button
-          variant="outline"
-          onClick={async () => {
-            try {
-              await openDemoPreview()
-            } catch (error) {
-              reportError(error)
-            }
-          }}
-        >
-          <Bird />
-          Open demo
-        </Button>
-      </CardContent>
-    </Card>
   )
 }
 

@@ -20,7 +20,7 @@ Design tool for previewing lenticular security threads on banknotes (Oberthur Fi
 - Use shadcn components for every control (`npx shadcn@latest add <name>`, base-nova style, Base UI primitives). Don't hand-roll buttons, inputs, menus or dialogs. Compose them in `src/components/controls.tsx`. Keller will restyle `src/components/ui` and the tokens in `src/index.css` later.
 - After adding a component, replace `from "cn"` with `from "@/lib/utils"` in the generated files.
 - Number fields are Figma-style `ScrubField`s (drag the label to scrub), not sliders.
-- Project list: a top bar with the app name, save status and an account menu (username, Sign out); a Projects heading with a New project button that opens a name dialog; the demo in a side card. Sign-in is a single username field with Continue.
+- Project list: a top bar with the app name, save status and an account menu (username, Sign out); a Projects heading with a New project button that opens a name dialog; a Demo button next to it. Sign-in is a single username field with Continue.
 - Editor layout: full-screen canvas with floating panels.
   - **Top left:** back to Projects, the project name, and the collapsible Banknotes list.
   - **Bottom:** play/pause plus Cycle and Playback settings, always. A selected banknote's frames appear as clips on a track.
