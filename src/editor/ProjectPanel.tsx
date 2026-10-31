@@ -49,15 +49,15 @@ export function ProjectPanel({
           {isDemo ? 'Exit demo' : 'Projects'}
         </Button>
       </div>
-      <div className="px-1.5 pb-1.5">
+      <div className="flex items-center gap-2 pb-1.5 pl-1.5 pr-3">
         <Input
           aria-label="Project name"
-          className="h-8 border-transparent font-medium shadow-none hover:border-input"
+          className="h-8 flex-1 border-transparent font-medium shadow-none hover:border-input"
           value={project.name}
           onChange={(e) => updateProject(project.id, (p) => ({ ...p, name: e.target.value }))}
         />
+        <div className="shrink-0"><CloudStatus isDemo={isDemo} /></div>
       </div>
-      <div className="flex items-center justify-between px-3 pb-2"><CloudStatus showWorkspace isDemo={isDemo} /></div>
       <Separator />
 
       <Collapsible open={open} onOpenChange={setOpen} className="flex min-h-0 flex-col">
