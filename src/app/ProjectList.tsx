@@ -1,4 +1,4 @@
-import { Copy, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Bird, Copy, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import {
   AlertDialog,
@@ -22,6 +22,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Field, IconButton } from '../components/controls'
 import { NoteView } from '../components/NoteView'
+import { createDemoProject } from '../lib/demo'
 import { createProject } from '../lib/notes'
 import { updateProject, useProjects } from '../lib/store'
 import type { Project } from '../lib/types'
@@ -40,12 +41,25 @@ export function ProjectList() {
           <div>
             <h1 className="font-heading text-xl font-semibold">Security thread playground</h1>
           </div>
-          {!creating && (
-            <Button onClick={() => setCreating(true)}>
-              <Plus />
-              New project
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={async () => {
+                const project = await createDemoProject()
+                useProjects.getState().add(project)
+                open(project.id)
+              }}
+            >
+              <Bird />
+              Demo
             </Button>
-          )}
+            {!creating && (
+              <Button onClick={() => setCreating(true)}>
+                <Plus />
+                New project
+              </Button>
+            )}
+          </div>
         </header>
 
         {creating && <NewProject onCancel={projects.length ? () => setCreating(false) : undefined} />}
