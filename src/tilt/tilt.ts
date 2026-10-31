@@ -29,6 +29,12 @@ export const useTilt = create<TiltState>()(() => ({
 
 export const setTilt = (patch: Partial<TiltState>) => useTilt.setState(patch)
 
+/** Shared by the keyboard shortcut and the playback button. Pause holds the rendered angle. */
+export function togglePlayback() {
+  const { source, angle, target } = useTilt.getState()
+  setTilt({ source: source === 'wobble' ? 'slider' : 'wobble', target: source === 'wobble' ? angle : target })
+}
+
 /**
  * Manual tilt uses a critically damped spring. Playback eases from flat to the full
  * cycle angle and back, reaching both endpoints without spring attenuation.

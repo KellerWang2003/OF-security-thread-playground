@@ -75,9 +75,8 @@ export function Canvas({
   const [view, setView] = useState<View>()
   const gesture = useRef<Gesture | null>(null)
   const [activeMode, setActiveMode] = useState<Gesture['mode']>()
-  const [spaceDown, setSpaceDown] = useState(false)
   const [dropping, setDropping] = useState(false)
-  const { angle, perspective, sheen } = useTilt()
+  const { angle, source, perspective, sheen } = useTilt()
 
   const selected = notes.find((n) => n.id === selectedId)
   const reference = selected ?? notes.at(0)
@@ -122,26 +121,6 @@ export function Canvas({
     return () => element.removeEventListener('wheel', onWheel)
   }, [])
 
-  // Holding space turns any drag into a pan, as in design tools
-  useEffect(() => {
-    const isTyping = (e: KeyboardEvent) => e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
-    const down = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !isTyping(e)) {
-        e.preventDefault()
-        setSpaceDown(true)
-      }
-    }
-    const up = (e: KeyboardEvent) => {
-      if (e.code === 'Space') setSpaceDown(false)
-    }
-    window.addEventListener('keydown', down)
-    window.addEventListener('keyup', up)
-    return () => {
-      window.removeEventListener('keydown', down)
-      window.removeEventListener('keyup', up)
-    }
-  }, [])
-
   useEffect(() => {
     if (!focus || !size) return
     const note = notes.find((n) => n.id === focus.noteId)
@@ -168,7 +147,7 @@ export function Canvas({
       className={cn(
         'relative flex-1 touch-none overflow-hidden select-none',
         dropping ? 'bg-muted' : 'bg-muted/40',
-        spaceDown || activeMode === 'pan' ? (activeMode === 'pan' ? 'cursor-grabbing' : 'cursor-grab') : '',
+        activeMode === 'pan' && 'cursor-grabbing',
       )}
       style={
         current
@@ -188,7 +167,7 @@ export function Canvas({
         const labelId = noteAt(e.target, 'data-note-label')
         const bodyId = noteAt(e.target, 'data-note-body')
         const note = notes.find((n) => n.id === (labelId ?? bodyId))
-        if (spaceDown || e.button === 1 || !note) {
+        if (e.button === 1 || !note) {
           gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, view: v, onBackground: !note }
         } else if (labelId) {
           onSelect(note.id)
@@ -232,6 +211,11 @@ export function Canvas({
         gesture.current = null
         setActiveMode(undefined)
       }}
+      onPointerCancel={() => {
+        if (gesture.current?.mode === 'tilt' && useTilt.getState().springBack) setTilt({ target: 0 })
+        gesture.current = null
+        setActiveMode(undefined)
+      }}
       onDragOver={(e) => {
         e.preventDefault()
         setDropping(true)
@@ -259,7 +243,7 @@ export function Canvas({
                 data-note-label={note.id}
                 className={cn(
                   'absolute bottom-full left-0 mb-1.5 flex items-baseline gap-1.5 text-xs whitespace-nowrap',
-                  !spaceDown && 'cursor-move',
+                  'cursor-move',
                 )}
               >
                 <span className={cn('font-medium', isSelected ? 'text-foreground' : 'text-muted-foreground')}>{note.name}</span>
@@ -273,9 +257,9 @@ export function Canvas({
                 // narrows: you can see which way the note is tilting, not just that it got shorter
                 style={{ perspective: 2.2 * Math.max(note.widthMm, note.heightMm) * scale }}
                 className={cn(
-                  'rounded-[2px] outline-offset-4',
-                  isSelected ? 'outline-2 outline-primary/50' : 'outline-0',
-                  !spaceDown && 'cursor-ns-resize',
+                  'rounded-[2px] outline-offset-4 transition-[outline-color] duration-150 cursor-ns-resize',
+                  isSelected ? 'outline-2' : 'outline-0',
+                  source === 'wobble' || activeMode === 'tilt' || activeMode === 'move' ? 'outline-primary/10' : 'outline-primary/50',
                 )}
               >
                 <NoteView note={note} scale={scale} angle={angle} perspective={perspective} sheen={sheen} />

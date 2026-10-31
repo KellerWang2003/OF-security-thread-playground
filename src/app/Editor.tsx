@@ -1,3 +1,4 @@
+import { togglePlayback } from '../tilt/tilt'
 import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -35,6 +36,19 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
+    const onSpace = (event: KeyboardEvent) => {
+      if (event.code !== 'Space' || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return
+      const element = event.target instanceof Element ? event.target : null
+      if (element?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="spinbutton"], [role="switch"], [role="checkbox"], [role="radio"], [role="slider"]')) return
+      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return
+      event.preventDefault()
+      if (!event.repeat) togglePlayback()
+    }
+    window.addEventListener('keydown', onSpace, { capture: true })
+    return () => window.removeEventListener('keydown', onSpace, { capture: true })
   }, [])
 
   const note = project.notes.find((n) => n.id === selectedId)

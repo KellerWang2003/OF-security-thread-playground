@@ -17,7 +17,7 @@ import { pickFiles } from '../lib/images'
 import { CYCLE_LIMITS, DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
 import { updateProject } from '../lib/store'
 import type { Frame, Note } from '../lib/types'
-import { setTilt, useTilt } from '../tilt/tilt'
+import { setTilt, togglePlayback, useTilt } from '../tilt/tilt'
 import { addColorFrame, addImageFrames, deleteFrame, moveFrame, replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
 
 /** Opens the system colour picker without a visible input */
@@ -50,7 +50,7 @@ export function TimelineBar({
   noteRef?: NoteRef
   besidePanel: boolean
 }) {
-  const { angle, source, target } = useTilt()
+  const source = useTilt((state) => state.source)
   const playing = source === 'wobble'
 
   return (
@@ -65,7 +65,7 @@ export function TimelineBar({
         variant={playing ? 'default' : 'outline'}
         size="icon"
         className="size-[68px] rounded-lg [&_svg:not([class*='size-'])]:size-6"
-        onClick={() => setTilt({ source: playing ? 'slider' : 'wobble', target: playing ? angle : target })}
+        onClick={togglePlayback}
       >
         {playing ? <Pause /> : <Play />}
       </IconButton>

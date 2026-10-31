@@ -2,9 +2,10 @@
 import React from 'react'
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../src/App'
+import { setTilt, useTilt } from '../src/tilt/tilt'
 import { TooltipProvider } from '../src/components/ui/tooltip'
 
 const saves = vi.hoisted(() => vi.fn())
@@ -25,6 +26,7 @@ beforeEach(() => {
   localStorage.clear()
   location.hash = ''
   saves.mockClear()
+  setTilt({ source: 'drag', angle: 0, target: 0 })
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
@@ -75,6 +77,37 @@ describe('username workspace editor', () => {
     await screen.findByRole('textbox', { name: 'Username' })
     expect(localStorage.getItem('of-thread-workspace')).toBeNull()
     expect(saves).not.toHaveBeenCalled()
+  })
+
+  it('toggles playback immediately with Space, ignores repeats and typing, and respects dialogs', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'keyboard-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await screen.findByPlaceholderText('Untitled project')
+    await user.click(screen.getByRole('button', { name: 'Demo', exact: true }))
+    await screen.findByRole('button', { name: 'Exit demo' })
+    fireEvent.keyDown(window, { code: 'Space', key: ' ' })
+    expect(useTilt.getState().source).toBe('wobble')
+    expect(screen.getByRole('button', { name: 'Pause', exact: true })).toBeDefined()
+    fireEvent.keyDown(window, { code: 'Space', key: ' ', repeat: true })
+    expect(useTilt.getState().source).toBe('wobble')
+    act(() => setTilt({ angle: 17, target: 17 }))
+    fireEvent.keyDown(window, { code: 'Space', key: ' ' })
+    expect(useTilt.getState().source).toBe('slider')
+    expect(useTilt.getState().target).toBe(17)
+
+    // The shortcut also works with the playback button focused, without a second toggle on keyup.
+    await user.click(screen.getByRole('button', { name: 'Play', exact: true }))
+    await user.keyboard(' ')
+    expect(useTilt.getState().source).toBe('slider')
+    const name = screen.getByRole('textbox', { name: 'Project name' })
+    await user.click(name)
+    await user.keyboard(' ')
+    expect(useTilt.getState().source).toBe('slider')
+    await user.click(screen.getByRole('button', { name: 'Add banknote', exact: true }))
+    await screen.findByRole('dialog')
+    fireEvent.keyDown(window, { code: 'Space', key: ' ' })
+    expect(useTilt.getState().source).toBe('slider')
   })
 
 })

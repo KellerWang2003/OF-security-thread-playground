@@ -8,7 +8,7 @@ const smoothstep = (edge0: number, edge1: number, x: number) => {
 const sum = (values: number[]) => values.reduce((total, v) => total + v, 0)
 
 /**
- * Degrees of tilt each frame shows for: its share of the timeline applied to the full cycle. The cycle is
+ * Degrees of tilt each frame shows for: its share of the timeline applied to the full cycle. The cycle
  * starts flat at 0° and reaches its final frame at the full cycle angle, then loops.
  */
 export function frameSpans(note: { frames: { length: number }[]; tilt: { cycleDeg: number } }) {

@@ -14,8 +14,8 @@ npm run dev
 - **Banknotes:** a project holds any number of banknotes, like artboards. Each has its own name, size in mm (portrait or landscape), background (solid colour or an uploaded design), thread and frames.
 - **Thread:** vertical or horizontal, width 3 to 6 mm, position across the note, and windows (open length, gap, offset). Frame images stay upright, keep their aspect ratio at the thread's thickness and repeat along it with no gaps. One repeat length applies to every frame of a banknote: it can crop the image, never stretch it, and is set from the first upload.
 - **Frames:** up to 5 per banknote, images or colours. Each frame has a length on the timeline; its share of the total is its share of the cycle. Replace, recolour, reorder or delete from a frame's ⋯ menu, or drop images on a banknote.
-- **Tilt:** back and forth only (horizontal lenses). Drag a banknote to tilt it up to ±60°, or press play to sweep from flat (0°) upward through the full Cycle angle and back to flat. **Cycle** (degrees for one full pass through the frames) and **Fade** (crossfade between frames) are shared by every banknote in the project. Past one cycle the frames loop.
-- **Canvas:** every banknote sits on one canvas. Scroll or space-drag to pan, pinch or ⌘-scroll to zoom (100% is about true size), drag a banknote's label to move it.
+- **Tilt:** back and forth only (horizontal lenses). Drag a banknote to tilt it up to ±60°, or press Play (Space toggles play/pause) to sweep from flat (0°) upward through the full Cycle angle and back to flat. **Cycle** (degrees for one full pass through the frames) and **Fade** (crossfade between frames) are shared by every banknote in the project. Past one cycle the frames loop.
+- **Canvas:** every banknote sits on one canvas. Scroll, drag the empty canvas, or middle-drag to pan, pinch or ⌘-scroll to zoom (100% is about true size), drag a banknote's label to move it.
 
 ## Cloud setup and Vercel
 
