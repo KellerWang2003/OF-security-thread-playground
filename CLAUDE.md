@@ -29,7 +29,7 @@ Design tool for previewing lenticular security threads on banknotes (Oberthur Fi
 
 - It's a general tool, not tied to the Flight notes: a project is created with just a name, and banknotes can be any size. There are no built-in denomination presets.
 - **Frames:** 2 to 5 per banknote. Lenticular optics are not simulated: frames are artwork shown in turn as you tilt.
-- **Tilt:** only back-and-forth (up/down) tilt animates, up to ±60° (`TILT_LIMIT`). Side to side only matters for diagonal lenses, which are planned for later. Tilting must read as up vs down, using a strong per-note perspective.
+- **Tilt:** only back-and-forth (up/down) tilt animates. Manual dragging is limited to ±60° (`TILT_LIMIT`). Default playback starts flat at 0°, tilts upward through the full Cycle angle, and returns to flat; it never splits the cycle above and below flat. The timeline starts at 0° too. Side to side only matters for diagonal lenses, which are planned for later. Tilting must read as up vs down, using a strong per-note perspective.
 - **Timeline:** each frame has a relative `length`, and its share of the total is its share of the cycle. `tilt.cycleDeg` (Cycle) and `tilt.transition` (Fade) are project-wide. They are stored on each note but always edited for all notes together, and must never resize the timeline. Past one cycle the frames loop. The timeline shows one cycle with no angle ruler.
 - **Images:** they always stay upright, even on horizontal threads. They repeat along the thread at their own aspect ratio with no gaps. The repeat length can crop an image but never stretch it.
 - **Threads:** they are windowed (open, gap, offset) and can run vertically or horizontally. There is no white surround.

@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { IconButton, Panel, ScrubField } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
-import { clamp, frameMix, frameSpans } from '../lib/frames'
+import { clamp, cyclePhase, frameMix, frameSpans } from '../lib/frames'
 import { pickFiles } from '../lib/images'
 import { CYCLE_LIMITS, DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
 import { updateProject } from '../lib/store'
@@ -127,7 +127,7 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const starts = lengths.map((_, i) => lengths.slice(0, i).reduce((sum, l) => sum + l, 0))
   const x = (units: number) => PAD + units * pxPerUnit
   const cycle = tilt.cycleDeg
-  const phase = cycle > 0 ? (((angle + cycle / 2) % cycle) + cycle) % cycle / cycle : 0
+  const phase = cyclePhase(angle, cycle)
 
   // Wheel: ⌘/Ctrl zooms the timeline, a plain vertical wheel scrolls it sideways
   useEffect(() => {
@@ -150,7 +150,7 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
     const rect = track.current?.getBoundingClientRect()
     if (!rect) return
     const u = clamp((clientX - rect.left - PAD) / (totalLength * pxPerUnit), 0, 1)
-    setTilt({ source: 'slider', target: (u - 0.5) * cycle })
+    setTilt({ source: 'slider', target: u * cycle })
   }
 
   return (

@@ -9,27 +9,33 @@ const sum = (values: number[]) => values.reduce((total, v) => total + v, 0)
 
 /**
  * Degrees of tilt each frame shows for: its share of the timeline applied to the full cycle. The cycle is
- * centred on flat, so the frames play from -cycle/2 to +cycle/2 and then loop.
+ * starts flat at 0° and reaches its final frame at the full cycle angle, then loops.
  */
 export function frameSpans(note: { frames: { length: number }[]; tilt: { cycleDeg: number } }) {
   const total = sum(note.frames.map((f) => f.length)) || 1
   return note.frames.map((f) => (f.length / total) * note.tilt.cycleDeg)
 }
 
-export const tiltRange = (spans: number[]) => sum(spans) / 2
 const cycleDeg = (spans: number[]) => sum(spans)
+
+/** Flat is the start; retain the endpoint at the right edge before angles beyond it loop. */
+export function cyclePhase(angle: number, cycle: number) {
+  if (cycle <= 0) return 0
+  if (angle >= 0 && angle <= cycle) return angle / cycle
+  return (((angle % cycle) + cycle) % cycle) / cycle
+}
 
 /** The angle range that shows frame `index` */
 export function sliceRange(index: number, spans: number[]): [number, number] {
-  const start = -tiltRange(spans) + spans.slice(0, index).reduce((sum, s) => sum + s, 0)
+  const start = spans.slice(0, index).reduce((sum, s) => sum + s, 0)
   return [start, start + (spans.at(index) ?? 0)]
 }
 
-/** How far the note can be tilted either way, whatever the length of the cycle */
+/** Manual dragging can tilt the note this far either way; playback spans the full cycle. */
 export const TILT_LIMIT = 60
 
 /**
- * Which frames show at a tilt angle, with frames of any length. The cycle is centred on flat and loops:
+ * Which frames show at a tilt angle, with frames of any length. The cycle starts flat and loops:
  * tilting past either end starts the frames again. `base` is drawn fully and `next` on top of it at
  * `blend` opacity, so a crossfade never dips through to the paper. The crossfade straddles each
  * boundary, the loop's included, and is a fraction of the shorter of the two frames meeting there.
@@ -40,7 +46,7 @@ export function frameMix(angle: number, spans: number[], transition: number) {
   if (count === 0 || total <= 0) return { base: 0, next: 0, blend: 0, current: 0 }
   const span = (i: number) => spans.at(i) ?? 0
   // Position within one cycle, from 0 at its start
-  const a = (((angle + total / 2) % total) + total) % total
+  const a = cyclePhase(angle, total) * total
   let start = 0
   let i = 0
   while (i < count - 1 && a >= start + span(i)) {
