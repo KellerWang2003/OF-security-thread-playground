@@ -1,4 +1,4 @@
-import { MAX_FRAMES, MIN_FRAMES, colorFrame } from '../lib/notes'
+import { DEFAULT_SPAN, MAX_FRAMES, MIN_FRAMES, colorFrame } from '../lib/notes'
 import { imageAspect, removeImage, storeImage } from '../lib/images'
 import { findNote, updateNote } from '../lib/store'
 import type { Frame } from '../lib/types'
@@ -29,16 +29,19 @@ export async function addImageFrames({ projectId, noteId }: NoteRef, files: File
       color: '#ffffff',
       imageId: await storeImage(file),
       name: imageName(file),
+      spanDeg: DEFAULT_SPAN,
     })),
   )
-  // The first images on a thread set the repeat height: one full image at the thread's width
+  // The first images on a thread set the repeat length: one full image at the thread's width
   const firstImages = note.frames.every((f) => f.kind === 'color')
   const aspect = firstImages && picked[0] ? await imageAspect(picked[0]) : undefined
+  const naturalMm = (n: typeof note, a: number) =>
+    n.thread.direction === 'vertical' ? n.thread.widthMm * a : n.thread.widthMm / a
   updateNote(projectId, noteId, (n) => ({
     ...n,
     frames: (replacePlaceholders ? added : [...n.frames, ...added]).slice(0, MAX_FRAMES),
     thread: aspect
-      ? { ...n.thread, tileMm: Math.min(n.heightMm, Math.max(1, Math.round(n.thread.widthMm * aspect * 2) / 2)) }
+      ? { ...n.thread, tileMm: Math.max(1, Math.round(naturalMm(n, aspect) * 2) / 2) }
       : n.thread,
   }))
   return images.length - picked.length

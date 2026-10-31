@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, ImagePlus, MoreHorizontal, Palette, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -11,10 +11,10 @@ import {
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
-import { clamp, formatDeg, frameMix } from '../lib/frames'
+import { clamp, formatDeg, frameMix, sliceRange, tiltRange } from '../lib/frames'
 import { pickFiles } from '../lib/images'
-import { MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
-import type { Note } from '../lib/types'
+import { MAX_FRAMES, MIN_FRAMES, SPAN_LIMITS } from '../lib/notes'
+import type { Frame, Note } from '../lib/types'
 import { setTilt, useTilt } from '../tilt/tilt'
 import { addColorFrame, addImageFrames, deleteFrame, moveFrame, replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
 
@@ -40,29 +40,60 @@ function TiltIndicator({ angle }: { angle: number }) {
   )
 }
 
+const PAD = 12
+const ZOOM = { min: 3, max: 40, initial: 10 }
+
 /**
- * Bottom of the canvas: play and stop, then the selected note's frames as a timeline. The playhead
- * marks the current angle; drag along the frames to scrub through the tilt.
+ * Bottom of the canvas: play and pause, then the selected note's frames on a timeline measured in degrees
+ * of tilt, like clips on a track. A frame's width is how long it shows; drag its right edge to change
+ * that. Drag the ruler or a frame to scrub, scroll to move along, ⌘-scroll to zoom.
  */
 export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRef: NoteRef | undefined; besidePanel: boolean }) {
+  const scroller = useRef<HTMLDivElement>(null)
   const track = useRef<HTMLDivElement>(null)
-  const scrubbing = useRef(false)
+  const gesture = useRef<{ mode: 'scrub' } | { mode: 'resize'; frameId: string; startX: number; startSpan: number } | null>(null)
+  const [pxPerDeg, setPxPerDeg] = useState(ZOOM.initial)
   const { angle, source, target } = useTilt()
   const { frames, tilt } = note
-  const range = tilt.rangeDeg
-  const { current } = frameMix(angle, range, frames.length, tilt.transition)
+  const spans = frames.map((f) => f.spanDeg)
+  const range = tiltRange(spans)
+  const { current } = frameMix(angle, spans, tilt.transition)
   const playing = source === 'wobble'
-  const playhead = clamp((angle + range) / (2 * range), 0, 1)
+  const x = (deg: number) => PAD + (deg + range) * pxPerDeg
+
+  // Wheel: ⌘/Ctrl zooms the timeline, a plain vertical wheel scrolls it sideways
+  useEffect(() => {
+    const element = scroller.current
+    if (!element) return
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        setPxPerDeg((p) => clamp(p * Math.exp(-clamp(e.deltaY, -40, 40) * 0.01), ZOOM.min, ZOOM.max))
+      } else if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault()
+        element.scrollLeft += e.deltaY
+      }
+    }
+    element.addEventListener('wheel', onWheel, { passive: false })
+    return () => element.removeEventListener('wheel', onWheel)
+  }, [])
 
   const scrubTo = (clientX: number) => {
     const rect = track.current?.getBoundingClientRect()
     if (!rect) return
-    const u = clamp((clientX - rect.left) / rect.width, 0, 1)
-    setTilt({ source: 'slider', target: -range + u * 2 * range })
+    setTilt({ source: 'slider', target: clamp((clientX - rect.left - PAD) / pxPerDeg - range, -range, range) })
   }
 
+  // Ruler ticks every 5° (every degree when zoomed in), labelled every 15° (every 5° when zoomed in)
+  const minor = pxPerDeg >= 14 ? 1 : 5
+  const major = pxPerDeg >= 18 ? 5 : 15
+  const ticks: number[] = []
+  for (let d = Math.ceil(-range / minor) * minor; d <= range + 1e-6; d += minor) ticks.push(d)
+
+  const starts = spans.map((_, i) => sliceRange(i, spans)[0])
+
   return (
-    <Panel className={cn('absolute bottom-3 left-3 flex h-[92px] items-stretch gap-3 p-2', besidePanel ? 'right-[268px]' : 'right-3')}>
+    <Panel className={cn('absolute bottom-3 left-3 flex h-[104px] items-stretch gap-2 p-2', besidePanel ? 'right-[268px]' : 'right-3')}>
       <div className="flex w-[84px] shrink-0 flex-col items-center justify-center gap-1.5">
         <div className="flex items-center gap-0.5">
           <IconButton
@@ -77,94 +108,88 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
         <span className="text-xs font-medium tabular-nums">{formatDeg(angle)}</span>
       </div>
 
-      <div
-        ref={track}
-        className="relative flex min-w-0 flex-1 cursor-ew-resize touch-none gap-1.5 select-none"
-        onPointerDown={(e) => {
-          if ((e.target as HTMLElement).closest('button')) return
-          e.currentTarget.setPointerCapture(e.pointerId)
-          scrubbing.current = true
-          scrubTo(e.clientX)
-        }}
-        onPointerMove={(e) => {
-          if (scrubbing.current) scrubTo(e.clientX)
-        }}
-        onPointerUp={() => {
-          scrubbing.current = false
-        }}
-      >
-        {frames.map((frame, i) => (
-          <div
-            key={frame.id}
-            className={cn(
-              'group relative flex min-w-[56px] flex-1 overflow-hidden rounded-lg border bg-white transition-shadow',
-              i === current && 'ring-2 ring-primary/60',
-            )}
-          >
-            <FrameThumb frame={frame} />
-            <span className="absolute top-1 left-1.5 rounded bg-background/80 px-1 text-[10px] font-medium tabular-nums">
-              {i + 1}
-            </span>
-            {noteRef && (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      variant="secondary"
-                      size="icon-xs"
-                      aria-label={`Frame ${i + 1} options`}
-                      className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 data-[popup-open]:opacity-100"
-                    />
-                  }
-                >
-                  <MoreHorizontal />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-44">
-                  <DropdownMenuItem
-                    onClick={async () => {
-                      const [file] = await pickFiles()
-                      if (file) await replaceFrameImage(noteRef, frame.id, file)
-                    }}
-                  >
-                    <RefreshCw />
-                    {frame.kind === 'image' ? 'Replace image' : 'Use an image'}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() =>
-                      pickColor(frame.color, (color) => updateFrame(noteRef, frame.id, { kind: 'color', color }))
-                    }
-                  >
-                    <Palette />
-                    {frame.kind === 'color' ? 'Change colour' : 'Use a colour'}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem disabled={i === 0} onClick={() => moveFrame(noteRef, frame.id, -1)}>
-                    <ArrowLeft />
-                    Move earlier
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled={i === frames.length - 1} onClick={() => moveFrame(noteRef, frame.id, 1)}>
-                    <ArrowRight />
-                    Move later
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    disabled={frames.length <= MIN_FRAMES}
-                    onClick={() => void deleteFrame(noteRef, frame.id)}
-                  >
-                    <Trash2 />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-        ))}
-
+      <div ref={scroller} className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden rounded-lg bg-muted/40">
         <div
-          className="pointer-events-none absolute -inset-y-1 w-0.5 -translate-x-1/2 rounded-full bg-primary"
-          style={{ left: `${playhead * 100}%` }}
-        />
+          ref={track}
+          className="relative h-full touch-none select-none"
+          style={{ width: x(range) + PAD }}
+          onPointerDown={(e) => {
+            const el = e.target as HTMLElement
+            if (el.closest('button') || el.closest('[role=menu]')) return
+            e.currentTarget.setPointerCapture(e.pointerId)
+            const handle = el.closest<HTMLElement>('[data-resize]')
+            const frame = frames.find((f) => f.id === handle?.dataset.resize)
+            if (frame && noteRef) {
+              gesture.current = { mode: 'resize', frameId: frame.id, startX: e.clientX, startSpan: frame.spanDeg }
+            } else {
+              gesture.current = { mode: 'scrub' }
+              scrubTo(e.clientX)
+            }
+          }}
+          onPointerMove={(e) => {
+            const g = gesture.current
+            if (g?.mode === 'scrub') scrubTo(e.clientX)
+            if (g?.mode === 'resize' && noteRef) {
+              const spanDeg = clamp(Math.round(g.startSpan + (e.clientX - g.startX) / pxPerDeg), SPAN_LIMITS.min, SPAN_LIMITS.max)
+              updateFrame(noteRef, g.frameId, { spanDeg })
+            }
+          }}
+          onPointerUp={() => {
+            gesture.current = null
+          }}
+        >
+          <div className="absolute inset-x-0 top-0 h-5 cursor-ew-resize border-b">
+            {ticks.map((d) => {
+              const isMajor = Math.abs(d % major) < 1e-6
+              return (
+                <div key={d} className="absolute bottom-0" style={{ left: x(d) }}>
+                  <div className={cn('w-px bg-foreground/25', isMajor ? 'h-2' : 'h-1')} />
+                  {isMajor && (
+                    <span className="absolute bottom-2 -translate-x-1/2 text-[9px] text-muted-foreground tabular-nums">
+                      {formatDeg(d)}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {frames.map((frame, i) => {
+            const left = x(starts.at(i) ?? -range)
+            const width = frame.spanDeg * pxPerDeg
+            return (
+              <div
+                key={frame.id}
+                className={cn(
+                  'group absolute top-6 bottom-1 overflow-hidden rounded-md border bg-background',
+                  i === current && 'ring-2 ring-primary/60',
+                )}
+                style={{ left: left + 1, width: Math.max(width - 2, 4) }}
+              >
+                <FrameThumb frame={frame} />
+                {width > 28 && (
+                  <span className="absolute top-0.5 left-1 rounded bg-background/80 px-1 text-[10px] font-medium tabular-nums">
+                    {i + 1}
+                  </span>
+                )}
+                {noteRef && (
+                  <>
+                    <FrameMenu frame={frame} index={i} count={frames.length} noteRef={noteRef} />
+                    <div
+                      data-resize={frame.id}
+                      aria-label={`Change frame ${i + 1} length`}
+                      className="absolute inset-y-0 right-0 w-1.5 cursor-col-resize bg-foreground/0 transition-colors hover:bg-primary/40"
+                    />
+                  </>
+                )}
+              </div>
+            )
+          })}
+
+          <div className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: x(clamp(angle, -range, range)) }}>
+            <div className="absolute -top-0.5 left-1/2 size-2 -translate-x-1/2 rotate-45 bg-primary" />
+          </div>
+        </div>
       </div>
 
       {noteRef && (
@@ -175,7 +200,7 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
                 type="button"
                 aria-label="Add frame"
                 disabled={frames.length >= MAX_FRAMES && !frames.every((f) => f.kind === 'color')}
-                className="flex w-12 shrink-0 items-center justify-center rounded-lg border border-dashed text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                className="flex w-10 shrink-0 items-center justify-center rounded-lg border border-dashed text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
               />
             }
           >
@@ -199,5 +224,53 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
         </DropdownMenu>
       )}
     </Panel>
+  )
+}
+
+function FrameMenu({ frame, index, count, noteRef }: { frame: Frame; index: number; count: number; noteRef: NoteRef }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="secondary"
+            size="icon-xs"
+            aria-label={`Frame ${index + 1} options`}
+            className="absolute top-0.5 right-2 opacity-0 group-hover:opacity-100 data-[popup-open]:opacity-100"
+          />
+        }
+      >
+        <MoreHorizontal />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-44" side="top">
+        <DropdownMenuItem
+          onClick={async () => {
+            const [file] = await pickFiles()
+            if (file) await replaceFrameImage(noteRef, frame.id, file)
+          }}
+        >
+          <RefreshCw />
+          {frame.kind === 'image' ? 'Replace image' : 'Use an image'}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => pickColor(frame.color, (color) => updateFrame(noteRef, frame.id, { kind: 'color', color }))}>
+          <Palette />
+          {frame.kind === 'color' ? 'Change colour' : 'Use a colour'}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem disabled={index === 0} onClick={() => moveFrame(noteRef, frame.id, -1)}>
+          <ArrowLeft />
+          Move earlier
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={index === count - 1} onClick={() => moveFrame(noteRef, frame.id, 1)}>
+          <ArrowRight />
+          Move later
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" disabled={count <= MIN_FRAMES} onClick={() => void deleteFrame(noteRef, frame.id)}>
+          <Trash2 />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

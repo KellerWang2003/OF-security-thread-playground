@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { IconButton } from '../components/controls'
 import { NoteView } from '../components/NoteView'
-import { clamp } from '../lib/frames'
+import { clamp, tiltRange } from '../lib/frames'
 import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
 import { setTilt, useTilt, useTiltLoop } from '../tilt/tilt'
@@ -79,7 +79,8 @@ export function Canvas({
   const { angle, perspective, sheen } = useTilt()
 
   const selected = notes.find((n) => n.id === selectedId)
-  useTiltLoop((selected ?? notes.at(0))?.tilt.rangeDeg ?? 30)
+  const reference = selected ?? notes.at(0)
+  useTiltLoop(reference ? tiltRange(reference.frames.map((f) => f.spanDeg)) : 15)
 
   // Until the first pan or zoom, the view simply fits every note
   const current = view ?? (size && notes.length ? fitView(notes, size) : undefined)
@@ -200,7 +201,7 @@ export function Canvas({
             startX: e.clientX,
             startY: e.clientY,
             start,
-            range: note.tilt.rangeDeg,
+            range: tiltRange(note.frames.map((f) => f.spanDeg)),
           }
           setTilt({ source: 'drag', target: start })
         }

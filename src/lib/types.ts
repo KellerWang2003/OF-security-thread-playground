@@ -4,6 +4,8 @@ export interface Frame {
   color: string
   imageId?: string
   name: string
+  /** How many degrees of tilt this frame shows for; the frames play one after another */
+  spanDeg: number
 }
 
 export interface ThreadSettings {
@@ -30,8 +32,6 @@ export interface ThreadWindows {
 }
 
 export interface TiltSettings {
-  /** The frames cycle once from -rangeDeg to +rangeDeg, a full cycle of 2 × rangeDeg */
-  rangeDeg: number
   /** 0 = hard cut between frames, 1 = crossfade across the whole slice */
   transition: number
 }

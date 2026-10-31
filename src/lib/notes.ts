@@ -2,6 +2,9 @@ import type { Frame, Note, Project, ThreadWindows } from './types'
 
 export const MIN_FRAMES = 2
 export const MAX_FRAMES = 5
+/** Degrees of tilt a new frame shows for */
+export const DEFAULT_SPAN = 15
+export const SPAN_LIMITS = { min: 1, max: 60 }
 export const THREAD_WIDTH = { min: 3, max: 6, step: 0.5 }
 export const NOTE_SIZE = { min: 20, max: 250 }
 export const FRAME_COLORS = ['#D9A441', '#2E9C8F', '#C2456B', '#4A6FD1', '#7C4DBA']
@@ -22,6 +25,7 @@ export function colorFrame(index: number): Frame {
     kind: 'color',
     color: FRAME_COLORS[index % FRAME_COLORS.length],
     name: `Colour ${index + 1}`,
+    spanDeg: DEFAULT_SPAN,
   }
 }
 
@@ -51,7 +55,7 @@ export function createNote({
     color,
     thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, tileMm: 10, windows: DEFAULT_WINDOWS },
     frames: [colorFrame(0), colorFrame(1)],
-    tilt: { rangeDeg: 30, transition: 0 },
+    tilt: { transition: 0 },
   }
 }
 
@@ -81,6 +85,11 @@ export function migrateProject(raw: unknown): Project {
     const n: Note = {
       ...raw,
       background: raw.background ?? (raw.faceImageId ? 'image' : 'solid'),
+      // Frames used to split one shared range equally
+      frames: raw.frames.map((f) => ({
+        ...f,
+        spanDeg: f.spanDeg ?? Math.round(((2 * ((raw.tilt as { rangeDeg?: number }).rangeDeg ?? 15)) / raw.frames.length) * 2) / 2,
+      })),
       thread: {
         widthMm: raw.thread.widthMm,
         direction: raw.thread.direction ?? 'vertical',

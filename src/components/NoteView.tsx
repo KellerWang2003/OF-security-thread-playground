@@ -1,41 +1,77 @@
-import type { CSSProperties } from 'react'
-import { frameMix } from '../lib/frames'
+import { useEffect, useState, type CSSProperties } from 'react'
+import { cn } from '@/lib/utils'
+import { frameMix, tiltRange } from '../lib/frames'
 import { useImageUrl } from '../lib/images'
 import type { Frame, Note } from '../lib/types'
 
 const MAX_TILES = 400
 
+// Height ÷ width of each image, once loaded
+const aspects = new Map<string, number>()
+
+function useImageAspect(url: string | undefined) {
+  const [loaded, setLoaded] = useState<{ url: string; aspect: number }>()
+  useEffect(() => {
+    if (!url || aspects.has(url)) return
+    const img = new Image()
+    img.onload = () => {
+      if (img.naturalWidth === 0) return
+      const aspect = img.naturalHeight / img.naturalWidth
+      aspects.set(url, aspect)
+      setLoaded({ url, aspect })
+    }
+    img.src = url
+  }, [url])
+  if (!url) return undefined
+  return aspects.get(url) ?? (loaded?.url === url ? loaded.aspect : undefined)
+}
+
 /**
- * One frame filling the thread: a flat colour, or the uploaded image repeated down the thread. Each
- * repeat is the image at the thread's width, at its own aspect ratio, cropped to `tilePx` from its top.
+ * One frame filling the thread: a flat colour, or the uploaded image repeated along the thread with no
+ * gaps. The image stays upright, scaled to the thread's thickness at its own aspect ratio. `tilePx` can
+ * shorten each repeat to a section of the image, but never lengthen it past the image itself.
  */
 export function FrameFill({
   frame,
-  heightPx,
+  direction,
+  thicknessPx,
+  lengthPx,
   tilePx,
   opacity = 1,
 }: {
   frame: Frame
-  heightPx: number
+  direction: Note['thread']['direction']
+  thicknessPx: number
+  lengthPx: number
   tilePx: number
   opacity?: number
 }) {
   const url = useImageUrl(frame.imageId)
+  const aspect = useImageAspect(url)
   if (frame.kind === 'color' || !url) {
     return <div className="absolute inset-0" style={{ opacity, backgroundColor: frame.kind === 'color' ? frame.color : undefined }} />
   }
-  const tiles = Math.min(MAX_TILES, Math.ceil(heightPx / Math.max(tilePx, 0.5)))
-  const tile: CSSProperties = {
-    height: tilePx,
+  const vertical = direction === 'vertical'
+  const image: CSSProperties = {
     backgroundImage: `url(${url})`,
-    backgroundSize: '100% auto',
-    backgroundPosition: 'center top',
-    backgroundRepeat: 'no-repeat',
+    backgroundSize: vertical ? '100% auto' : 'auto 100%',
+    backgroundPosition: 'left top',
   }
+  const naturalPx = aspect ? (vertical ? thicknessPx * aspect : thicknessPx / aspect) : undefined
+  const repeatPx = naturalPx ? Math.min(tilePx, naturalPx) : undefined
+
+  if (!naturalPx || !repeatPx || repeatPx >= naturalPx - 0.5) {
+    return <div className="absolute inset-0" style={{ ...image, opacity, backgroundRepeat: vertical ? 'repeat-y' : 'repeat-x' }} />
+  }
+  const tiles = Math.min(MAX_TILES, Math.ceil(lengthPx / Math.max(repeatPx, 0.5)))
   return (
-    <div className="absolute inset-0 flex flex-col overflow-hidden" style={{ opacity }}>
+    <div className={cn('absolute inset-0 flex overflow-hidden', vertical ? 'flex-col' : 'flex-row')} style={{ opacity }}>
       {Array.from({ length: tiles }, (_, i) => (
-        <div key={i} className="w-full shrink-0" style={tile} />
+        <div
+          key={i}
+          className="shrink-0"
+          style={{ ...image, backgroundRepeat: 'no-repeat', ...(vertical ? { height: repeatPx, width: '100%' } : { width: repeatPx, height: '100%' }) }}
+        />
       ))}
     </div>
   )
@@ -70,27 +106,21 @@ export function NoteView({
   const { thread, frames, tilt } = note
   const mm = (value: number) => value * scale
   const face = useImageUrl(note.background === 'image' ? note.faceImageId : undefined)
-  const mix = frameMix(angle, tilt.rangeDeg, frames.length, tilt.transition)
+  const spans = frames.map((f) => f.spanDeg)
+  const mix = frameMix(angle, spans, tilt.transition)
   const baseFrame = frames.at(mix.base)
   const nextFrame = frames.at(mix.next)
-  const t = angle / tilt.rangeDeg
+  const t = angle / Math.max(tiltRange(spans), 1)
   const rotate = perspective ? `rotateX(${angle}deg)` : undefined
   const sheenAt = 50 + t * 70
   const direction = '180deg'
   const horizontal = thread.direction === 'horizontal'
-  // The thread is drawn as a vertical strip, then turned for a horizontal thread, so its artwork, repeats
-  // and windows always run along its length
   const lengthMm = horizontal ? note.widthMm : note.heightMm
   const strip: CSSProperties = horizontal
-    ? {
-        left: 0,
-        top: mm(thread.positionMm - thread.widthMm / 2),
-        width: mm(thread.widthMm),
-        height: mm(lengthMm),
-        transformOrigin: 'top left',
-        transform: `translateY(${mm(thread.widthMm)}px) rotate(-90deg)`,
-      }
+    ? { left: 0, top: mm(thread.positionMm - thread.widthMm / 2), width: mm(lengthMm), height: mm(thread.widthMm) }
     : { left: mm(thread.positionMm - thread.widthMm / 2), top: 0, width: mm(thread.widthMm), height: mm(lengthMm) }
+
+  const fill = { direction: thread.direction, thicknessPx: mm(thread.widthMm), lengthPx: mm(lengthMm), tilePx: mm(thread.tileMm) }
 
   // Between windows the paper covers the thread, so the thread only shows through the windows
   const { windows } = thread
@@ -98,11 +128,12 @@ export function NoteView({
   if (windows.enabled && windows.gapMm > 0) {
     const open = mm(windows.windowMm)
     const period = mm(windows.windowMm + windows.gapMm)
-    const mask = `repeating-linear-gradient(to bottom, #000 0, #000 ${open}px, transparent ${open}px, transparent ${period}px)`
+    const mask = `repeating-linear-gradient(${horizontal ? 'to right' : 'to bottom'}, #000 0, #000 ${open}px, transparent ${open}px, transparent ${period}px)`
     windowMask.maskImage = mask
     windowMask.WebkitMaskImage = mask
-    windowMask.maskPosition = `0 ${mm(windows.offsetMm)}px`
-    windowMask.WebkitMaskPosition = `0 ${mm(windows.offsetMm)}px`
+    const offset = horizontal ? `${mm(windows.offsetMm)}px 0` : `0 ${mm(windows.offsetMm)}px`
+    windowMask.maskPosition = offset
+    windowMask.WebkitMaskPosition = offset
   }
 
   return (
@@ -122,16 +153,13 @@ export function NoteView({
         className="absolute overflow-hidden bg-white"
         style={{ ...strip, ...windowMask }}
       >
-        {baseFrame && <FrameFill frame={baseFrame} heightPx={mm(lengthMm)} tilePx={mm(thread.tileMm)} />}
-        {nextFrame && mix.blend > 0 && mix.next !== mix.base && (
-          <FrameFill frame={nextFrame} heightPx={mm(lengthMm)} tilePx={mm(thread.tileMm)} opacity={mix.blend} />
-        )}
+        {baseFrame && <FrameFill frame={baseFrame} {...fill} />}
+        {nextFrame && mix.blend > 0 && mix.next !== mix.base && <FrameFill frame={nextFrame} {...fill} opacity={mix.blend} />}
         {sheen && (
           <div
             className="absolute inset-0 mix-blend-soft-light"
             style={{
-              // Inside a turned strip, the note's top-to-bottom runs across the strip
-              background: `linear-gradient(${horizontal ? '270deg' : '180deg'}, transparent ${sheenAt - 18}%, rgba(255,255,255,0.7) ${sheenAt}%, transparent ${sheenAt + 18}%)`,
+              background: `linear-gradient(180deg, transparent ${sheenAt - 18}%, rgba(255,255,255,0.7) ${sheenAt}%, transparent ${sheenAt + 18}%)`,
             }}
           />
         )}

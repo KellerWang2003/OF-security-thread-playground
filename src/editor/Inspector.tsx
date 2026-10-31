@@ -168,21 +168,11 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
         )}
       </Section>
 
-      <Section title="Frame cycle">
-        <div className="grid grid-cols-2 gap-2">
+      <Section title="Frames">
+        <div className="grid grid-cols-1 gap-2">
           <ScrubField
-            label="∠"
-            title="Angle for one full cycle of the frames"
-            value={tilt.rangeDeg * 2}
-            min={10}
-            max={90}
-            step={1}
-            unit="°"
-            onChange={(full) => setTiltSettings({ rangeDeg: full / 2 })}
-          />
-          <ScrubField
-            label="◐"
-            title="Crossfade between frames"
+            label="Crossfade"
+            title="How much neighbouring frames blend into each other"
             value={Math.round(tilt.transition * 100)}
             min={0}
             max={100}
