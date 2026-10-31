@@ -87,7 +87,7 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
             <Button
               variant="outline"
               size="sm"
-              className="h-14 flex-1 justify-start gap-2 overflow-hidden px-1.5"
+              className="h-[58px] flex-1 justify-start gap-2 overflow-hidden rounded-[calc(var(--radius-sm)+7px)] p-1.5"
               onClick={async () => {
                 try {
                   const [file] = await pickFiles()

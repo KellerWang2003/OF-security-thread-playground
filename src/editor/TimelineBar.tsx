@@ -56,7 +56,7 @@ export function TimelineBar({
   return (
     <Panel
       className={cn(
-        'absolute bottom-3 left-3 flex h-[88px] items-stretch gap-2 p-2',
+        'absolute bottom-3 left-3 flex h-[88px] items-stretch gap-2 p-2 rounded-[calc(var(--radius)+0.5rem+1px)]',
         note && (besidePanel ? 'right-[268px]' : 'right-3'),
       )}
     >
@@ -193,7 +193,7 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
               <div
                 key={frame.id}
                 className={cn(
-                  'group absolute inset-y-1 overflow-hidden rounded-md border bg-background',
+                  'group absolute inset-y-1 overflow-hidden rounded-sm border bg-background',
                   i === current && 'ring-1 ring-primary/30',
                 )}
                 style={{ left: left + 1, width: Math.max(width - 2, 4) }}

@@ -140,7 +140,7 @@ function ProjectCard({ project }: { project: Project }) {
 
   return (
     <li>
-      <Card className="group gap-0 py-0">
+      <Card className="group gap-0 rounded-lg py-0">
         <button
           type="button"
           onClick={() => open(project.id)}

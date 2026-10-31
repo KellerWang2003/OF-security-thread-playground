@@ -245,7 +245,7 @@ export function ColorField({ value, onChange }: { value: string; onChange: (valu
         aria-label="Pick colour"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="absolute top-1/2 left-1.5 size-5 -translate-y-1/2 cursor-pointer rounded border-0 bg-transparent p-0 [&::-webkit-color-swatch]:rounded [&::-webkit-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0"
+        className="absolute top-1/2 left-1.5 size-5 -translate-y-1/2 cursor-pointer rounded-[max(0px,calc(var(--radius)-6px))] border-0 bg-transparent p-0 [&::-webkit-color-swatch]:rounded-[inherit] [&::-webkit-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0"
       />
       <Input
         className="h-8 pl-8 uppercase tabular-nums"

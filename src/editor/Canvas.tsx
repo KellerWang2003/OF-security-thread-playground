@@ -255,9 +255,9 @@ export function Canvas({
                 data-note-body={note.id}
                 // A short perspective, relative to the note's size, so the near edge visibly widens and the far edge
                 // narrows: you can see which way the note is tilting, not just that it got shorter
-                style={{ perspective: 2.2 * Math.max(note.widthMm, note.heightMm) * scale }}
+                style={{ perspective: 2.2 * Math.max(note.widthMm, note.heightMm) * scale, borderRadius: 1.5 * scale }}
                 className={cn(
-                  'rounded-[2px] outline-offset-4 transition-[outline-color] duration-150 cursor-ns-resize',
+                  'outline-offset-4 transition-[outline-color] duration-150 cursor-ns-resize',
                   isSelected ? 'outline-2' : 'outline-0',
                   source === 'wobble' || activeMode === 'tilt' || activeMode === 'move' ? 'outline-primary/5' : 'outline-primary/25',
                 )}
@@ -273,7 +273,7 @@ export function Canvas({
         // Top right, clear of the properties panel when one is open
         <div
           className={cn(
-            'absolute top-3 flex items-center gap-0.5 rounded-lg border border-border/70 bg-background/95 p-0.5 shadow-panel backdrop-blur',
+            'absolute top-3 flex items-center gap-0.5 rounded-lg border border-border/70 bg-background/95 p-0.5 shadow-panel backdrop-blur [&>[data-slot=button]]:rounded-[calc(var(--radius)-3px)]',
             selected ? 'right-[268px]' : 'right-3',
           )}
         >
