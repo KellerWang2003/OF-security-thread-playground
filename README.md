@@ -14,7 +14,7 @@ npm run dev
 - **Banknotes:** a project holds any number of banknotes, like artboards. Each has its own name, size in mm (portrait or landscape), background (solid colour or an uploaded design), thread and frames.
 - **Thread:** vertical or horizontal, thickness 3 to 6 mm, position across the note, optional background colour, and individually editable windows. Choose Continuous or Windowed, then Edit windows to draw visible sections on the canvas, move them, or drag their ends. Sections snap to 0.5 mm; Start/End fields set exact positions, and Delete removes the selected section. Complete frame images stay upright, fill the thread's thickness at their own aspect ratio, and repeat to the banknote edge. Image gap sets the space between copies, defaulting to 0 mm; gaps show the thread background or the banknote underneath.
 - **Frames:** up to 5 per banknote, images or colours. Each frame has a length on the timeline; its share of the total is its share of the cycle. Replace, recolour, reorder or delete from a frame's ⋯ menu, or drop images on a banknote.
-- **Tilt:** back and forth only (horizontal lenses). Drag a banknote to tilt it up to ±60°, or press Play (Space toggles play/pause) to sweep from flat (0°) upward through the full Cycle angle and back to flat. **Cycle** (degrees for one full pass through the frames) and **Fade** (crossfade between frames) are shared by every banknote in the project. Past one cycle the frames loop.
+- **Tilt:** back and forth only (horizontal lenses). Drag a banknote to tilt it up to ±60°, or press Play (Space toggles play/pause) to sweep from flat (0°) upward through the full Cycle angle and back to flat. **Cycle** (degrees for one full pass through the frames) and **Playback settings** (fade between frames, speed, motion curve, and a hold at each end) are shared by every banknote in the project. Past one cycle the frames loop.
 - **Canvas:** every banknote sits on one canvas. Scroll, drag the empty canvas, or middle-drag to pan, pinch or ⌘-scroll to zoom (100% is about true size), drag a banknote's label to move it.
 
 ## Cloud setup and Vercel
@@ -32,7 +32,7 @@ See [backend and save behavior](docs/SUPABASE.md) for schema, deployment, recove
 A full-screen canvas with floating panels:
 
 - **Top left:** back to Projects, the project name, and the collapsible Banknotes list (double-click to rename, + to add, duplicate, delete).
-- **Bottom:** play/pause, Cycle and Fade, always. With a banknote selected, its frames follow as clips on a track: drag a frame's right edge to change its length, drag to scrub, scroll to move along, ⌘-scroll to zoom. The playhead shows where in the cycle the tilt is.
+- **Bottom:** play/pause, Cycle and a Playback settings popover, always. With a banknote selected, its frames follow as clips on a track: drag a frame's right edge to change its length, drag to scrub, scroll to move along, ⌘-scroll to zoom. The playhead shows where in the cycle the tilt is.
 - **Right, while a banknote is selected:** name, size and orientation, background, thread (direction, width, position, repeat) and windows.
 
 ## UI

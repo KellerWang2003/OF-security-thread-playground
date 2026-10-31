@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../src/App'
+import { useProjects } from '../src/lib/store'
+import { migrateProject } from '../src/lib/notes'
 import { setTilt, useTilt } from '../src/tilt/tilt'
 import { TooltipProvider } from '../src/components/ui/tooltip'
 
@@ -86,6 +88,32 @@ describe('username workspace editor', () => {
     await user.click(screen.getByRole('button', { name: 'Edit windows', exact: true }))
     await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
     expect(screen.getByTitle('Visible section starts here').querySelector('input')!.value).toBe('16')
+    expect(saves).not.toHaveBeenCalled()
+  })
+  it('opens playback settings and applies saved fade, speed, curve and hold to every banknote', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'playback-settings-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Duplicate', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Playback settings', exact: true }))
+    const dialog = await screen.findByRole('dialog', { name: 'Playback settings' })
+    expect(dialog).toBeDefined()
+    fireEvent.change(screen.getByTitle('How much neighbouring frames blend into each other').querySelector('input')!, { target: { value: '60' } })
+    fireEvent.change(screen.getByTitle('Playback speed multiplier; 1× takes two seconds for the full motion, before holds').querySelector('input')!, { target: { value: '2' } })
+    fireEvent.change(screen.getByTitle('Pause at flat and at full tilt, in seconds at each end').querySelector('input')!, { target: { value: '0.5' } })
+    await user.click(screen.getByRole('combobox', { name: 'Playback curve' }))
+    await user.click(await screen.findByRole('option', { name: 'Linear', exact: true }))
+    const project = useProjects.getState().demoPreview!
+    expect(project.notes).toHaveLength(2)
+    for (const note of migrateProject(JSON.parse(JSON.stringify(project))).notes) {
+      expect(note.tilt).toMatchObject({ transition: 0.6, speed: 2, curve: 'linear', holdSeconds: 0.5 })
+    }
+    expect(screen.getByText('2 s / loop')).toBeDefined()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Playback settings' })).toBeNull())
+    expect(screen.getByRole('button', { name: 'Playback settings', exact: true })).toBeDefined()
     expect(saves).not.toHaveBeenCalled()
   })
   it('discards demo edits on exit and signs out without creating any project', async () => {

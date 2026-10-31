@@ -87,7 +87,7 @@ export function Canvas({
 
   const selected = notes.find((n) => n.id === selectedId)
   const reference = selected ?? notes.at(0)
-  useTiltLoop(reference?.tilt.cycleDeg ?? 30)
+  useTiltLoop(reference?.tilt.cycleDeg ?? 30, reference?.tilt)
 
   // Until the first pan or zoom, the view simply fits every note
   const current = view ?? (size && notes.length ? fitView(notes, size) : undefined)

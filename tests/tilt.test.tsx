@@ -25,7 +25,7 @@ beforeEach(() => {
   vi.spyOn(performance, 'now').mockImplementation(() => now)
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { const id = ++nextId; callbacks.set(id, callback); return id })
   vi.stubGlobal('cancelAnimationFrame', (id: number) => callbacks.delete(id))
-  setTilt({ source: 'drag', angle: 0, target: 0, wobbleSpeed: 1 })
+  setTilt({ source: 'drag', angle: 0, target: 0 })
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
@@ -41,6 +41,52 @@ describe('flat-to-upward playback', () => {
     expect(angles[100]).toBeCloseTo(0, 8)
     expect(Math.min(...angles)).toBeGreaterThanOrEqual(0)
     expect(Math.max(...angles)).toBeLessThanOrEqual(cycle)
+  })
+
+  it.each([
+    ['smooth', (1 - Math.cos(Math.PI * 0.2)) / 2],
+    ['linear', 0.2],
+    ['ease-in', 0.04],
+    ['ease-out', 0.36],
+  ] as const)('uses the %s curve while still reaching the full tilt', (curve, expected) => {
+    renderHook(() => useTiltLoop(30, { curve }))
+    setTilt({ source: 'wobble' })
+    tick(20)
+    advance(200)
+    expect(useTilt.getState().angle).toBeCloseTo(expected * 30, 8)
+    advance(800)
+    expect(useTilt.getState().angle).toBeCloseTo(30, 8)
+  })
+
+  it('changes speed during playback without restarting the motion', () => {
+    const { rerender } = renderHook(({ speed }) => useTiltLoop(30, { speed, curve: 'linear' }), { initialProps: { speed: 1 } })
+    setTilt({ source: 'wobble' })
+    tick(20)
+    advance(200)
+    expect(useTilt.getState().angle).toBeCloseTo(6, 8)
+    rerender({ speed: 2 })
+    tick(20)
+    expect(useTilt.getState().angle).toBeCloseTo(7.2, 8)
+    advance(380)
+    expect(useTilt.getState().angle).toBeCloseTo(30, 8)
+    advance(500)
+    expect(useTilt.getState().angle).toBeCloseTo(0, 8)
+  })
+
+  it('holds at both ends for the requested time', () => {
+    renderHook(() => useTiltLoop(30, { curve: 'linear', holdSeconds: 0.4 }))
+    setTilt({ source: 'wobble' })
+    tick(20)
+    advance(1000)
+    expect(useTilt.getState().angle).toBeCloseTo(30, 8)
+    advance(400)
+    expect(useTilt.getState().angle).toBeCloseTo(30, 8)
+    advance(1000)
+    expect(useTilt.getState().angle).toBeCloseTo(0, 8)
+    advance(400)
+    expect(useTilt.getState().angle).toBeCloseTo(0, 8)
+    advance(200)
+    expect(useTilt.getState().angle).toBeCloseTo(6, 8)
   })
 
   it('holds the current angle on pause and starts the next play run flat', () => {

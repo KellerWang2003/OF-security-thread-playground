@@ -33,7 +33,14 @@ export interface ThreadWindows {
   sections: ThreadWindow[]
 }
 
+export type PlaybackCurve = 'smooth' | 'linear' | 'ease-in' | 'ease-out'
+
 export interface TiltSettings {
+  /** Playback speed multiplier; 1 = one second in each direction */
+  speed?: number
+  curve?: PlaybackCurve
+  /** Seconds spent at each end of the tilt motion */
+  holdSeconds?: number
   /** Degrees of tilt for one full cycle of the frames; past it the frames loop */
   cycleDeg: number
   /** 0 = hard cut between frames, 1 = crossfade across the whole slice */

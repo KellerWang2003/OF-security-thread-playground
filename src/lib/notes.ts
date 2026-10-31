@@ -1,3 +1,4 @@
+import { DEFAULT_PLAYBACK, playbackSettings } from './playback'
 import { migrateWindows, threadLength } from './thread'
 import type { Frame, Note, Project } from './types'
 
@@ -7,7 +8,7 @@ export const MAX_FRAMES = 5
 export const DEFAULT_LENGTH = 10
 export const LENGTH_LIMITS = { min: 1, max: 100 }
 export const CYCLE_LIMITS = { min: 2, max: 120 }
-export const DEFAULT_TILT = { cycleDeg: 30, transition: 0 }
+export const DEFAULT_TILT = { ...DEFAULT_PLAYBACK, cycleDeg: 30, transition: 0 }
 export const THREAD_WIDTH = { min: 3, max: 6, step: 0.5 }
 export const NOTE_SIZE = { min: 20, max: 250 }
 export const FRAME_COLORS = ['#D9A441', '#2E9C8F', '#C2456B', '#4A6FD1', '#7C4DBA']
@@ -102,6 +103,7 @@ export function migrateProject(raw: unknown): Project {
       // Older frames had degree spans, or split one shared range equally: keep their proportions and cycle
       frames: raw.frames.map((f) => ({ ...f, length: f.length ?? oldLength(raw.frames, f) })),
       tilt: {
+        ...playbackSettings(raw.tilt),
         transition: raw.tilt.transition,
         cycleDeg:
           raw.tilt.cycleDeg ??

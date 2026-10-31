@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { create } from 'zustand'
+import { advancePlayback, playbackEase, playbackSettings, type PlaybackSettings } from '../lib/playback'
 import { TILT_LIMIT, clamp } from '../lib/frames'
 
 export type TiltSource = 'drag' | 'wobble' | 'slider'
@@ -10,7 +11,6 @@ interface TiltState {
   angle: number
   /** Where the current source wants the angle to be */
   target: number
-  wobbleSpeed: number
   springBack: boolean
   perspective: boolean
   sheen: boolean
@@ -21,7 +21,6 @@ export const useTilt = create<TiltState>()(() => ({
   source: 'drag',
   angle: 0,
   target: 0,
-  wobbleSpeed: 1,
   springBack: true,
   perspective: true,
   sheen: true,
@@ -39,12 +38,15 @@ export function togglePlayback() {
  * Manual tilt uses a critically damped spring. Playback eases from flat to the full
  * cycle angle and back, reaching both endpoints without spring attenuation.
  */
-export function useTiltLoop(cycleDeg: number) {
+export function useTiltLoop(cycleDeg: number, settings: PlaybackSettings = {}) {
+  const { speed, curve, holdSeconds } = playbackSettings(settings)
+  const currentSettings = useRef({ speed, curve, holdSeconds })
+  useEffect(() => { currentSettings.current = { speed, curve, holdSeconds } }, [speed, curve, holdSeconds])
   useEffect(() => {
     let raf = 0
     let last = performance.now()
     let velocity = 0
-    let phase = 0
+    let position = { phase: 0, holdRemaining: 0 }
     let lastSource: TiltSource | undefined
     const stiffness = 140
     const damping = 2 * Math.sqrt(stiffness)
@@ -55,9 +57,12 @@ export function useTiltLoop(cycleDeg: number) {
       const s = useTilt.getState()
       let target = s.target
       if (s.source === 'wobble') {
-        // Speed 1: flat → full upward tilt → flat in two seconds. Start each run flat.
-        phase = lastSource === 'wobble' ? (phase + dt * s.wobbleSpeed * Math.PI) % (2 * Math.PI) : 0
-        target = Math.max(0, cycleDeg) * (1 - Math.cos(phase)) / 2
+        const { speed, curve, holdSeconds } = currentSettings.current
+        position = lastSource === 'wobble'
+          ? advancePlayback(position, dt, speed, holdSeconds)
+          : { phase: 0, holdRemaining: 0 }
+        const progress = position.phase <= 1 ? position.phase : 2 - position.phase
+        target = Math.max(0, cycleDeg) * playbackEase(progress, curve)
         velocity = 0
         if (target !== s.angle || target !== s.target) useTilt.setState({ angle: target, target })
       } else {
