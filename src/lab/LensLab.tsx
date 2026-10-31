@@ -13,6 +13,7 @@ import {
   cycleFraction,
   fittingRepeat,
   flatFraction,
+  firstReveal,
   frameAt,
   slotOrder,
   lensFrom,
@@ -55,14 +56,14 @@ interface Settings {
 
 const BASE: Settings = {
   cycleX: 60,
-  cycleY: 200,
+  cycleY: 320,
   xOn: true,
   yOn: true,
   lean: 1,
-  flatAt: 'centre',
+  flatAt: 'pingpong',
   count: 5,
   reach: 30,
-  aircraft: [false, false, true, false, true],
+  aircraft: [false, false, false, true, true],
   direction: 'vertical',
   widthMm: 5,
   aspect: 1,
@@ -79,7 +80,7 @@ const BASE: Settings = {
 const PRESETS: { id: string; label: string; title: string; patch: Partial<Settings> }[] = [
   { id: 'today', label: 'Today', title: 'Horizontal lens: only up/down animates', patch: { xOn: false, yOn: true, cycleY: 64, flatAt: 'start', aircraft: [false, false, false, false, false] } },
   { id: '45', label: '45°', title: 'Both tilts play the sequence at the same speed', patch: { xOn: true, yOn: true, cycleX: 64, cycleY: 64, flatAt: 'centre', aircraft: [false, false, true, false, true] } },
-  { id: 'steep', label: 'Steep', title: 'About 73°: a sideways tilt reaches the aircraft, up/down never does', patch: { xOn: true, yOn: true, cycleX: 60, cycleY: 200, flatAt: 'centre', aircraft: [false, false, true, false, true] } },
+  { id: 'steep', label: 'Steep', title: 'About 79°: a sideways tilt of about 19° reaches the aircraft; up/down never does, even at 90°', patch: { xOn: true, yOn: true, cycleX: 60, cycleY: 320, flatAt: 'pingpong', count: 5, aircraft: [false, false, false, true, true] } },
   { id: 'vertical', label: 'Vertical', title: 'Vertical lens: only left/right animates', patch: { xOn: true, yOn: false, cycleX: 64, flatAt: 'start', aircraft: [false, false, false, false, false] } },
 ]
 
@@ -114,14 +115,14 @@ export function LensLab() {
     const extent = (axis: 'x' | 'y', side: 1 | -1) => {
       const cycle = axis === 'x' ? (s.xOn ? s.cycleX : null) : (s.yOn ? s.cycleY : null)
       const sign = axisDirection(lens, axis) || 1
-      const share = s.flatAt === 'start' ? 1 : side === 1 ? 1 - flat : flat
+      const share = s.flatAt === 'start' ? 1 : s.flatAt === 'pingpong' ? 0.5 : side === 1 ? 1 - flat : flat
       return side * sign * Math.min((cycle ?? s.reach) * share, TILT_LIMIT)
     }
     const tick = (now: number) => {
       const t = (now - start) / 1000
       const round = Math.floor(t / period)
       const ease = (1 - Math.cos((2 * Math.PI * t) / period)) / 2
-      const outward = s.flatAt === 'centre'
+      const outward = s.flatAt !== 'start'
       // One way: every round is a full sweep. Outward: rounds alternate sides
       const side: 1 | -1 = outward && Math.floor(round / (sweep === 'both' ? 2 : 1)) % 2 === 1 ? -1 : 1
       const axis = sweep === 'both' ? (round % 2 === 0 ? 'x' : 'y') : sweep
@@ -243,6 +244,11 @@ function CycleField({ label, title, on, value, onToggle, onChange }: { label: st
 
 function Controls({ s, set, lens }: { s: Settings; set: (p: Partial<Settings>) => void; lens: Lens }) {
   const bothOff = !s.xOn && !s.yOn
+  const hidden = s.aircraft.slice(0, s.count)
+  const anyHidden = hidden.some(Boolean)
+  const revealX = anyHidden && !bothOff ? firstReveal(lens, 'x', hidden, s.count, s.flatAt) : null
+  const revealY = anyHidden && !bothOff ? firstReveal(lens, 'y', hidden, s.count, s.flatAt) : null
+  const revealText = (v: number | null) => (v == null ? 'never' : `${fmt(v, 0)}°`)
   return (
     <Panel className="flex h-fit flex-col lg:sticky lg:top-4">
       <Group title="Presets">
@@ -260,8 +266,8 @@ function Controls({ s, set, lens }: { s: Settings; set: (p: Partial<Settings>) =
         <InlineField label="Lean" title="Which way the ridges slant">
           <Segmented value={String(s.lean)} options={[{ value: '1', label: '/' }, { value: '-1', label: '\\' }]} onChange={(v) => set({ lean: v === '1' ? 1 : -1 })} />
         </InlineField>
-        <InlineField label="Frames run" title="Flat always shows frame 1. One way: 1 to 5 in one tilt direction. Outward: 2, 3 one way and 4, 5 the other">
-          <Segmented value={s.flatAt} options={[{ value: 'start', label: 'One way' }, { value: 'centre', label: 'Outward' }]} onChange={(flatAt) => set({ flatAt })} />
+        <InlineField label="Frames run" title="Flat always shows frame 1. One way: 1 to 5 in one tilt direction. Outward: 2, 3 one way and 4, 5 the other. Ping-pong: 1 to 5 both ways, then back down past the cycle">
+          <Segmented value={s.flatAt} options={[{ value: 'start', label: 'One way' }, { value: 'centre', label: 'Outward' }, { value: 'pingpong', label: 'Ping-pong' }]} onChange={(flatAt) => set({ flatAt })} />
         </InlineField>
         <InlineField label="Frames">
           <Segmented value={String(s.count)} options={[2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) }))} onChange={(v) => set({ count: Number(v) })} />
@@ -291,6 +297,15 @@ function Controls({ s, set, lens }: { s: Settings; set: (p: Partial<Settings>) =
             <div className="text-muted-foreground">Lens cycle</div>
             <div className="text-base font-medium tabular-nums">{bothOff ? '–' : `${fmt(lens.cycleDeg)}°`}</div>
           </div>
+          {anyHidden && !bothOff && (
+            <div className="col-span-2 border-t border-border/60 pt-2" title="Smallest tilt, either way along each axis, that shows an aircraft frame (checked all the way to 90°, past any cycle)">
+              <div className="text-muted-foreground">Aircraft first shows at</div>
+              <div className="flex gap-4 text-base font-medium tabular-nums">
+                <span>↔ {revealText(revealX)}</span>
+                <span className={revealY == null ? 'text-emerald-600' : undefined}>↕ {revealText(revealY)}</span>
+              </div>
+            </div>
+          )}
         </div>
       </Group>
       <Group title="Thread" caption="These only affect the print layer.">
@@ -504,7 +519,7 @@ function Timeline({ lens, s, tilt, aircraft }: { lens: Lens; s: Settings; tilt: 
   const trackY = 120
   const trackH = 56
   const cycles = Array.from({ length: hi - lo }, (_, i) => lo + i)
-  const boxW = (X(1) - X(0)) / s.count
+  const boxW = (X(1) - X(0)) / order.length
 
   const bracket = (reach: number, y: number, color: string, name: string, axis: 'x' | 'y') => {
     if (reach <= 0) return null
@@ -537,8 +552,8 @@ function Timeline({ lens, s, tilt, aircraft }: { lens: Lens; s: Settings; tilt: 
       {cycles.map((k) => (
         <g key={k} opacity={k === 0 ? 1 : 0.5}>
           {order.map((i, slot) => {
-            const a = k + slot / s.count
-            const b = k + (slot + 1) / s.count
+            const a = k + slot / order.length
+            const b = k + (slot + 1) / order.length
             const cx = (X(a) + X(b)) / 2
             return (
               <g key={i}>
@@ -606,7 +621,7 @@ function PrintView({ lens, s, aircraft }: { lens: Lens; s: Settings; aircraft: b
       for (let x = 0; x < w; x++) {
         const u = x * sin + y * cos
         const m = ((u % P) + P) % P
-        const strip = order[Math.min(s.count - 1, Math.floor((m / P) * s.count))]
+        const strip = order[Math.min(order.length - 1, Math.floor((m / P) * order.length))]
         const i = (y * w + x) * 4
         const src = frames[strip]
         const edge = s.ridges && m < 1
@@ -631,9 +646,10 @@ function PrintView({ lens, s, aircraft }: { lens: Lens; s: Settings; aircraft: b
 function PrintCheck({ lens, s, set }: { lens: Lens; s: Settings; set: (p: Partial<Settings>) => void }) {
   const { imgLen, step, along } = threadCopies(s)
   const geometry: ThreadGeometry = { direction: s.direction, widthMm: s.widthMm, lengthMm: along, repeatMm: step }
-  const drift = closeViewDrift(lens, geometry, s.viewMm, s.count)
+  const slots = slotOrder(s.count, s.flatAt).length
+  const drift = closeViewDrift(lens, geometry, s.viewMm, slots)
   const samples = samplesAcrossWidth(lens, geometry, s.pitchUm)
-  const fit = repeatFit(lens, geometry, s.pitchUm, s.count)
+  const fit = repeatFit(lens, geometry, s.pitchUm, slots)
   const snapGap = fittingRepeat(lens, s.direction, imgLen + s.gapMm, s.pitchUm) - imgLen
   const rows: { label: string; value: ReactNode; title: string; ok?: boolean }[] = [
     {

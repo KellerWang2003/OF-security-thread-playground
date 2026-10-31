@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { slotOrder, acrossTilt, axisDirection, coverageAt, cyclesFrom, cycleFraction, fittingRepeat, frameAt, lensFrom, repeatFit, samplesAcrossWidth } from '../src/lib/lens'
+import { firstReveal, slotOrder, acrossTilt, axisDirection, coverageAt, cyclesFrom, cycleFraction, fittingRepeat, frameAt, lensFrom, repeatFit, samplesAcrossWidth } from '../src/lib/lens'
 
 describe('lens maths', () => {
   it('turns two tilt cycles into a lens and back', () => {
@@ -57,5 +57,19 @@ describe('cycle end', () => {
   it('shows the last frame at exactly one cycle, then loops', () => {
     expect(frameAt(cycleFraction(64, 64, 'start', 5), 5, 'start')).toBe(4)
     expect(frameAt(cycleFraction(70, 64, 'start', 5), 5, 'start')).toBe(0)
+  })
+})
+
+describe('ping-pong and reveal check', () => {
+  it('runs 1 to 5 and back down, with flat on frame 1', () => {
+    expect(slotOrder(5, 'pingpong')).toEqual([3, 2, 1, 0, 1, 2, 3, 4])
+    expect(frameAt(cycleFraction(0, 60, 'pingpong', 5), 5, 'pingpong')).toBe(0)
+  })
+
+  it('keeps up/down away from the aircraft even at 90° on the Steep preset', () => {
+    const lens = lensFrom({ cycleX: 60, cycleY: 320, lean: 1 })
+    const aircraft = [false, false, false, true, true]
+    expect(firstReveal(lens, 'y', aircraft, 5, 'pingpong')).toBeNull()
+    expect(firstReveal(lens, 'x', aircraft, 5, 'pingpong')).toBeLessThan(25)
   })
 })

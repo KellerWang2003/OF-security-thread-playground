@@ -54,28 +54,39 @@ export function acrossTilt(lens: Lens, x: number, y: number) {
 }
 
 /**
- * How the frames run from flat. Either way the flat banknote shows frame 1.
+ * How the frames run from flat. Every option shows frame 1 when the banknote is flat.
  * - 'start': frame 1 starts at flat and the frames run one way (today's lenses): 1, 2, 3, 4, 5.
- * - 'centre': flat sits in the middle of frame 1 and the frames run outward both ways: tilting one way
- *   gives 2, 3, the other way 4, 5. Along the cycle that reads 5, 4, 1, 2, 3.
+ * - 'centre' (Outward): flat sits in the middle of frame 1 and the frames run outward both ways: tilting
+ *   one way gives 2, 3, the other way 4, 5. Along the cycle that reads 5, 4, 1, 2, 3, so running past the
+ *   cycle jumps from 3 straight to 5.
+ * - 'pingpong': the cycle runs 1, 2, 3, 4, 5, 4, 3, 2 and repeats, so both directions play 1 to 5 and
+ *   tilting past the cycle plays back down smoothly, with no jump. Middle frames appear twice per cycle.
  */
-export type FlatAt = 'start' | 'centre'
+export type FlatAt = 'start' | 'centre' | 'pingpong'
 
 /** Frames on the backward side of frame 1 when they run outward */
 const backwardCount = (count: number) => Math.floor((count - 1) / 2)
 
-/** Where flat sits in the cycle, 0 to 1 */
-export const flatFraction = (flatAt: FlatAt, count: number) =>
-  flatAt === 'centre' ? (backwardCount(count) + 0.5) / Math.max(1, count) : 0
-
-/** The frame (0-based) in each slot along the cycle */
+/** The frame (0-based) in each slot along one cycle; slots are equal in width */
 export function slotOrder(count: number, flatAt: FlatAt) {
   const frames = Array.from({ length: count }, (_, i) => i)
-  if (flatAt === 'start' || count < 3) return frames
+  if (flatAt === 'start' || count < 2) return frames
+  if (flatAt === 'pingpong') {
+    // count − 2 frames behind frame 1 (counting back down), then frame 1 up to the last
+    return Array.from({ length: 2 * count - 2 }, (_, i) => Math.abs(i - (count - 2)))
+  }
+  if (count < 3) return frames
   const back = backwardCount(count)
   const forward = frames.slice(1, count - back)
   const backward = frames.slice(count - back).reverse()
   return [...backward, 0, ...forward]
+}
+
+/** Where flat sits in the cycle, 0 to 1: at the start of frame 1, or in its middle */
+export function flatFraction(flatAt: FlatAt, count: number) {
+  if (flatAt === 'start') return 0
+  const order = slotOrder(count, flatAt)
+  return (order.indexOf(0) + 0.5) / Math.max(1, order.length)
 }
 
 const wrap01 = (v: number) => ((v % 1) + 1) % 1
@@ -89,12 +100,38 @@ export function cycleFraction(s: number, cycleDeg: number, flatAt: FlatAt, count
   return raw >= 0 && raw <= 1 ? raw : wrap01(raw)
 }
 
-/** Which slot along the cycle a position falls in */
-export const slotAt = (fraction: number, count: number) =>
-  Math.min(count - 1, Math.floor((fraction === 1 ? 1 : wrap01(fraction)) * count))
+/** Which of `slots` equal slots along the cycle a position falls in */
+export const slotAt = (fraction: number, slots: number) =>
+  Math.min(slots - 1, Math.floor((fraction === 1 ? 1 : wrap01(fraction)) * slots))
 
 /** Which frame (0-based) shows at a cycle position */
-export const frameAt = (fraction: number, count: number, flatAt: FlatAt) => slotOrder(count, flatAt)[slotAt(fraction, count)] ?? 0
+export function frameAt(fraction: number, count: number, flatAt: FlatAt) {
+  const order = slotOrder(count, flatAt)
+  return order[slotAt(fraction, order.length)] ?? 0
+}
+
+/**
+ * The smallest tilt (in either direction along one axis, up to `maxDeg`) that shows any frame in `hidden`,
+ * or null if that tilt never shows one. Used to check that, say, up/down can never reveal the aircraft.
+ */
+export function firstReveal(
+  lens: Lens,
+  axis: 'x' | 'y',
+  hidden: boolean[],
+  count: number,
+  flatAt: FlatAt,
+  maxDeg = 90,
+  step = 0.25,
+) {
+  for (let t = 0; t <= maxDeg + 1e-9; t += step) {
+    for (const sign of [1, -1]) {
+      const v = sign * t
+      const s = axis === 'x' ? acrossTilt(lens, v, 0) : acrossTilt(lens, 0, v)
+      if (hidden[frameAt(cycleFraction(s, lens.cycleDeg, flatAt, count), count, flatAt)]) return t
+    }
+  }
+  return null
+}
 
 /**
  * How far along the cycle one tilt alone can move from flat, as a fraction of the cycle (each way).
