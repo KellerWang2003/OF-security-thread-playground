@@ -198,7 +198,7 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
                 )}
                 style={{ left: left + 1, width: Math.max(width - 2, 4) }}
               >
-                <FrameThumb frame={frame} />
+                <FrameThumb frame={frame} backgroundColor={note.thread.backgroundColor} />
                 {width > 28 && (
                   <span className="absolute top-0.5 left-1 rounded bg-background/80 px-1 text-[10px] font-medium tabular-nums">
                     {i + 1}

@@ -9,6 +9,8 @@ export interface Frame {
 }
 
 export interface ThreadSettings {
+  /** Optional colour behind the frame artwork; omitted for transparency */
+  backgroundColor?: string
   widthMm: number
   /** Which way the thread runs across the note */
   direction: 'vertical' | 'horizontal'

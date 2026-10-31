@@ -78,12 +78,16 @@ export function FrameFill({
 }
 
 /** A frame as a thumbnail: the uploaded image whole, or its colour */
-export function FrameThumb({ frame }: { frame: Frame }) {
+export function FrameThumb({ frame, backgroundColor }: { frame: Frame; backgroundColor?: string }) {
   const url = useImageUrl(frame.imageId)
   if (frame.kind === 'color' || !url) {
     return <div className="absolute inset-0" style={{ backgroundColor: frame.kind === 'color' ? frame.color : undefined }} />
   }
-  return <img src={url} alt="" draggable={false} className="absolute inset-0 size-full object-contain p-1" />
+  return (
+    <div className="absolute inset-0" style={{ backgroundColor }}>
+      <img src={url} alt="" draggable={false} className="absolute inset-0 size-full object-contain p-1" />
+    </div>
+  )
 }
 
 /**
@@ -150,8 +154,8 @@ export function NoteView({
       {face && <img src={face} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />}
 
       <div
-        className="absolute overflow-hidden bg-white"
-        style={{ ...strip, ...windowMask }}
+        className="absolute overflow-hidden"
+        style={{ ...strip, ...windowMask, backgroundColor: thread.backgroundColor }}
       >
         {baseFrame && <FrameFill frame={baseFrame} {...fill} />}
         {nextFrame && mix.blend > 0 && mix.next !== mix.base && <FrameFill frame={nextFrame} {...fill} opacity={mix.blend} />}

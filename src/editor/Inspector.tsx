@@ -2,7 +2,7 @@ import { reportError } from '../cloud/notices'
 import { ImageUp, RectangleHorizontal, RectangleVertical, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import { ColorField, IconButton, Panel, ScrubField, Section, Segmented } from '../components/controls'
+import { ColorField, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
@@ -143,6 +143,14 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
             onChange={(positionMm) => setThread({ positionMm })}
           />
         </div>
+        <SwitchField
+          label="Background"
+          checked={!!thread.backgroundColor}
+          onChange={(enabled) => setThread({ backgroundColor: enabled ? '#ffffff' : undefined })}
+        />
+        {thread.backgroundColor && (
+          <ColorField value={thread.backgroundColor} onChange={(backgroundColor) => setThread({ backgroundColor })} />
+        )}
         <ScrubField
           label="Repeat"
           title="Height of the image section that repeats down the thread"

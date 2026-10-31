@@ -110,6 +110,8 @@ export function migrateProject(raw: unknown): Project {
             : 2 * ((raw.tilt as { rangeDeg?: number }).rangeDeg ?? 15)),
       },
       thread: {
+        // Threads without an explicit background let the banknote show through.
+        backgroundColor: raw.thread.backgroundColor,
         widthMm: raw.thread.widthMm,
         direction: raw.thread.direction ?? 'vertical',
         positionMm: raw.thread.positionMm ?? (raw.thread as { xMm?: number }).xMm ?? raw.widthMm / 2,
