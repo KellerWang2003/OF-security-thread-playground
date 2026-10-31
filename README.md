@@ -1,35 +1,29 @@
-# React + TypeScript + Vite
+# Security thread playground
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A design tool for previewing a lenticular security thread on a banknote. You upload 2 to 5 frames and tilt the note; the tilt range is split into equal slices, one frame per slice.
 
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
-
-Note: This will impact Vite dev & build performances.
-You can also try [the experimental native React Compiler support in plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md#rust-react-compiler) by using `compiler: true` in the plugin options instead of using the Babel plugin.
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## What it does
+
+- **Projects:** create, open, rename, duplicate and delete. Everything autosaves to the browser's IndexedDB, including uploaded images; nothing leaves your machine.
+- **Note:** Flight presets (0.2 at 68 × 120, 25 at 68 × 134, 10,000 at 68 × 148 mm) or a custom size, colour, optional face artwork.
+- **Thread:** width 3 to 6 mm, position from the left edge, white surround, frames stretched full length or repeated as a tile.
+- **Frames:** upload, reorder, replace, rename and delete; colour frames as placeholders. Drop images on the note to add them.
+- **Tilt:** drag on the note, auto-wobble or an angle slider; back and forth or side to side; range, crossfade, perspective and a moving highlight.
+
+## Layout
+
+```
+src/
+  app/          project list and editor screens
+  editor/       Stage (note + drag), FrameStrip, Inspector (side panel), frame actions
+  components/   NoteView (the note and thread) and small UI controls
+  tilt/         preview tilt state and the spring-smoothed tilt loop
+  lib/          types, note presets, IndexedDB, project store, frame maths
+```
+
+Later: phone gyroscope, PNG and video export, diagonal lenses, then the Anima foil, Arc-en-Ciel and SPARK Flow PRIME as new layers.
