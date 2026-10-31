@@ -1,23 +1,7 @@
-import { create } from 'zustand'
-import * as db from './db'
+import { useWorkspace, putProject } from '../cloud/workspace'
 import { copyImage, removeImage } from './images'
 import { nextNotePosition } from './notes'
 import type { Note, Project } from './types'
-
-// Edits land in memory immediately and are written to IndexedDB shortly after, per project
-const saveTimers = new Map<string, number>()
-
-function scheduleSave(id: string) {
-  window.clearTimeout(saveTimers.get(id))
-  saveTimers.set(
-    id,
-    window.setTimeout(() => {
-      saveTimers.delete(id)
-      const project = useProjects.getState().projects.find((p) => p.id === id)
-      if (project) void db.saveProject(project)
-    }, 250),
-  )
-}
 
 const noteImageIds = (note: Note) => [note.faceImageId, ...note.frames.map((f) => f.imageId)].filter((i) => i !== undefined)
 
@@ -34,62 +18,38 @@ async function copyNote(note: Note): Promise<Note> {
   return { ...note, id: crypto.randomUUID(), faceImageId, frames }
 }
 
-interface ProjectsState {
-  projects: Project[]
-  loaded: boolean
-  load: () => Promise<void>
-  add: (project: Project) => void
-  update: (id: string, change: (project: Project) => Project) => void
-  duplicate: (id: string) => Promise<Project | undefined>
-  remove: (id: string) => Promise<void>
-}
-
-export const useProjects = create<ProjectsState>()((set, get) => ({
-  projects: [],
-  loaded: false,
-
-  load: async () => {
-    const projects = await db.loadProjects()
-    set({ projects, loaded: true })
+// Keep the editor's existing actions while the cloud workspace owns persistence.
+const actions = {
+  add: (project: Project) => putProject(project),
+  update: (id: string, change: (project: Project) => Project) => {
+    const project = useWorkspace.getState().projects.find((p) => p.id === id)
+    if (project) putProject({ ...change(project), updatedAt: Date.now() })
   },
-
-  add: (project) => {
-    set((s) => ({ projects: [...s.projects, project] }))
-    void db.saveProject(project)
-  },
-
-  update: (id, change) => {
-    set((s) => ({
-      projects: s.projects.map((p) => (p.id === id ? { ...change(p), updatedAt: Date.now() } : p)),
-    }))
-    scheduleSave(id)
-  },
-
-  duplicate: async (id) => {
-    const source = get().projects.find((p) => p.id === id)
+  duplicate: async (id: string) => {
+    const workspace = useWorkspace.getState().workspace
+    const source = useWorkspace.getState().projects.find((p) => p.id === id)
     if (!source) return undefined
     const now = Date.now()
     const copy: Project = {
-      ...source,
-      id: crypto.randomUUID(),
-      name: `${source.name} copy`,
-      createdAt: now,
-      updatedAt: now,
-      notes: await Promise.all(source.notes.map(copyNote)),
+      ...source, id: crypto.randomUUID(), name: `${source.name} copy`,
+      createdAt: now, updatedAt: now, notes: await Promise.all(source.notes.map(copyNote)),
     }
-    get().add(copy)
+    if (useWorkspace.getState().workspace !== workspace) throw new Error('The workspace changed. Try again.')
+    actions.add(copy)
     return copy
   },
-
-  remove: async (id) => {
-    const project = get().projects.find((p) => p.id === id)
-    if (!project) return
-    window.clearTimeout(saveTimers.get(id))
-    set((s) => ({ projects: s.projects.filter((p) => p.id !== id) }))
-    await db.deleteProject(id)
-    await Promise.all(project.notes.flatMap(noteImageIds).map((i) => removeImage(i)))
+  remove: async (id: string) => {
+    const project = useWorkspace.getState().projects.find((p) => p.id === id)
+    if (project) putProject(project, true)
   },
-}))
+}
+
+// Zustand's hook and imperative API are both used by the existing UI.
+export const useProjects = Object.assign(
+  <T = ReturnType<typeof useWorkspace.getState>>(selector?: (state: ReturnType<typeof useWorkspace.getState>) => T) =>
+    useWorkspace(selector ?? ((state) => state as T)),
+  { getState: () => ({ ...useWorkspace.getState(), ...actions }) },
+)
 
 export const updateProject = (id: string, change: (project: Project) => Project) =>
   useProjects.getState().update(id, change)

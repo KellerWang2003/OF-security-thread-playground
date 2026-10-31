@@ -1,3 +1,4 @@
+import { reportError } from '../cloud/notices'
 import { ArrowLeft, ArrowRight, ImagePlus, MoreHorizontal, Palette, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -240,8 +241,10 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
           <DropdownMenuContent className="w-44" side="top" align="end">
             <DropdownMenuItem
               onClick={async () => {
-                const files = await pickFiles({ multiple: true })
-                if (files.length) await addImageFrames(noteRef, files)
+                try {
+                  const files = await pickFiles({ multiple: true })
+                  if (files.length) await addImageFrames(noteRef, files)
+                } catch (error) { reportError(error) }
               }}
             >
               <ImagePlus />
@@ -277,8 +280,10 @@ function FrameMenu({ frame, index, count, noteRef }: { frame: Frame; index: numb
       <DropdownMenuContent className="w-44" side="top">
         <DropdownMenuItem
           onClick={async () => {
-            const [file] = await pickFiles()
-            if (file) await replaceFrameImage(noteRef, frame.id, file)
+            try {
+              const [file] = await pickFiles()
+              if (file) await replaceFrameImage(noteRef, frame.id, file)
+            } catch (error) { reportError(error) }
           }}
         >
           <RefreshCw />

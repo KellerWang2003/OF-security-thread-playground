@@ -1,0 +1,9 @@
+project_id = "of-security-thread-playground"
+# Username workspaces use the publishable client without Supabase Auth.
+# This app does not manage project-wide Auth settings.
+
+[functions.thread-workspace]
+enabled = true
+verify_jwt = false
+import_map = "./functions/thread-workspace/deno.json"
+entrypoint = "./functions/thread-workspace/index.ts"

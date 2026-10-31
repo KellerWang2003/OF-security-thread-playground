@@ -2,7 +2,7 @@ import { createStore, del, get, set, values } from 'idb-keyval'
 import { migrateProject } from './notes'
 import type { Project } from './types'
 
-// Everything lives in the browser's IndexedDB, so projects survive reloads and nothing is uploaded.
+// Original browser-only stores, retained for importing existing work into cloud workspaces.
 const projectStore = createStore('of-thread-projects', 'projects')
 const imageStore = createStore('of-thread-images', 'images')
 

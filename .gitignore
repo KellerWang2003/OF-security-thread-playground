@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment and Supabase machine state
+.env
+.env.*
+!.env.example
+supabase/.temp/
+supabase/.branches/
+coverage/

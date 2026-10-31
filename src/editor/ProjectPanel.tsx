@@ -15,6 +15,8 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
+import { CloudStatus } from '../components/CloudStatus'
+import { runAction, reportError } from '../cloud/notices'
 import { NoteView } from '../components/NoteView'
 import { duplicateNote, removeNote, updateNote, updateProject } from '../lib/store'
 import type { Note, Project } from '../lib/types'
@@ -53,6 +55,7 @@ export function ProjectPanel({
           onChange={(e) => updateProject(project.id, (p) => ({ ...p, name: e.target.value }))}
         />
       </div>
+      <div className="flex items-center justify-between px-3 pb-2"><CloudStatus showWorkspace /></div>
       <Separator />
 
       <Collapsible open={open} onOpenChange={setOpen} className="flex min-h-0 flex-col">
@@ -115,8 +118,10 @@ export function ProjectPanel({
                       label="Duplicate"
                       size="icon-xs"
                       onClick={async () => {
-                        const id = await duplicateNote(project.id, note.id)
-                        if (id) onSelect(id)
+                        try {
+                          const id = await duplicateNote(project.id, note.id)
+                          if (id) onSelect(id)
+                        } catch (error) { reportError(error) }
                       }}
                     >
                       <Copy />
@@ -142,7 +147,7 @@ export function ProjectPanel({
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
-                if (deleting) void removeNote(project.id, deleting.id)
+                if (deleting) runAction(removeNote(project.id, deleting.id))
                 setDeleting(undefined)
               }}
             >

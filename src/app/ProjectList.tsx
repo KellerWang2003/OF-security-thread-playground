@@ -21,6 +21,9 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, IconButton } from '../components/controls'
+import { CloudStatus } from '../components/CloudStatus'
+import { importBrowserProjects, useWorkspace } from '../cloud/workspace'
+import { runAction, reportError } from '../cloud/notices'
 import { NoteView } from '../components/NoteView'
 import { createDemoProject } from '../lib/demo'
 import { createProject } from '../lib/notes'
@@ -31,6 +34,7 @@ const open = (id: string) => (location.hash = `#/p/${id}`)
 
 export function ProjectList() {
   const projects = useProjects((s) => s.projects)
+  const { legacyProjects, importing } = useWorkspace()
   const [creating, setCreating] = useState(projects.length === 0)
   const sorted = [...projects].sort((a, b) => b.updatedAt - a.updatedAt)
 
@@ -41,13 +45,16 @@ export function ProjectList() {
           <div>
             <h1 className="font-heading text-xl font-semibold">Security thread playground</h1>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <CloudStatus showWorkspace />
             <Button
               variant="outline"
               onClick={async () => {
-                const project = await createDemoProject()
-                useProjects.getState().add(project)
-                open(project.id)
+                try {
+                  const project = await createDemoProject()
+                  useProjects.getState().add(project)
+                  open(project.id)
+                } catch (error) { reportError(error) }
               }}
             >
               <Bird />
@@ -61,6 +68,11 @@ export function ProjectList() {
             )}
           </div>
         </header>
+
+        {legacyProjects.length > 0 && <div className="flex items-center justify-between rounded-lg border bg-background px-4 py-3">
+          <span className="text-sm">{legacyProjects.length} browser {legacyProjects.length === 1 ? 'project' : 'projects'}</span>
+          <Button variant="outline" disabled={importing} onClick={() => runAction(importBrowserProjects())}>{importing ? 'Importing…' : 'Import browser projects'}</Button>
+        </div>}
 
         {creating && <NewProject onCancel={projects.length ? () => setCreating(false) : undefined} />}
 
@@ -157,7 +169,7 @@ function ProjectCard({ project }: { project: Project }) {
           <IconButton label="Rename" onClick={() => setRenaming(true)}>
             <Pencil />
           </IconButton>
-          <IconButton label="Duplicate" onClick={() => void useProjects.getState().duplicate(project.id)}>
+          <IconButton label="Duplicate" onClick={() => runAction(useProjects.getState().duplicate(project.id))}>
             <Copy />
           </IconButton>
           <IconButton label="Delete" onClick={() => setDeleting(true)}>
@@ -176,7 +188,7 @@ function ProjectCard({ project }: { project: Project }) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => void useProjects.getState().remove(project.id)}>
+            <AlertDialogAction variant="destructive" onClick={() => runAction(useProjects.getState().remove(project.id))}>
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

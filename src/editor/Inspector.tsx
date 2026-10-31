@@ -1,3 +1,4 @@
+import { reportError } from '../cloud/notices'
 import { ImageUp, RectangleHorizontal, RectangleVertical, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -88,8 +89,10 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
               size="sm"
               className="h-14 flex-1 justify-start gap-2 overflow-hidden px-1.5"
               onClick={async () => {
-                const [file] = await pickFiles()
-                if (file) await setFaceImage(noteRef, file)
+                try {
+                  const [file] = await pickFiles()
+                  if (file) await setFaceImage(noteRef, file)
+                } catch (error) { reportError(error) }
               }}
             >
               {background ? (

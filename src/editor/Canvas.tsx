@@ -1,3 +1,4 @@
+import { runAction } from '../cloud/notices'
 import { Maximize, Minus, Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -242,7 +243,7 @@ export function Canvas({
         const noteId = noteAt(e.target, 'data-note-body') ?? noteAt(e.target, 'data-note-label') ?? selectedId
         if (!noteId) return
         onSelect(noteId)
-        void addImageFrames({ projectId, noteId }, Array.from(e.dataTransfer.files))
+        runAction(addImageFrames({ projectId, noteId }, Array.from(e.dataTransfer.files)))
       }}
     >
       {current &&
