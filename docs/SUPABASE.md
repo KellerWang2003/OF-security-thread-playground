@@ -30,7 +30,7 @@ Vercel uses the Vite preset, `npm run build`, and `dist`. `vercel.json` records 
 
 **Untitled project** was imported from the original Dia browser into `keller`, with its artwork and banknote settings. **Silly bird demo** was published as the shared template in the reserved `public-demos` namespace. Its original five images were verified byte for byte. The original browser stores remain untouched.
 
-Every username sees the shared demo card. Opening it, or pressing Demo, creates an editable copy in the current workspace with new project, banknote, and frame IDs. Shared artwork is cached locally for previews, then uploaded into the destination workspace before that copy is saved. The canonical template is read-only through the app API, and `public-demos` is reserved so it cannot be selected as an ordinary username.
+The Demo button opens a temporary editor preview using the shared template. It has no project-list card and never enters the cloud save queue or the local project cache. Edits remain in memory and are discarded on Exit demo, navigating back, reloading, or signing out. The next visit starts fresh. Template artwork may be cached for rendering. The canonical template remains read-only through the app API, and `public-demos` is reserved so it cannot be selected as an ordinary username.
 
 ## Saving and recovery
 
@@ -38,7 +38,7 @@ Edits appear immediately and are queued in IndexedDB before a cloud save. Saves 
 
 A revision check prevents a stale tab or device from overwriting a newer save. On a conflict, **Keep both** saves local work as a recovered copy and loads the cloud version. **Use cloud version** discards the conflicting local version. If a save committed but its response was lost, its revision lets a retry recognize it instead of duplicating the project.
 
-Device caches, artwork, and outboxes are separated by workspace; each browser tab keeps its own outbox to preserve simultaneous edits. Opening a new tab recovers available device drafts. Switching workspaces waits for local persistence and retains pending edits for the next time that username is opened. Closing with pending saves triggers the browser's unsaved-work warning. Storage quota failures are reported and never marked Saved.
+Device caches, artwork, and outboxes are separated by workspace; each browser tab keeps its own outbox to preserve simultaneous edits. Opening a new tab recovers available device drafts. Signing out waits for local persistence and retains pending edits for the next time that username is opened. Closing with pending saves triggers the browser's unsaved-work warning. Storage quota failures are reported and never marked Saved.
 
 This is local recovery after the app has loaded, not an installable offline app: a fresh page load still needs the frontend assets, and artwork not cached on that device needs a connection. Clearing browser data removes local drafts; completed cloud saves remain in Supabase.
 
@@ -67,7 +67,7 @@ For a new Supabase project, apply both migrations, deploy the function, then set
 
 ## Verification
 
-`npm test` covers the durable outbox, offline reload, in-flight edits, lost responses, concurrent saves, deletion conflicts, imports, workspace switching, username normalization, and the editor UI. `npm run lint` and `npm run build` check the application.
+`npm test` covers the durable outbox, offline reload, in-flight edits, lost responses, concurrent saves, deletion conflicts, imports, sign-out, temporary demo isolation, username normalization, and the editor UI. `npm run lint` and `npm run build` check the application.
 
 To verify a deployed backend explicitly, while logged into the CLI:
 

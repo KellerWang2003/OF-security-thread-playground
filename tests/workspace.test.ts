@@ -2,8 +2,9 @@ import 'fake-indexeddb/auto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createNote, createProject } from '../src/lib/notes'
 import * as legacy from '../src/lib/db'
-import { openWorkspace, closeWorkspace, importBrowserProjects, useWorkspace, putProject, createWorkspaceDemo } from '../src/cloud/workspace'
+import { openWorkspace, closeWorkspace, importBrowserProjects, useWorkspace, putProject, openDemoPreview, clearDemoPreview, hasPendingSaves } from '../src/cloud/workspace'
 import { readArtwork, readCache } from '../src/cloud/cache'
+import { updateNote, findNote } from '../src/lib/store'
 import { createRepository } from '../src/cloud/repository'
 
 vi.mock('../src/cloud/repository', async (importOriginal) => {
@@ -13,7 +14,7 @@ vi.mock('../src/cloud/repository', async (importOriginal) => {
     save: async (record: import('../src/cloud/sync').CachedProject) => ({ project: record.project, revision: record.revision, deleted: record.deleted }),
   })) }
 })
-afterEach(() => { closeWorkspace(); vi.clearAllMocks() })
+afterEach(() => { closeWorkspace(); vi.clearAllMocks(); vi.unstubAllGlobals() })
 
 describe('username workspaces and browser import', () => {
   it('imports artwork and preserves the original browser project; retry makes no duplicate', async () => {
@@ -82,24 +83,34 @@ describe('username workspaces and browser import', () => {
     expect(useWorkspace.getState().projects.filter((p) => p.name === project.name)).toHaveLength(1)
     await legacy.deleteProject(project.id)
   })
-  it('opens a shared demo as a separate editable project in the current workspace', async () => {
+  it('keeps demo edits in memory without adding projects or saving them', async () => {
     const template = createProject('Shared demo source')
     template.notes.push(createNote({ name: 'Demo banknote', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' }))
     const original = structuredClone(template)
-    vi.mocked(createRepository).mockReturnValueOnce({
+    const save = vi.fn(async (record: import('../src/cloud/sync').CachedProject) => ({ project: record.project, revision: record.revision, deleted: record.deleted }))
+    vi.stubGlobal('location', { hash: '' })
+    vi.mocked(createRepository).mockReturnValue({
       list: async () => [],
-      save: async (record) => ({ project: record.project, revision: record.revision, deleted: false }),
+      save,
       demo: async () => template,
     })
     await openWorkspace('demo-copy-test')
-    await vi.waitFor(() => expect(useWorkspace.getState().sharedDemo).toBeDefined())
-    const copy = await createWorkspaceDemo()
+    const copy = await openDemoPreview()
     expect(copy.id).not.toBe(template.id)
     expect(copy.notes[0].id).not.toBe(template.notes[0].id)
     expect(copy.notes[0].frames[0].id).not.toBe(template.notes[0].frames[0].id)
-    expect(useWorkspace.getState().projects[0].id).toBe(copy.id)
-    copy.notes[0].name = 'My edits'
+    expect(useWorkspace.getState().projects).toEqual([])
+    updateNote(copy.id, copy.notes[0].id, (note) => ({ ...note, name: 'My edits' }))
+    expect(findNote(copy.id, copy.notes[0].id)?.name).toBe('My edits')
     expect(template).toEqual(original)
+    expect(save).not.toHaveBeenCalled()
+    expect(hasPendingSaves()).toBe(false)
+    expect((await readCache('demo-copy-test')).some((record) => record.project.id === copy.id)).toBe(false)
+    clearDemoPreview()
+    expect(useWorkspace.getState().demoPreview).toBeUndefined()
+    const fresh = await openDemoPreview()
+    expect(fresh.notes[0].name).toBe('Demo banknote')
+    expect(fresh.id).not.toBe(copy.id)
   })
 
 })

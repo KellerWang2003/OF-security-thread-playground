@@ -26,11 +26,13 @@ const THUMB = 28
 /** Top-left: back to the projects, the project's name, and its notes as a collapsible list */
 export function ProjectPanel({
   project,
+  isDemo = false,
   selectedId,
   onSelect,
   onAdd,
 }: {
   project: Project
+  isDemo?: boolean
   selectedId: string | undefined
   onSelect: (noteId: string) => void
   onAdd: () => void
@@ -44,7 +46,7 @@ export function ProjectPanel({
       <div className="flex items-center gap-1 p-1.5">
         <Button variant="ghost" size="sm" className="px-1.5" onClick={() => (location.hash = '')}>
           <ChevronLeft />
-          Projects
+          {isDemo ? 'Exit demo' : 'Projects'}
         </Button>
       </div>
       <div className="px-1.5 pb-1.5">
@@ -55,7 +57,7 @@ export function ProjectPanel({
           onChange={(e) => updateProject(project.id, (p) => ({ ...p, name: e.target.value }))}
         />
       </div>
-      <div className="flex items-center justify-between px-3 pb-2"><CloudStatus showWorkspace /></div>
+      <div className="flex items-center justify-between px-3 pb-2"><CloudStatus showWorkspace isDemo={isDemo} /></div>
       <Separator />
 
       <Collapsible open={open} onOpenChange={setOpen} className="flex min-h-0 flex-col">

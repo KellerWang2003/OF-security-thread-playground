@@ -4,7 +4,7 @@ import { Editor } from './app/Editor'
 import { ProjectList } from './app/ProjectList'
 import { OpenWorkspace } from './app/OpenWorkspace'
 import { cloudConfigured } from './cloud/client'
-import { openWorkspace, closeWorkspace, useWorkspace, watchWorkspace, retrySync, switchWorkspace } from './cloud/workspace'
+import { openWorkspace, closeWorkspace, useWorkspace, watchWorkspace, retrySync, signOut, clearDemoPreview } from './cloud/workspace'
 import { readWorkspaceName, WORKSPACE_EVENT } from './cloud/identity'
 import { useNotice, runAction } from './cloud/notices'
 import { ConflictDialog } from './components/CloudStatus'
@@ -21,20 +21,23 @@ function useHash() {
 
 function Workspace({ name }: { name: string }) {
   const hash = useHash()
-  const { projects, loaded, error } = useWorkspace()
+  const { projects, demoPreview, loaded, error } = useWorkspace()
   useEffect(() => {
     void openWorkspace(name)
     const unwatch = watchWorkspace()
     return () => { unwatch(); closeWorkspace() }
   }, [name])
+  useEffect(() => {
+    if (hash !== '#/demo' && location.hash !== '#/demo') clearDemoPreview()
+  }, [hash])
   if (!loaded) return <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
     <span role={error ? 'alert' : 'status'}>{error || 'Loading projects…'}</span>
-    {error && <div className="flex gap-2"><Button onClick={() => runAction(Promise.resolve(retrySync()))}>Retry</Button><Button variant="ghost" onClick={() => runAction(switchWorkspace())}>Switch workspace</Button></div>}
+    {error && <div className="flex gap-2"><Button onClick={() => runAction(Promise.resolve(retrySync()))}>Retry</Button><Button variant="ghost" onClick={() => runAction(signOut())}>Sign out</Button></div>}
   </div>
   const projectId = hash.match(/^#\/p\/(.+)$/)?.[1]
-  const project = projects.find((p) => p.id === projectId)
+  const project = hash === '#/demo' ? demoPreview : projects.find((p) => p.id === projectId)
   return <>
-    {project ? <Editor key={project.id} project={project} /> : <ProjectList />}
+    {project ? <Editor key={project.id} project={project} isDemo={hash === '#/demo'} /> : <ProjectList />}
     <ConflictDialog />
   </>
 }

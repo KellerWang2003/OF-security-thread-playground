@@ -12,7 +12,7 @@ import { TimelineBar } from '../editor/TimelineBar'
  * A full-screen canvas with floating panels: project and banknotes top left, the frame timeline along
  * the bottom, and the selected note's properties on the right.
  */
-export function Editor({ project }: { project: Project }) {
+export function Editor({ project, isDemo = false }: { project: Project; isDemo?: boolean }) {
   const [selectedId, setSelectedId] = useState<string>()
   const [adding, setAdding] = useState(false)
   const [focus, setFocus] = useState<{ noteId: string; token: number }>()
@@ -58,7 +58,7 @@ export function Editor({ project }: { project: Project }) {
         <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={setSelectedId} focus={focus} />
       )}
 
-      <ProjectPanel project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} />
+      <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} />
       {!isEmpty && (
         <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
       )}

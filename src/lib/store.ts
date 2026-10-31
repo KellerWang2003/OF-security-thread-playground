@@ -1,4 +1,4 @@
-import { useWorkspace, putProject } from '../cloud/workspace'
+import { useWorkspace, putProject, editorProject } from '../cloud/workspace'
 import { copyImage, removeImage } from './images'
 import { nextNotePosition } from './notes'
 import type { Note, Project } from './types'
@@ -22,7 +22,7 @@ async function copyNote(note: Note): Promise<Note> {
 const actions = {
   add: (project: Project) => putProject(project),
   update: (id: string, change: (project: Project) => Project) => {
-    const project = useWorkspace.getState().projects.find((p) => p.id === id)
+    const project = editorProject(id)
     if (project) putProject({ ...change(project), updatedAt: Date.now() })
   },
   duplicate: async (id: string) => {
@@ -55,10 +55,7 @@ export const updateProject = (id: string, change: (project: Project) => Project)
   useProjects.getState().update(id, change)
 
 export const findNote = (projectId: string, noteId: string) =>
-  useProjects
-    .getState()
-    .projects.find((p) => p.id === projectId)
-    ?.notes.find((n) => n.id === noteId)
+  editorProject(projectId)?.notes.find((note) => note.id === noteId)
 
 export const updateNote = (projectId: string, noteId: string, change: (note: Note) => Note) =>
   updateProject(projectId, (p) => ({ ...p, notes: p.notes.map((n) => (n.id === noteId ? change(n) : n)) }))
