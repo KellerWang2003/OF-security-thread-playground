@@ -10,6 +10,7 @@ Design tool for previewing lenticular security threads on banknotes (Oberthur Fi
 
 ## Working with Keller
 
+- **Branches:** the app has live users, and main deploys to them through Vercel. Do all work on the `dev` branch, or a feature branch off it, and commit and push there. Merge into main or push main only when Keller explicitly says to in that conversation. The Supabase backend is shared by every branch, so treat database, function or template changes as live too, and check with Keller first.
 - Plan first. Don't write code until Keller says to build. A scope change or "let's focus on X" means update the plan, not implement it.
 - He iterates by giving feedback on the running app. Commit after each round, with a message that says what changed.
 - Call notes "banknotes" in the UI.
