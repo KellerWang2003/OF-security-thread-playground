@@ -62,6 +62,7 @@ export function Canvas({
   selectedId,
   onSelect,
   focus,
+  showWindowCuts = false,
 }: {
   projectId: string
   notes: Note[]
@@ -69,6 +70,7 @@ export function Canvas({
   onSelect: (noteId: string | undefined) => void
   /** Centres the canvas on a note whenever the token changes */
   focus?: { noteId: string; token: number }
+  showWindowCuts?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const size = useElementSize(ref)
@@ -262,7 +264,7 @@ export function Canvas({
                   source === 'wobble' || activeMode === 'tilt' || activeMode === 'move' ? 'outline-primary/5' : 'outline-primary/25',
                 )}
               >
-                <NoteView note={note} scale={scale} angle={angle} perspective={perspective} sheen={sheen} />
+                <NoteView note={note} scale={scale} angle={angle} perspective={perspective} sheen={sheen} showWindowCuts={isSelected && showWindowCuts} />
               </div>
             </div>
           )

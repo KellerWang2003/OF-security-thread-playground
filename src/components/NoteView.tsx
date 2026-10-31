@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
 import { TILT_LIMIT, frameMix, frameSpans } from '../lib/frames'
 import { useImageUrl } from '../lib/images'
+import { threadWindowMask, windowEdges } from '../lib/thread'
 import type { Frame, Note } from '../lib/types'
 
 // Height ÷ width of each image, once loaded
@@ -94,12 +95,14 @@ export function NoteView({
   angle = 0,
   perspective = false,
   sheen = false,
+  showWindowCuts = false,
 }: {
   note: Note
   scale: number
   angle?: number
   perspective?: boolean
   sheen?: boolean
+  showWindowCuts?: boolean
 }) {
   const { thread, frames, tilt } = note
   const mm = (value: number) => value * scale
@@ -120,19 +123,7 @@ export function NoteView({
 
   const fill = { direction: thread.direction, thicknessPx: mm(thread.widthMm), lengthPx: mm(lengthMm), gapPx: mm(thread.imageGapMm ?? 0) }
 
-  // Between windows the paper covers the thread, so the thread only shows through the windows
-  const { windows } = thread
-  const windowMask: CSSProperties = {}
-  if (windows.enabled && windows.gapMm > 0) {
-    const open = mm(windows.windowMm)
-    const period = mm(windows.windowMm + windows.gapMm)
-    const mask = `repeating-linear-gradient(${horizontal ? 'to right' : 'to bottom'}, #000 0, #000 ${open}px, transparent ${open}px, transparent ${period}px)`
-    windowMask.maskImage = mask
-    windowMask.WebkitMaskImage = mask
-    const offset = horizontal ? `${mm(windows.offsetMm)}px 0` : `0 ${mm(windows.offsetMm)}px`
-    windowMask.maskPosition = offset
-    windowMask.WebkitMaskPosition = offset
-  }
+  const windowMask = threadWindowMask(thread, scale)
 
   return (
     <div
@@ -146,6 +137,13 @@ export function NoteView({
       }}
     >
       {face && <img src={face} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />}
+
+      {showWindowCuts && thread.windows.enabled && (
+        <div aria-hidden="true" data-window-ghost className="pointer-events-none absolute overflow-hidden" style={{ ...strip, opacity: 0.2, backgroundColor: thread.backgroundColor }}>
+          {baseFrame && <FrameFill frame={baseFrame} {...fill} />}
+          {nextFrame && mix.blend > 0 && mix.next !== mix.base && <FrameFill frame={nextFrame} {...fill} opacity={mix.blend} />}
+        </div>
+      )}
 
       <div
         className="absolute overflow-hidden"
@@ -162,6 +160,16 @@ export function NoteView({
           />
         )}
       </div>
+
+      {showWindowCuts && thread.windows.enabled && (
+        <div aria-hidden="true" data-window-cuts className="pointer-events-none absolute" style={strip}>
+          {windowEdges(thread, lengthMm).map((edge) => (
+            <div key={edge} className="absolute border-dashed border-fuchsia-500" style={horizontal
+              ? { left: mm(edge), top: -4, bottom: -4, borderLeftWidth: 1 }
+              : { top: mm(edge), left: -4, right: -4, borderTopWidth: 1 }} />
+          ))}
+        </div>
+      )}
 
       {perspective && (
         // The note catches a little light or shade as it turns away from flat

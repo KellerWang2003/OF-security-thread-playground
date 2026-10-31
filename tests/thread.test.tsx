@@ -2,6 +2,7 @@
 import React from 'react'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { windowEdges } from '../src/lib/thread'
 import { FrameFill, NoteView } from '../src/components/NoteView'
 import { createNote, createProject, migrateProject } from '../src/lib/notes'
 import type { Frame } from '../src/lib/types'
@@ -55,6 +56,34 @@ describe('whole image repeats', () => {
     expect(strip.style.maskImage).toContain('repeating-linear-gradient')
     rerender(<NoteView note={{ ...note, thread: { ...note.thread, backgroundColor: undefined } }} scale={2} />)
     expect(strip.style.backgroundColor).toBe('')
+  })
+
+  it('shows cut guides on the banknote and shifts the cuts without moving the artwork', () => {
+    const note = makeNote()
+    note.thread.windows = { enabled: true, windowMm: 8, gapMm: 6, offsetMm: 0 }
+    const { container, rerender } = render(<NoteView note={note} scale={2} showWindowCuts />)
+    const ghost = container.querySelector('[data-window-ghost]') as HTMLElement
+    expect(ghost.style.opacity).toBe('0.2')
+    expect(container.querySelector('[data-window-cuts]')?.children[0].getAttribute('style')).toContain('top: 0px')
+    note.thread.windows.offsetMm = 3
+    rerender(<NoteView note={note} scale={2} showWindowCuts />)
+    expect(container.querySelector('[data-window-cuts]')?.children[0].getAttribute('style')).toContain('top: 6px')
+    expect((container.querySelector('[data-window-ghost]') as HTMLElement).style.top).toBe(ghost.style.top)
+    rerender(<NoteView note={note} scale={2} />)
+    expect(container.querySelector('[data-window-cuts]')).toBeNull()
+    expect(container.querySelector('[data-window-ghost]')).toBeNull()
+  })
+
+  it('handles positive, negative, and wrapped offsets including partial edge windows', () => {
+    const thread = makeNote().thread
+    thread.windows = { enabled: true, windowMm: 8, gapMm: 6, offsetMm: 3 }
+    expect(windowEdges(thread, 30)).toEqual([3, 11, 17, 25])
+    thread.windows.offsetMm = -3
+    expect(windowEdges(thread, 30)).toEqual([5, 11, 19, 25])
+    thread.windows.offsetMm = 17
+    expect(windowEdges(thread, 30)).toEqual([3, 11, 17, 25])
+    thread.windows.enabled = false
+    expect(windowEdges(thread, 30)).toEqual([])
   })
 
   it('loads old cropping settings as whole artwork with zero gap and preserves new settings on reload', () => {

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { reportError } from '../cloud/notices'
 import { ImageUp, RectangleHorizontal, RectangleVertical, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -13,7 +14,27 @@ import { setFaceImage, type NoteRef } from './frameActions'
 type Change = (note: Note) => Note
 
 /** Right: the selected note's properties, Figma style */
-export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
+export function Inspector({ note, noteRef, onWindowCutsChange }: { note: Note; noteRef: NoteRef; onWindowCutsChange?: (show: boolean) => void }) {
+  const [showCuts, setShowCuts] = useState(false)
+  const [offsetHovered, setOffsetHovered] = useState(false)
+  const [offsetFocused, setOffsetFocused] = useState(false)
+  const [offsetDragging, setOffsetDragging] = useState(false)
+  useEffect(() => {
+    if (!offsetDragging) return
+    const stop = () => setOffsetDragging(false)
+    window.addEventListener('pointerup', stop)
+    window.addEventListener('pointercancel', stop)
+    window.addEventListener('blur', stop)
+    return () => {
+      window.removeEventListener('pointerup', stop)
+      window.removeEventListener('pointercancel', stop)
+      window.removeEventListener('blur', stop)
+    }
+  }, [offsetDragging])
+  useEffect(() => {
+    onWindowCutsChange?.(note.thread.windows.enabled && (showCuts || offsetHovered || offsetFocused || offsetDragging))
+    return () => onWindowCutsChange?.(false)
+  }, [note.thread.windows.enabled, showCuts, offsetHovered, offsetFocused, offsetDragging, onWindowCutsChange])
   const update = (change: Change) => updateNote(noteRef.projectId, noteRef.noteId, change)
   const { thread } = note
   const threadLength = thread.direction === 'vertical' ? note.heightMm : note.widthMm
@@ -175,7 +196,16 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
               <ScrubField label="Open" title="Window length" value={windows.windowMm} min={1} max={threadLength} step={0.5} unit="mm" onChange={(windowMm) => setWindows({ windowMm })} />
               <ScrubField label="Bridge" title="Covered length between windows" value={windows.gapMm} min={0.5} max={threadLength} step={0.5} unit="mm" onChange={(gapMm) => setWindows({ gapMm })} />
             </div>
-            <ScrubField label="Offset" title="Shift the windows along the thread" value={windows.offsetMm} min={-threadLength} max={threadLength} step={0.5} unit="mm" onChange={(offsetMm) => setWindows({ offsetMm })} />
+            <div
+              onPointerDownCapture={() => setOffsetDragging(true)}
+              onPointerEnter={() => setOffsetHovered(true)}
+              onPointerLeave={() => setOffsetHovered(false)}
+              onFocusCapture={() => setOffsetFocused(true)}
+              onBlurCapture={() => setOffsetFocused(false)}
+            >
+              <ScrubField label="Offset" title="Shift the cuts along the artwork; preview cuts on the canvas" value={windows.offsetMm} min={-threadLength} max={threadLength} step={0.5} unit="mm" onChange={(offsetMm) => setWindows({ offsetMm })} />
+            </div>
+            <SwitchField label="Show cuts" checked={showCuts} onChange={setShowCuts} />
           </>
         )}
       </Section>

@@ -17,6 +17,7 @@ import { TimelineBar } from '../editor/TimelineBar'
  */
 export function Editor({ project, isDemo = false }: { project: Project; isDemo?: boolean }) {
   const [selectedId, setSelectedId] = useState<string>()
+  const [showWindowCuts, setShowWindowCuts] = useState(false)
   const [adding, setAdding] = useState(false)
   const [focus, setFocus] = useState<{ noteId: string; token: number }>()
   const isEmpty = project.notes.length === 0
@@ -104,14 +105,14 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
           </Button>
         </div>
       ) : (
-        <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={setSelectedId} focus={focus} />
+        <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={setSelectedId} focus={focus} showWindowCuts={showWindowCuts} />
       )}
 
       <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} />
       {!isEmpty && (
         <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
       )}
-      {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} />}
+      {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} onWindowCutsChange={setShowWindowCuts} />}
 
       {adding && (
         <AddNoteDialog
