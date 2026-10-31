@@ -4,8 +4,6 @@ import { TILT_LIMIT, frameMix, frameSpans } from '../lib/frames'
 import { useImageUrl } from '../lib/images'
 import type { Frame, Note } from '../lib/types'
 
-const MAX_TILES = 400
-
 // Height ÷ width of each image, once loaded
 const aspects = new Map<string, number>()
 
@@ -26,24 +24,20 @@ function useImageAspect(url: string | undefined) {
   return aspects.get(url) ?? (loaded?.url === url ? loaded.aspect : undefined)
 }
 
-/**
- * One frame filling the thread: a flat colour, or the uploaded image repeated along the thread with no
- * gaps. The image stays upright, scaled to the thread's thickness at its own aspect ratio. `tilePx` can
- * shorten each repeat to a section of the image, but never lengthen it past the image itself.
- */
+/** Complete, upright images fit the thread's thickness and repeat with optional spacing. */
 export function FrameFill({
   frame,
   direction,
   thicknessPx,
   lengthPx,
-  tilePx,
+  gapPx,
   opacity = 1,
 }: {
   frame: Frame
   direction: Note['thread']['direction']
   thicknessPx: number
   lengthPx: number
-  tilePx: number
+  gapPx: number
   opacity?: number
 }) {
   const url = useImageUrl(frame.imageId)
@@ -58,19 +52,19 @@ export function FrameFill({
     backgroundPosition: 'left top',
   }
   const naturalPx = aspect ? (vertical ? thicknessPx * aspect : thicknessPx / aspect) : undefined
-  const repeatPx = naturalPx ? Math.min(tilePx, naturalPx) : undefined
+  const gap = Math.max(0, gapPx)
 
-  if (!naturalPx || !repeatPx || repeatPx >= naturalPx - 0.5) {
+  if (!naturalPx || gap === 0) {
     return <div className="absolute inset-0" style={{ ...image, opacity, backgroundRepeat: vertical ? 'repeat-y' : 'repeat-x' }} />
   }
-  const tiles = Math.min(MAX_TILES, Math.ceil(lengthPx / Math.max(repeatPx, 0.5)))
+  const tiles = Math.ceil(lengthPx / (naturalPx + gap))
   return (
-    <div className={cn('absolute inset-0 flex overflow-hidden', vertical ? 'flex-col' : 'flex-row')} style={{ opacity }}>
+    <div className={cn('absolute inset-0 flex overflow-hidden', vertical ? 'flex-col' : 'flex-row')} style={{ opacity, gap }}>
       {Array.from({ length: tiles }, (_, i) => (
         <div
           key={i}
           className="shrink-0"
-          style={{ ...image, backgroundRepeat: 'no-repeat', ...(vertical ? { height: repeatPx, width: '100%' } : { width: repeatPx, height: '100%' }) }}
+          style={{ ...image, backgroundRepeat: 'no-repeat', ...(vertical ? { height: naturalPx, width: '100%' } : { width: naturalPx, height: '100%' }) }}
         />
       ))}
     </div>
@@ -124,7 +118,7 @@ export function NoteView({
     ? { left: 0, top: mm(thread.positionMm - thread.widthMm / 2), width: mm(lengthMm), height: mm(thread.widthMm) }
     : { left: mm(thread.positionMm - thread.widthMm / 2), top: 0, width: mm(thread.widthMm), height: mm(lengthMm) }
 
-  const fill = { direction: thread.direction, thicknessPx: mm(thread.widthMm), lengthPx: mm(lengthMm), tilePx: mm(thread.tileMm) }
+  const fill = { direction: thread.direction, thicknessPx: mm(thread.widthMm), lengthPx: mm(lengthMm), gapPx: mm(thread.imageGapMm ?? 0) }
 
   // Between windows the paper covers the thread, so the thread only shows through the windows
   const { windows } = thread

@@ -55,7 +55,7 @@ export function createNote({
     heightMm,
     background: 'solid',
     color,
-    thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, tileMm: 10, windows: DEFAULT_WINDOWS },
+    thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, imageGapMm: 0, windows: DEFAULT_WINDOWS },
     frames: [colorFrame(0), colorFrame(1)],
     tilt: DEFAULT_TILT,
   }
@@ -115,7 +115,8 @@ export function migrateProject(raw: unknown): Project {
         widthMm: raw.thread.widthMm,
         direction: raw.thread.direction ?? 'vertical',
         positionMm: raw.thread.positionMm ?? (raw.thread as { xMm?: number }).xMm ?? raw.widthMm / 2,
-        tileMm: raw.thread.tileMm ?? 10,
+        // Retire the old cropping length; existing artwork now repeats whole, with no gap.
+        imageGapMm: Math.max(0, raw.thread.imageGapMm ?? 0),
         windows: raw.thread.windows ?? DEFAULT_WINDOWS,
       },
     }

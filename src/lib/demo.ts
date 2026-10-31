@@ -96,7 +96,7 @@ export async function createDemoProject(): Promise<Project> {
         ...note,
         frames,
         // A 6 mm thread repeats the 2:3 bird every 9 mm, so 9 mm windows show one bird each
-        thread: { ...note.thread, widthMm: 6, tileMm: 9, windows: { enabled: true, windowMm: 9, gapMm: 9, offsetMm: 0 } },
+        thread: { ...note.thread, widthMm: 6, imageGapMm: 0, windows: { enabled: true, windowMm: 9, gapMm: 9, offsetMm: 0 } },
         tilt: { cycleDeg: 30, transition: 0.3 },
       },
     ],

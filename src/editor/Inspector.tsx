@@ -16,6 +16,7 @@ type Change = (note: Note) => Note
 export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const update = (change: Change) => updateNote(noteRef.projectId, noteRef.noteId, change)
   const { thread } = note
+  const threadLength = thread.direction === 'vertical' ? note.heightMm : note.widthMm
   const setThread = (patch: Partial<Note['thread']>) => update((n) => ({ ...n, thread: { ...n.thread, ...patch } }))
   const { windows } = thread
   const setWindows = (patch: Partial<Note['thread']['windows']>) =>
@@ -122,9 +123,10 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
           ]}
           onChange={setDirection}
         />
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid gap-2">
           <ScrubField
-            label="W"
+            label="Thickness"
+            title="Thread width vertically, or height horizontally"
             value={thread.widthMm}
             min={THREAD_WIDTH.min}
             max={THREAD_WIDTH.max}
@@ -152,14 +154,14 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
           <ColorField value={thread.backgroundColor} onChange={(backgroundColor) => setThread({ backgroundColor })} />
         )}
         <ScrubField
-          label="Repeat"
-          title="Height of the image section that repeats down the thread"
-          value={thread.tileMm}
-          min={1}
-          max={note.heightMm}
+          label="Image gap"
+          title="Space between complete image copies along the thread"
+          value={thread.imageGapMm ?? 0}
+          min={0}
+          max={threadLength}
           step={0.5}
           unit="mm"
-          onChange={(tileMm) => setThread({ tileMm })}
+          onChange={(imageGapMm) => setThread({ imageGapMm })}
         />
       </Section>
 
@@ -170,10 +172,10 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
         {windows.enabled && (
           <>
             <div className="grid grid-cols-2 gap-2">
-              <ScrubField label="Open" title="Window length" value={windows.windowMm} min={1} max={note.heightMm} step={0.5} unit="mm" onChange={(windowMm) => setWindows({ windowMm })} />
-              <ScrubField label="Gap" title="Covered length between windows" value={windows.gapMm} min={0.5} max={note.heightMm} step={0.5} unit="mm" onChange={(gapMm) => setWindows({ gapMm })} />
+              <ScrubField label="Open" title="Window length" value={windows.windowMm} min={1} max={threadLength} step={0.5} unit="mm" onChange={(windowMm) => setWindows({ windowMm })} />
+              <ScrubField label="Bridge" title="Covered length between windows" value={windows.gapMm} min={0.5} max={threadLength} step={0.5} unit="mm" onChange={(gapMm) => setWindows({ gapMm })} />
             </div>
-            <ScrubField label="Offset" title="Shift the windows along the thread" value={windows.offsetMm} min={-note.heightMm} max={note.heightMm} step={0.5} unit="mm" onChange={(offsetMm) => setWindows({ offsetMm })} />
+            <ScrubField label="Offset" title="Shift the windows along the thread" value={windows.offsetMm} min={-threadLength} max={threadLength} step={0.5} unit="mm" onChange={(offsetMm) => setWindows({ offsetMm })} />
           </>
         )}
       </Section>

@@ -16,11 +16,8 @@ export interface ThreadSettings {
   direction: 'vertical' | 'horizontal'
   /** Thread centre: from the left edge for a vertical thread, from the top edge for a horizontal one */
   positionMm: number
-  /**
-   * Length of the section of each frame image that repeats down the thread. Images are scaled to the
-   * thread's width at their own aspect ratio and cropped to this length, the same for every frame.
-   */
-  tileMm: number
+  /** Space between complete image copies along the thread */
+  imageGapMm: number
   windows: ThreadWindows
 }
 
