@@ -1,7 +1,7 @@
 import { zipSync } from 'fflate'
 import { GIFEncoder, applyPalette, quantize } from 'gifenc'
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, QUALITY_HIGH, WebMOutputFormat, getFirstEncodableVideoCodec } from 'mediabunny'
-import { MAX_EXPORT_PX, drawExportFrame, exportLayout, loadNoteAssets, playbackAngles, type NoteAssets } from './exportRender'
+import { drawExportFrame, exportGroups, exportLayout, loadNoteAssets, playbackAngles, scaleForHeight, type NoteAssets } from './exportRender'
 import type { Note } from './types'
 
 export type ExportFormat = 'mp4' | 'gif'
@@ -11,8 +11,8 @@ export interface ExportOptions {
   notes: Note[]
   /** One file with the banknotes side by side, or one file per banknote */
   separate: boolean
-  /** Output px per mm */
-  scale: number
+  /** Output frame height in px; a very wide row may come out smaller to stay within 4K */
+  height: number
   fps: number
   /** Passes of playback in a video; a GIF always loops forever */
   loops: number
@@ -27,12 +27,12 @@ const safeName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-').trim() ||
 async function renderFile(notes: Note[], assets: Map<string, NoteAssets>, options: ExportOptions, onFrame: () => void, signal: AbortSignal) {
   // Every banknote shares the project-wide cycle and playback settings
   const angles = playbackAngles(notes[0].tilt, options.fps, options.format === 'gif' ? 1 : options.loops)
-  const layout = exportLayout(notes, options.scale, angles, options.perspective)
-  if (Math.max(layout.width, layout.height) > MAX_EXPORT_PX) throw new Error(`The export would be ${layout.width} × ${layout.height} px. Lower Scale to stay within ${MAX_EXPORT_PX} px.`)
+  const scale = scaleForHeight(notes, angles, options.perspective, options.height)
+  const layout = exportLayout(notes, scale, angles, options.perspective)
   const canvas = new OffscreenCanvas(layout.width, layout.height)
   const ctx = canvas.getContext('2d', { willReadFrequently: options.format === 'gif' })!
-  const faces = new Map(notes.map((n) => [n.id, new OffscreenCanvas(Math.ceil(n.widthMm * options.scale), Math.ceil(n.heightMm * options.scale))]))
-  const draw = (angle: number) => drawExportFrame(ctx, layout, assets, faces, options.scale, angle, options)
+  const faces = new Map(notes.map((n) => [n.id, new OffscreenCanvas(Math.ceil(n.widthMm * scale), Math.ceil(n.heightMm * scale))]))
+  const draw = (angle: number) => drawExportFrame(ctx, layout, assets, faces, scale, angle, options)
 
   if (options.format === 'gif') {
     const gif = GIFEncoder()
@@ -88,7 +88,7 @@ async function renderFile(notes: Note[], assets: Map<string, NoteAssets>, option
 export async function exportTilt(projectName: string, options: ExportOptions, onProgress: (progress: number) => void, signal: AbortSignal) {
   const { notes } = options
   const assets = new Map(await Promise.all(notes.map(async (n) => [n.id, await loadNoteAssets(n)] as const)))
-  const groups = options.separate && notes.length > 1 ? notes.map((n) => [n]) : [notes]
+  const groups = exportGroups(notes, options.separate)
   const framesEach = playbackAngles(notes[0].tilt, options.fps, options.format === 'gif' ? 1 : options.loops).length
   const total = framesEach * groups.length
   let done = 0

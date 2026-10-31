@@ -1,32 +1,61 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
-import { CheckboxField, ColorField, Field, ScrubField, Segmented, SwitchField } from '../components/controls'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { CheckboxField, ColorField, InlineField, ScrubField, Segmented } from '../components/controls'
 import { reportError } from '../cloud/notices'
 import type { ExportFormat } from '../lib/exportMedia'
-import { exportSize } from '../lib/exportRender'
+import { RESOLUTIONS, exportSize } from '../lib/exportRender'
 import type { Project } from '../lib/types'
 import { useTilt } from '../tilt/tilt'
 
-type Scope = 'selected' | 'all' | 'choose'
+const FORMATS = [{ value: 'mp4' as const, label: 'MP4' }, { value: 'gif' as const, label: 'GIF' }]
+const FRAME_RATES: Record<ExportFormat, number[]> = { mp4: [24, 30, 60], gif: [10, 15, 20, 25] }
+const DEFAULTS: Record<ExportFormat, { height: number; fps: number }> = { mp4: { height: 1080, fps: 30 }, gif: { height: 480, fps: 20 } }
 
-const FPS: Record<ExportFormat, number[]> = { mp4: [30, 60], gif: [20, 25] }
-const SCALE = { mp4: 8, gif: 5 }
+function SettingsGroup({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2.5">
+      <div className="flex h-5 items-center justify-between">
+        <h3 className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">{title}</h3>
+        {action}
+      </div>
+      {children}
+    </section>
+  )
+}
 
-/** Exports one playback loop of the tilt as MP4 or GIF, for one, all or some banknotes */
+function OptionSelect<T extends string | number>({ label, value, options, onChange }: {
+  label: string
+  value: T
+  options: { value: T; label: string }[]
+  onChange: (value: T) => void
+}) {
+  return (
+    <Select value={value} items={options} onValueChange={(next) => { if (next !== null) onChange(next as T) }}>
+      <SelectTrigger aria-label={label} className="w-full"><SelectValue /></SelectTrigger>
+      <SelectContent alignItemWithTrigger={false}>
+        {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  )
+}
+
+/** Exports one playback loop of the tilt as MP4 or GIF, laid out like a video editor's export settings */
 export function ExportDialog({ project, selectedId, open, onOpenChange }: {
   project: Project
   selectedId?: string
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const [format, setFormat] = useState<ExportFormat>('mp4')
-  const [scope, setScope] = useState<Scope>(selectedId ? 'selected' : 'all')
   const [chosen, setChosen] = useState<Set<string>>(() => new Set(selectedId ? [selectedId] : project.notes.map((n) => n.id)))
   const [separate, setSeparate] = useState(false)
-  const [scale, setScale] = useState(SCALE.mp4)
-  const [fps, setFps] = useState(30)
+  const [format, setFormat] = useState<ExportFormat>('mp4')
+  const [height, setHeight] = useState(DEFAULTS.mp4.height)
+  const [fps, setFps] = useState(DEFAULTS.mp4.fps)
   const [loops, setLoops] = useState(1)
   const [background, setBackground] = useState('#f4f4f5')
   const [transparent, setTransparent] = useState(false)
@@ -34,20 +63,26 @@ export function ExportDialog({ project, selectedId, open, onOpenChange }: {
   const abort = useRef<AbortController>(null)
   const { sheen, perspective } = useTilt()
 
-  const notes = scope === 'selected' ? project.notes.filter((n) => n.id === selectedId)
-    : scope === 'all' ? project.notes
-    : project.notes.filter((n) => chosen.has(n.id))
+  const notes = project.notes.filter((n) => chosen.has(n.id))
   const several = notes.length > 1
-  const options = { format, notes, separate: several && separate, scale, fps, loops: format === 'gif' ? 1 : loops, sheen, perspective,
+  const allChosen = notes.length === project.notes.length
+  const options = { format, notes, separate: several && separate, height, fps, loops: format === 'gif' ? 1 : loops, sheen, perspective,
     background: format === 'gif' && transparent ? undefined : background }
   const size = exportSize(notes, options)
   const busy = progress !== undefined
+  const files = options.separate ? notes.length : 1
 
   const changeFormat = (next: ExportFormat) => {
     setFormat(next)
-    setFps(FPS[next][0])
-    setScale(SCALE[next])
+    setHeight(DEFAULTS[next].height)
+    setFps(DEFAULTS[next].fps)
   }
+  const toggle = (id: string, on: boolean) => setChosen((set) => {
+    const next = new Set(set)
+    if (on) next.add(id)
+    else next.delete(id)
+    return next
+  })
 
   const run = async () => {
     const controller = new AbortController()
@@ -71,67 +106,65 @@ export function ExportDialog({ project, selectedId, open, onOpenChange }: {
       if (!next) abort.current?.abort()
       onOpenChange(next)
     }}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="gap-5 sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Export</DialogTitle>
         </DialogHeader>
         <fieldset disabled={busy} className="contents">
-          <Field label="Format">
-            <Segmented value={format} options={[{ value: 'mp4', label: 'MP4' }, { value: 'gif', label: 'GIF' }]} onChange={changeFormat} />
-          </Field>
-          <Field label="Banknotes">
-            <Segmented
-              value={scope}
-              options={[
-                ...(selectedId ? [{ value: 'selected' as const, label: 'Selected' }] : []),
-                { value: 'all', label: 'All' },
-                { value: 'choose', label: 'Choose' },
-              ]}
-              onChange={setScope}
-            />
-            {scope === 'choose' && (
-              <div className="flex max-h-40 flex-col gap-2 overflow-y-auto rounded-md border border-border/60 p-2.5">
-                {project.notes.map((n) => (
-                  <CheckboxField key={n.id} label={n.name} checked={chosen.has(n.id)} onChange={(on) => setChosen((set) => {
-                    const next = new Set(set)
-                    if (on) next.add(n.id)
-                    else next.delete(n.id)
-                    return next
-                  })} />
-                ))}
-              </div>
+          <SettingsGroup
+            title="Banknotes"
+            action={project.notes.length > 1 && (
+              <Label className="flex cursor-pointer items-center gap-1.5 text-xs font-normal text-muted-foreground">
+                All
+                <Checkbox checked={allChosen} indeterminate={!allChosen && notes.length > 0}
+                  onCheckedChange={(on) => setChosen(new Set(on ? project.notes.map((n) => n.id) : []))} />
+              </Label>
             )}
-          </Field>
-          {several && (
-            <Field label="Files">
-              <Segmented value={separate ? 'separate' : 'one'} options={[{ value: 'one', label: 'Side by side' }, { value: 'separate', label: 'Separate' }]}
-                onChange={(next) => setSeparate(next === 'separate')} />
-            </Field>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Scale">
-              <ScrubField label="px" title="Pixels per millimetre" value={scale} min={2} max={40} step={1} unit="/mm" onChange={setScale} />
-            </Field>
+          >
+            <div className="flex max-h-36 flex-col gap-2 overflow-y-auto rounded-lg border border-border/60 p-2.5">
+              {project.notes.map((n) => (
+                <CheckboxField key={n.id} label={n.name} checked={chosen.has(n.id)} onChange={(on) => toggle(n.id, on)} />
+              ))}
+            </div>
+            {several && <CheckboxField label="Export as separate files" checked={separate} onChange={setSeparate} />}
+          </SettingsGroup>
+
+          <SettingsGroup title="Video">
+            <InlineField label="Format">
+              <Segmented value={format} options={FORMATS} onChange={changeFormat} />
+            </InlineField>
+            <InlineField label="Resolution" title="Height of the frame; banknotes keep their proportions">
+              <OptionSelect label="Resolution" value={height} options={RESOLUTIONS.filter((r) => format === 'mp4' ? r.value >= 720 : r.value <= 1080)} onChange={setHeight} />
+            </InlineField>
+            <InlineField label="Frame rate">
+              <OptionSelect label="Frame rate" value={fps} options={FRAME_RATES[format].map((f) => ({ value: f, label: `${f} fps` }))} onChange={setFps} />
+            </InlineField>
             {format === 'mp4' && (
-              <Field label="Loops">
-                <ScrubField label="×" title="Times the playback loop repeats" value={loops} min={1} max={10} onChange={setLoops} />
-              </Field>
+              <InlineField label="Loops" title="Times the playback loop repeats; a GIF loops forever">
+                <ScrubField label="×" value={loops} min={1} max={10} onChange={setLoops} />
+              </InlineField>
             )}
-          </div>
-          <Field label="Frame rate">
-            <Segmented value={String(fps)} options={FPS[format].map((f) => ({ value: String(f), label: `${f} fps` }))} onChange={(next) => setFps(Number(next))} />
-          </Field>
-          <Field label="Background">
-            {!(format === 'gif' && transparent) && <ColorField value={background} onChange={setBackground} />}
-            {format === 'gif' && <SwitchField label="Transparent" checked={transparent} onChange={setTransparent} />}
-          </Field>
+          </SettingsGroup>
+
+          <SettingsGroup title="Background">
+            {format === 'gif' && <CheckboxField label="Transparent" checked={transparent} onChange={setTransparent} />}
+            {!(format === 'gif' && transparent) && (
+              <InlineField label="Colour">
+                <ColorField value={background} onChange={setBackground} />
+              </InlineField>
+            )}
+          </SettingsGroup>
         </fieldset>
-        {busy && <Progress value={Math.round(progress * 100)} />}
-        <DialogFooter className="items-center sm:justify-between">
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {notes.length > 0 && `${size.width} × ${size.height} px · ${size.seconds.toFixed(1)} s`}
-          </span>
-          <div className="flex gap-2">
+
+        <DialogFooter className="items-center gap-3 sm:justify-between">
+          {busy ? (
+            <Progress className="flex-1" value={Math.round(progress * 100)} />
+          ) : (
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {notes.length > 0 && `${size.width} × ${size.height} · ${size.seconds.toFixed(1)} s${files > 1 ? ` · ${files} files` : ''}`}
+            </span>
+          )}
+          <div className="flex shrink-0 gap-2">
             {busy && <Button variant="outline" onClick={() => abort.current?.abort()}>Cancel</Button>}
             <Button disabled={busy || notes.length === 0} onClick={() => void run()}>
               {busy ? `Exporting ${Math.round(progress * 100)}%` : 'Export'}

@@ -250,8 +250,10 @@ export function exportLayout(notes: Note[], scale: number, angles: number[], per
     x = cx + c.halfWidth + margin
     return { note: c.note, cx, cy: margin + above }
   })
-  const even = (value: number) => Math.ceil(value / 2) * 2
-  return { width: even(x), height: even(margin * 2 + above + below), cells: placed }
+  // A hair of tolerance so float error never rounds an exact size up a step
+  const even = (value: number) => Math.ceil(value / 2 - 1e-6) * 2
+  const height = margin * 2 + above + below
+  return { width: even(x), height: even(height), exactWidth: x, exactHeight: height, cells: placed }
 }
 
 /** Renders one export frame: the background, then every banknote at `angle` */
@@ -284,9 +286,32 @@ export function drawExportFrame(
 /** Largest output side; hardware video encoders commonly stop at 4K */
 export const MAX_EXPORT_PX = 3840
 
-export function exportSize(notes: Note[], options: { scale: number; fps: number; loops: number; perspective: boolean; separate: boolean }) {
+/** Output resolutions by frame height, as video editors name them */
+export const RESOLUTIONS = [
+  { value: 360, label: '360p' },
+  { value: 480, label: '480p' },
+  { value: 720, label: '720p' },
+  { value: 1080, label: '1080p' },
+  { value: 1440, label: '1440p' },
+  { value: 2160, label: '4K' },
+]
+
+/**
+ * Px per mm that makes a file `height` px tall. The layout grows in proportion to its scale, so it is
+ * measured once at 1 px per mm. Very wide rows are scaled down to stay within MAX_EXPORT_PX.
+ */
+export function scaleForHeight(notes: Note[], angles: number[], perspective: boolean, height: number) {
+  const unit = exportLayout(notes, 1, angles, perspective)
+  return Math.min(height / unit.exactHeight, MAX_EXPORT_PX / unit.exactWidth, MAX_EXPORT_PX / unit.exactHeight)
+}
+
+/** The file groups an export makes: one with every banknote side by side, or one per banknote */
+export const exportGroups = (notes: Note[], separate: boolean) => (separate && notes.length > 1 ? notes.map((n) => [n]) : [notes])
+
+export function exportSize(notes: Note[], options: { height: number; fps: number; loops: number; perspective: boolean; separate: boolean }) {
   if (notes.length === 0) return { width: 0, height: 0, seconds: 0 }
   const angles = playbackAngles(notes[0].tilt, options.fps, options.loops)
-  const layouts = (options.separate ? notes.map((n) => [n]) : [notes]).map((group) => exportLayout(group, options.scale, angles, options.perspective))
+  const layouts = exportGroups(notes, options.separate).map((group) =>
+    exportLayout(group, scaleForHeight(group, angles, options.perspective, options.height), angles, options.perspective))
   return { width: Math.max(...layouts.map((l) => l.width)), height: Math.max(...layouts.map((l) => l.height)), seconds: angles.length / options.fps }
 }

@@ -65,10 +65,20 @@ describe('layout', () => {
 
   it('sizes separate files by the largest banknote', () => {
     const notes = [makeNote(), makeNote(80, 140)]
-    const together = exportSize(notes, { scale: 4, fps: 30, loops: 1, perspective: false, separate: false })
-    const apart = exportSize(notes, { scale: 4, fps: 30, loops: 1, perspective: false, separate: true })
+    const together = exportSize(notes, { height: 720, fps: 30, loops: 1, perspective: false, separate: false })
+    const apart = exportSize(notes, { height: 720, fps: 30, loops: 1, perspective: false, separate: true })
+    expect(together.height).toBe(720)
+    expect(apart.height).toBe(720)
     expect(apart.width).toBeLessThan(together.width)
     expect(apart.seconds).toBeCloseTo(2)
+  })
+
+  it('hits the chosen resolution with tilt, and keeps wide rows within 4K', () => {
+    const notes = [makeNote()]
+    expect(exportSize(notes, { height: 1080, fps: 30, loops: 1, perspective: true, separate: false }).height).toBe(1080)
+    const row = Array.from({ length: 8 }, () => makeNote(150, 70))
+    const wide = exportSize(row, { height: 2160, fps: 30, loops: 1, perspective: false, separate: false })
+    expect(wide.width).toBeLessThanOrEqual(3840)
   })
 })
 

@@ -116,6 +116,16 @@ export function Field({ label, hint, children }: { label: string; hint?: ReactNo
   )
 }
 
+/** A label on the left and its control on the right, as in a video editor's export settings */
+export function InlineField({ label, title, children }: { label: string; title?: string; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[88px_1fr] items-center gap-3" title={title}>
+      <Label className="text-xs font-normal text-muted-foreground">{label}</Label>
+      <div className="min-w-0">{children}</div>
+    </div>
+  )
+}
+
 /** Commits while typing only when the value is in range, so a half-typed number never jumps */
 export function NumberField({
   value,
