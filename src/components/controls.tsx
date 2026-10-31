@@ -14,7 +14,7 @@ const round = (value: number) => Math.round(value * 100) / 100
 
 /** A floating panel over the canvas */
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('rounded-xl border bg-background/95 shadow-sm backdrop-blur', className)}>{children}</div>
+  return <div className={cn('rounded-lg border border-border/70 bg-background/95 shadow-panel backdrop-blur', className)}>{children}</div>
 }
 
 /**
@@ -95,7 +95,7 @@ const clampValue = (value: number, min: number, max: number) => Math.min(max, Ma
 /** One titled group of controls in the side panel */
 export function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-3 border-b px-4 py-4">
+    <section className="flex flex-col gap-3 border-b border-border/60 px-4 py-3">
       <div className="flex h-5 items-center justify-between">
         <h2 className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">{title}</h2>
         {action}

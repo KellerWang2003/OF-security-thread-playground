@@ -138,7 +138,7 @@ export function NoteView({
 
   return (
     <div
-      className="relative overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.12),0_8px_24px_rgba(0,0,0,0.12)]"
+      className="relative overflow-hidden shadow-note"
       style={{
         width: mm(note.widthMm),
         height: mm(note.heightMm),

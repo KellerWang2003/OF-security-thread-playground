@@ -152,7 +152,7 @@ export function Canvas({
       style={
         current
           ? {
-              backgroundImage: 'radial-gradient(circle, var(--border) 1px, transparent 1.2px)',
+              backgroundImage: 'radial-gradient(circle, color-mix(in oklab, var(--border) 55%, transparent) 1px, transparent 1.2px)',
               backgroundSize: `${grid}px ${grid}px`,
               backgroundPosition: `${current.x}px ${current.y}px`,
             }
@@ -259,7 +259,7 @@ export function Canvas({
                 className={cn(
                   'rounded-[2px] outline-offset-4 transition-[outline-color] duration-150 cursor-ns-resize',
                   isSelected ? 'outline-2' : 'outline-0',
-                  source === 'wobble' || activeMode === 'tilt' || activeMode === 'move' ? 'outline-primary/10' : 'outline-primary/50',
+                  source === 'wobble' || activeMode === 'tilt' || activeMode === 'move' ? 'outline-primary/5' : 'outline-primary/25',
                 )}
               >
                 <NoteView note={note} scale={scale} angle={angle} perspective={perspective} sheen={sheen} />
@@ -273,7 +273,7 @@ export function Canvas({
         // Top right, clear of the properties panel when one is open
         <div
           className={cn(
-            'absolute top-3 flex items-center gap-0.5 rounded-lg border bg-background/95 p-0.5 shadow-sm backdrop-blur',
+            'absolute top-3 flex items-center gap-0.5 rounded-lg border border-border/70 bg-background/95 p-0.5 shadow-panel backdrop-blur',
             selected ? 'right-[268px]' : 'right-3',
           )}
         >

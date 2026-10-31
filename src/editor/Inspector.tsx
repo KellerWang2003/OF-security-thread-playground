@@ -52,7 +52,7 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
 
   return (
     <Panel className="absolute top-3 right-3 bottom-3 flex w-[248px] flex-col overflow-y-auto">
-      <div className="truncate border-b px-4 py-3 text-sm font-medium">{note.name}</div>
+      <div className="truncate border-b border-border/60 px-4 py-3 text-sm font-medium">{note.name}</div>
 
       <Section title="Note">
         <Segmented

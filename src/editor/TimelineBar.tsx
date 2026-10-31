@@ -194,7 +194,7 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
                 key={frame.id}
                 className={cn(
                   'group absolute inset-y-1 overflow-hidden rounded-md border bg-background',
-                  i === current && 'ring-2 ring-primary/60',
+                  i === current && 'ring-1 ring-primary/30',
                 )}
                 style={{ left: left + 1, width: Math.max(width - 2, 4) }}
               >

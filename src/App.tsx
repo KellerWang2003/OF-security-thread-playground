@@ -55,7 +55,7 @@ function App() {
   if (!cloudConfigured) return <div className="flex h-full items-center justify-center text-sm" role="alert">Cloud connection is not configured.</div>
   return <>
     {name ? <Workspace key={name} name={name} /> : <OpenWorkspace />}
-    {notice && <div role="alert" className="fixed top-3 left-1/2 z-[100] flex max-w-lg -translate-x-1/2 items-center gap-3 rounded-lg border bg-background p-3 text-sm shadow-lg">
+    {notice && <div role="alert" className="fixed top-3 left-1/2 z-[100] flex max-w-lg -translate-x-1/2 items-center gap-3 rounded-lg border bg-background p-3 text-sm shadow-menu">
       <span>{notice}</span>
       <Button variant="ghost" size="sm" onClick={() => useNotice.setState({ message: '' })}>Dismiss</Button>
     </div>}
