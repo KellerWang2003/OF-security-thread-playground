@@ -85,7 +85,7 @@ export async function createDemoProject(): Promise<Project> {
       color: '#ffffff',
       imageId: await storeImage(await drawBird(i)),
       name: `${i + 1} ${word}`,
-      spanDeg: 15,
+      length: 10,
     })),
   )
   const note = createNote({ name: 'Flappy 25', x: 0, y: 0, widthMm: 68, heightMm: 134, color: '#8A4F9E' })
@@ -97,7 +97,7 @@ export async function createDemoProject(): Promise<Project> {
         frames,
         // A 6 mm thread repeats the 2:3 bird every 9 mm, so 9 mm windows show one bird each
         thread: { ...note.thread, widthMm: 6, tileMm: 9, windows: { enabled: true, windowMm: 9, gapMm: 9, offsetMm: 0 } },
-        tilt: { transition: 0.3 },
+        tilt: { cycleDeg: 30, transition: 0.3 },
       },
     ],
   }

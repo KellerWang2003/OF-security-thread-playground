@@ -1,4 +1,4 @@
-import { DEFAULT_SPAN, MAX_FRAMES, MIN_FRAMES, colorFrame } from '../lib/notes'
+import { DEFAULT_LENGTH, MAX_FRAMES, MIN_FRAMES, colorFrame } from '../lib/notes'
 import { imageAspect, removeImage, storeImage } from '../lib/images'
 import { findNote, updateNote } from '../lib/store'
 import type { Frame } from '../lib/types'
@@ -29,7 +29,7 @@ export async function addImageFrames({ projectId, noteId }: NoteRef, files: File
       color: '#ffffff',
       imageId: await storeImage(file),
       name: imageName(file),
-      spanDeg: DEFAULT_SPAN,
+      length: DEFAULT_LENGTH,
     })),
   )
   // The first images on a thread set the repeat length: one full image at the thread's width

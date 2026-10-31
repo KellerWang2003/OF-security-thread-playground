@@ -2,9 +2,10 @@ import type { Frame, Note, Project, ThreadWindows } from './types'
 
 export const MIN_FRAMES = 2
 export const MAX_FRAMES = 5
-/** Degrees of tilt a new frame shows for */
-export const DEFAULT_SPAN = 15
-export const SPAN_LIMITS = { min: 1, max: 60 }
+/** Timeline length of a new frame, in the timeline's own units */
+export const DEFAULT_LENGTH = 10
+export const LENGTH_LIMITS = { min: 1, max: 100 }
+export const CYCLE_LIMITS = { min: 2, max: 120 }
 export const THREAD_WIDTH = { min: 3, max: 6, step: 0.5 }
 export const NOTE_SIZE = { min: 20, max: 250 }
 export const FRAME_COLORS = ['#D9A441', '#2E9C8F', '#C2456B', '#4A6FD1', '#7C4DBA']
@@ -25,7 +26,7 @@ export function colorFrame(index: number): Frame {
     kind: 'color',
     color: FRAME_COLORS[index % FRAME_COLORS.length],
     name: `Colour ${index + 1}`,
-    spanDeg: DEFAULT_SPAN,
+    length: DEFAULT_LENGTH,
   }
 }
 
@@ -55,13 +56,25 @@ export function createNote({
     color,
     thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, tileMm: 10, windows: DEFAULT_WINDOWS },
     frames: [colorFrame(0), colorFrame(1)],
-    tilt: { transition: 0 },
+    tilt: { cycleDeg: 30, transition: 0 },
   }
 }
 
 export function createProject(name: string): Project {
   const now = Date.now()
   return { id: crypto.randomUUID(), name, createdAt: now, updatedAt: now, notes: [] }
+}
+
+const spanOf = (f: Frame) => (f as { spanDeg?: number }).spanDeg
+
+/** A frame saved with a degree span gets a timeline length in the same proportion, averaging the default */
+function oldLength(frames: Frame[], frame: Frame) {
+  const spans = frames.map(spanOf)
+  const known = spans.filter((s) => s !== undefined)
+  const span = spanOf(frame)
+  if (span === undefined || known.length === 0) return DEFAULT_LENGTH
+  const mean = known.reduce((total, s) => total + s, 0) / known.length
+  return Math.max(LENGTH_LIMITS.min, Math.round((span / mean) * DEFAULT_LENGTH))
 }
 
 /** Projects saved before notes existed held a single note's settings at the top level */
@@ -85,11 +98,16 @@ export function migrateProject(raw: unknown): Project {
     const n: Note = {
       ...raw,
       background: raw.background ?? (raw.faceImageId ? 'image' : 'solid'),
-      // Frames used to split one shared range equally
-      frames: raw.frames.map((f) => ({
-        ...f,
-        spanDeg: f.spanDeg ?? Math.round(((2 * ((raw.tilt as { rangeDeg?: number }).rangeDeg ?? 15)) / raw.frames.length) * 2) / 2,
-      })),
+      // Older frames had degree spans, or split one shared range equally: keep their proportions and cycle
+      frames: raw.frames.map((f) => ({ ...f, length: f.length ?? oldLength(raw.frames, f) })),
+      tilt: {
+        transition: raw.tilt.transition,
+        cycleDeg:
+          raw.tilt.cycleDeg ??
+          (raw.frames.every((f) => (f as { spanDeg?: number }).spanDeg !== undefined)
+            ? raw.frames.reduce((total, f) => total + ((f as { spanDeg?: number }).spanDeg ?? 0), 0)
+            : 2 * ((raw.tilt as { rangeDeg?: number }).rangeDeg ?? 15)),
+      },
       thread: {
         widthMm: raw.thread.widthMm,
         direction: raw.thread.direction ?? 'vertical',

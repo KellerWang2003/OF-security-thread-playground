@@ -11,9 +11,9 @@ import {
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
-import { clamp, formatDeg, frameMix, sliceRange, tiltRange } from '../lib/frames'
+import { clamp, formatDeg, frameMix, frameSpans } from '../lib/frames'
 import { pickFiles } from '../lib/images'
-import { MAX_FRAMES, MIN_FRAMES, SPAN_LIMITS } from '../lib/notes'
+import { LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
 import type { Frame, Note } from '../lib/types'
 import { setTilt, useTilt } from '../tilt/tilt'
 import { addColorFrame, addImageFrames, deleteFrame, moveFrame, replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
@@ -41,6 +41,7 @@ function TiltIndicator({ angle }: { angle: number }) {
 }
 
 const PAD = 12
+/** Pixels per unit of frame length; a new frame (10 units) starts 100 px wide */
 const ZOOM = { min: 3, max: 40, initial: 10 }
 
 /**
@@ -52,18 +53,20 @@ const ZOOM = { min: 3, max: 40, initial: 10 }
 export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRef: NoteRef | undefined; besidePanel: boolean }) {
   const scroller = useRef<HTMLDivElement>(null)
   const track = useRef<HTMLDivElement>(null)
-  const gesture = useRef<{ mode: 'scrub' } | { mode: 'resize'; frameId: string; startX: number; startSpan: number } | null>(null)
-  const [pxPerDeg, setPxPerDeg] = useState(ZOOM.initial)
+  const gesture = useRef<{ mode: 'scrub' } | { mode: 'resize'; frameId: string; startX: number; startLength: number } | null>(null)
+  const [pxPerUnit, setPxPerUnit] = useState(ZOOM.initial)
   const { angle, source, target } = useTilt()
   const { frames, tilt } = note
-  const spans = frames.map((f) => f.spanDeg)
-  const range = tiltRange(spans)
-  const cycle = 2 * range
-  const { current } = frameMix(angle, spans, tilt.transition)
+  const { current } = frameMix(angle, frameSpans(note), tilt.transition)
   const playing = source === 'wobble'
-  // The track is one cycle; past either end the frames simply loop, so the playhead wraps around
-  const x = (deg: number) => PAD + (deg + range) * pxPerDeg
-  const wrapped = cycle > 0 ? ((((angle + range) % cycle) + cycle) % cycle) - range : 0
+  // The track shows frame lengths in their own units, independent of the cycle's angle. The playhead
+  // maps where the tilt is within the cycle onto the track, wrapping as the frames loop.
+  const lengths = frames.map((f) => f.length)
+  const totalLength = lengths.reduce((sum, l) => sum + l, 0)
+  const starts = lengths.map((_, i) => lengths.slice(0, i).reduce((sum, l) => sum + l, 0))
+  const x = (units: number) => PAD + units * pxPerUnit
+  const cycle = tilt.cycleDeg
+  const phase = cycle > 0 ? (((angle + cycle / 2) % cycle) + cycle) % cycle / cycle : 0
 
   // Wheel: ⌘/Ctrl zooms the timeline, a plain vertical wheel scrolls it sideways
   useEffect(() => {
@@ -72,7 +75,7 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
     const onWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault()
-        setPxPerDeg((p) => clamp(p * Math.exp(-clamp(e.deltaY, -40, 40) * 0.01), ZOOM.min, ZOOM.max))
+        setPxPerUnit((p) => clamp(p * Math.exp(-clamp(e.deltaY, -40, 40) * 0.01), ZOOM.min, ZOOM.max))
       } else if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
         e.preventDefault()
         element.scrollLeft += e.deltaY
@@ -85,10 +88,9 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
   const scrubTo = (clientX: number) => {
     const rect = track.current?.getBoundingClientRect()
     if (!rect) return
-    setTilt({ source: 'slider', target: clamp((clientX - rect.left - PAD) / pxPerDeg - range, -range, range) })
+    const u = clamp((clientX - rect.left - PAD) / (totalLength * pxPerUnit), 0, 1)
+    setTilt({ source: 'slider', target: (u - 0.5) * cycle })
   }
-
-  const starts = spans.map((_, i) => sliceRange(i, spans)[0])
 
   return (
     <Panel className={cn('absolute bottom-3 left-3 flex h-[88px] items-stretch gap-2 p-2', besidePanel ? 'right-[268px]' : 'right-3')}>
@@ -110,7 +112,7 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
         <div
           ref={track}
           className="relative h-full touch-none overflow-hidden select-none"
-          style={{ width: x(range) + PAD }}
+          style={{ width: x(totalLength) + PAD }}
           onPointerDown={(e) => {
             const el = e.target as HTMLElement
             if (el.closest('button') || el.closest('[role=menu]')) return
@@ -118,7 +120,7 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
             const handle = el.closest<HTMLElement>('[data-resize]')
             const frame = frames.find((f) => f.id === handle?.dataset.resize)
             if (frame && noteRef) {
-              gesture.current = { mode: 'resize', frameId: frame.id, startX: e.clientX, startSpan: frame.spanDeg }
+              gesture.current = { mode: 'resize', frameId: frame.id, startX: e.clientX, startLength: frame.length }
             } else {
               gesture.current = { mode: 'scrub' }
               scrubTo(e.clientX)
@@ -128,8 +130,8 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
             const g = gesture.current
             if (g?.mode === 'scrub') scrubTo(e.clientX)
             if (g?.mode === 'resize' && noteRef) {
-              const spanDeg = clamp(Math.round(g.startSpan + (e.clientX - g.startX) / pxPerDeg), SPAN_LIMITS.min, SPAN_LIMITS.max)
-              updateFrame(noteRef, g.frameId, { spanDeg })
+              const length = clamp(Math.round(g.startLength + (e.clientX - g.startX) / pxPerUnit), LENGTH_LIMITS.min, LENGTH_LIMITS.max)
+              updateFrame(noteRef, g.frameId, { length })
             }
           }}
           onPointerUp={() => {
@@ -137,8 +139,8 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
           }}
         >
           {frames.map((frame, i) => {
-            const left = x(starts.at(i) ?? -range)
-            const width = frame.spanDeg * pxPerDeg
+            const left = x(starts.at(i) ?? 0)
+            const width = frame.length * pxPerUnit
             return (
               <div
                 key={frame.id}
@@ -168,7 +170,7 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
             )
           })}
 
-          <div className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: x(wrapped) }}>
+          <div className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: x(phase * totalLength) }}>
             <div className="absolute -top-0.5 left-1/2 size-2 -translate-x-1/2 rotate-45 bg-primary" />
           </div>
         </div>

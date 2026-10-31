@@ -2,9 +2,9 @@ import { ImageUp, RectangleHorizontal, RectangleVertical, X } from 'lucide-react
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { ColorField, IconButton, Panel, ScrubField, Section, Segmented } from '../components/controls'
-import { clamp, cycleDeg } from '../lib/frames'
+import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
-import { NOTE_SIZE, SPAN_LIMITS, THREAD_WIDTH } from '../lib/notes'
+import { CYCLE_LIMITS, NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
 import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
 import { setFaceImage, type NoteRef } from './frameActions'
@@ -46,16 +46,6 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
       const across = acrossOf(n, n.thread.direction)
       const positionMm = Math.round((n.thread.positionMm / across) * acrossOf(flipped, n.thread.direction) * 2) / 2
       return { ...n, ...flipped, thread: { ...n.thread, positionMm } }
-    })
-  const cycle = cycleDeg(note.frames.map((f) => f.spanDeg))
-  // Scales every frame by the same factor, so their relative lengths stay as you set them on the timeline
-  const setCycle = (total: number) =>
-    update((n) => {
-      const current = cycleDeg(n.frames.map((f) => f.spanDeg))
-      return {
-        ...n,
-        frames: n.frames.map((f) => ({ ...f, spanDeg: Math.max(SPAN_LIMITS.min, Math.round(((f.spanDeg * total) / current) * 10) / 10) })),
-      }
     })
   const portrait = note.heightMm >= note.widthMm
   const background = useImageUrl(note.faceImageId)
@@ -182,13 +172,13 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
         <div className="grid grid-cols-1 gap-2">
           <ScrubField
             label="Full cycle"
-            title="Degrees of tilt for one full cycle of the frames; changing it scales every frame to fit"
-            value={cycle}
-            min={SPAN_LIMITS.min * note.frames.length}
-            max={90}
+            title="Degrees of tilt for one full cycle of the frames"
+            value={tilt.cycleDeg}
+            min={CYCLE_LIMITS.min}
+            max={CYCLE_LIMITS.max}
             step={1}
             unit="°"
-            onChange={setCycle}
+            onChange={(cycleDeg) => setTiltSettings({ cycleDeg })}
           />
           <ScrubField
             label="Crossfade"

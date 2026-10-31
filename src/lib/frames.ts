@@ -5,9 +5,19 @@ const smoothstep = (edge0: number, edge1: number, x: number) => {
   return t * t * (3 - 2 * t)
 }
 
-/** The whole cycle in degrees, centred on flat: frames play from -total/2 to +total/2 */
-export const cycleDeg = (spans: number[]) => spans.reduce((sum, s) => sum + s, 0)
-export const tiltRange = (spans: number[]) => cycleDeg(spans) / 2
+const sum = (values: number[]) => values.reduce((total, v) => total + v, 0)
+
+/**
+ * Degrees of tilt each frame shows for: its share of the timeline applied to the full cycle. The cycle is
+ * centred on flat, so the frames play from -cycle/2 to +cycle/2 and then loop.
+ */
+export function frameSpans(note: { frames: { length: number }[]; tilt: { cycleDeg: number } }) {
+  const total = sum(note.frames.map((f) => f.length)) || 1
+  return note.frames.map((f) => (f.length / total) * note.tilt.cycleDeg)
+}
+
+export const tiltRange = (spans: number[]) => sum(spans) / 2
+const cycleDeg = (spans: number[]) => sum(spans)
 
 /** The angle range that shows frame `index` */
 export function sliceRange(index: number, spans: number[]): [number, number] {

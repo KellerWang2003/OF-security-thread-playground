@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
-import { TILT_LIMIT, frameMix } from '../lib/frames'
+import { TILT_LIMIT, frameMix, frameSpans } from '../lib/frames'
 import { useImageUrl } from '../lib/images'
 import type { Frame, Note } from '../lib/types'
 
@@ -106,7 +106,7 @@ export function NoteView({
   const { thread, frames, tilt } = note
   const mm = (value: number) => value * scale
   const face = useImageUrl(note.background === 'image' ? note.faceImageId : undefined)
-  const spans = frames.map((f) => f.spanDeg)
+  const spans = frameSpans(note)
   const mix = frameMix(angle, spans, tilt.transition)
   const baseFrame = frames.at(mix.base)
   const nextFrame = frames.at(mix.next)
