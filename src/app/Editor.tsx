@@ -1,4 +1,4 @@
-import { undoProject, redoProject } from '../lib/store'
+import { undoProject, redoProject, updateNote } from '../lib/store'
 import { beginHistoryGroup, endHistoryGroup, breakHistoryGroup } from '../lib/history'
 import { togglePlayback } from '../tilt/tilt'
 import { Plus } from 'lucide-react'
@@ -17,7 +17,9 @@ import { TimelineBar } from '../editor/TimelineBar'
  */
 export function Editor({ project, isDemo = false }: { project: Project; isDemo?: boolean }) {
   const [selectedId, setSelectedId] = useState<string>()
-  const [showWindowCuts, setShowWindowCuts] = useState(false)
+  const [editingNoteId, setEditingNoteId] = useState<string>()
+  const [selectedWindowId, setSelectedWindowId] = useState<string>()
+  const editingWindows = editingNoteId !== undefined && editingNoteId === selectedId
   const [adding, setAdding] = useState(false)
   const [focus, setFocus] = useState<{ noteId: string; token: number }>()
   const isEmpty = project.notes.length === 0
@@ -33,16 +35,36 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   // Escape clears the selection, unless a field or dialog is handling it
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return
       if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement) && !document.querySelector('[role=dialog]')) {
-        setSelectedId(undefined)
+        if (editingWindows) { setEditingNoteId(undefined); setSelectedWindowId(undefined) }
+        else setSelectedId(undefined)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [editingWindows])
+
+  useEffect(() => {
+    if (!editingWindows) return
+    const onDelete = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return
+      const element = event.target instanceof Element ? event.target : null
+      if (element?.closest('input, textarea, select, [contenteditable], [role="dialog"], [role="menu"]')) return
+      if (!selectedWindowId || document.querySelector('[role="dialog"], [role="menu"]')) return
+      event.preventDefault()
+      updateNote(project.id, editingNoteId!, (n) => ({ ...n, thread: { ...n.thread,
+        windows: { ...n.thread.windows, sections: n.thread.windows.sections.filter((s) => s.id !== selectedWindowId) } } }))
+      setSelectedWindowId(undefined)
+    }
+    window.addEventListener('keydown', onDelete)
+    return () => window.removeEventListener('keydown', onDelete)
+  }, [editingWindows, editingNoteId, selectedWindowId, project.id])
 
   useEffect(() => {
     const onSpace = (event: KeyboardEvent) => {
+      if (editingWindows) return
       if (event.code !== 'Space' || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return
       const element = event.target instanceof Element ? event.target : null
       if (element?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="spinbutton"], [role="switch"], [role="checkbox"], [role="radio"], [role="slider"]')) return
@@ -52,7 +74,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     }
     window.addEventListener('keydown', onSpace, { capture: true })
     return () => window.removeEventListener('keydown', onSpace, { capture: true })
-  }, [])
+  }, [editingWindows])
 
   useEffect(() => {
     const onHistory = (event: KeyboardEvent) => {
@@ -69,13 +91,13 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     }
     const endGesture = () => endHistoryGroup(project.id)
     window.addEventListener('keydown', onHistory)
-    window.addEventListener('pointerup', endGesture)
-    window.addEventListener('pointercancel', endGesture)
+    window.addEventListener('pointerup', endGesture, true)
+    window.addEventListener('pointercancel', endGesture, true)
     window.addEventListener('blur', endGesture)
     return () => {
       window.removeEventListener('keydown', onHistory)
-      window.removeEventListener('pointerup', endGesture)
-      window.removeEventListener('pointercancel', endGesture)
+      window.removeEventListener('pointerup', endGesture, true)
+      window.removeEventListener('pointercancel', endGesture, true)
       window.removeEventListener('blur', endGesture)
       endGesture()
     }
@@ -105,14 +127,18 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
           </Button>
         </div>
       ) : (
-        <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={setSelectedId} focus={focus} showWindowCuts={showWindowCuts} />
+        <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={setSelectedId} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} />
       )}
 
       <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} />
       {!isEmpty && (
         <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
       )}
-      {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} onWindowCutsChange={setShowWindowCuts} />}
+      {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId}
+        onEditingWindowsChange={(editing) => {
+          setEditingNoteId(editing ? note.id : undefined)
+          setSelectedWindowId(undefined)
+        }} />}
 
       {adding && (
         <AddNoteDialog

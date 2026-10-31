@@ -10,6 +10,7 @@ import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
 import { setTilt, useTilt, useTiltLoop } from '../tilt/tilt'
 import { addImageFrames } from './frameActions'
+import { WindowEditor } from './WindowEditor'
 import { useElementSize } from './useElementSize'
 
 /** CSS pixels per millimetre at 100% zoom, so 100% is roughly true size */
@@ -62,7 +63,9 @@ export function Canvas({
   selectedId,
   onSelect,
   focus,
-  showWindowCuts = false,
+  editingWindows = false,
+  selectedWindowId,
+  onWindowSelect,
 }: {
   projectId: string
   notes: Note[]
@@ -70,7 +73,9 @@ export function Canvas({
   onSelect: (noteId: string | undefined) => void
   /** Centres the canvas on a note whenever the token changes */
   focus?: { noteId: string; token: number }
-  showWindowCuts?: boolean
+  editingWindows?: boolean
+  selectedWindowId?: string
+  onWindowSelect: (id: string | undefined) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const size = useElementSize(ref)
@@ -138,6 +143,23 @@ export function Canvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus?.token])
 
+  useEffect(() => {
+    if (!editingWindows || !selected || !size) return
+    setTilt({ source: 'slider', target: useTilt.getState().angle })
+    const v = viewRef.current
+    if (!v) return
+    const zoom = Math.max(1, v.zoom)
+    const s = zoom * PX_PER_MM
+    const horizontal = selected.thread.direction === 'horizontal'
+    // Centre the thread in the canvas area to the left of the inspector.
+    setView({ zoom,
+      x: (size.width - 268) / 2 - (selected.x + (horizontal ? selected.widthMm / 2 : selected.thread.positionMm)) * s,
+      y: (FIT_INSETS.top + size.height - FIT_INSETS.bottom) / 2 - (selected.y + (horizontal ? selected.thread.positionMm : selected.heightMm / 2)) * s,
+    })
+    // Only entering the tool recentres; resizing windows must not move the canvas.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingWindows, selectedId])
+
   const noteAt = (target: EventTarget, attribute: 'data-note-label' | 'data-note-body') =>
     (target as HTMLElement).closest(`[${attribute}]`)?.getAttribute(attribute) ?? undefined
 
@@ -163,6 +185,10 @@ export function Canvas({
       onPointerDown={(e) => {
         const v = viewRef.current
         if (!v) return
+        if (editingWindows && noteAt(e.target, 'data-note-body') === selectedId) {
+          onWindowSelect(undefined)
+          return
+        }
         // Freeze the fitted view, or moving a note would refit the canvas under the pointer
         if (!view) setView(v)
         e.currentTarget.setPointerCapture(e.pointerId)
@@ -264,7 +290,11 @@ export function Canvas({
                   source === 'wobble' || activeMode === 'tilt' || activeMode === 'move' ? 'outline-primary/5' : 'outline-primary/25',
                 )}
               >
-                <NoteView note={note} scale={scale} angle={angle} perspective={perspective} sheen={sheen} showWindowCuts={isSelected && showWindowCuts} />
+                <NoteView note={note} scale={scale} angle={angle} perspective={perspective && !(isSelected && editingWindows)} sheen={sheen} showWindowCuts={isSelected && editingWindows} />
+                {isSelected && editingWindows && note.thread.windows.enabled && (
+                  <WindowEditor note={note} scale={scale} selectedId={selectedWindowId} onSelect={onWindowSelect}
+                    onChange={(sections) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, windows: { ...n.thread.windows, sections } } }))} />
+                )}
               </div>
             </div>
           )

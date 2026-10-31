@@ -51,6 +51,43 @@ describe('username workspace editor', () => {
     expect(screen.getByText('Renamed UI project', { exact: true })).toBeDefined()
     expect(screen.getAllByText('1 banknote')).toHaveLength(2)
   })
+  it('edits and deletes canvas windows, undoes deletion, and preserves sections across continuous mode', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      callback: ResizeObserverCallback
+      constructor(callback: ResizeObserverCallback) { this.callback = callback }
+      observe() { this.callback([{ contentRect: { width: 1280, height: 720 } } as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      unobserve() {} disconnect() {}
+    })
+    for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
+    }
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'window-editor-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Edit windows', exact: true }))
+    expect(screen.getByRole('group', { name: 'Edit thread windows' })).toBeDefined()
+    await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
+    const start = screen.getByTitle('Visible section starts here').querySelector('input')!
+    fireEvent.change(start, { target: { value: '16' } })
+    expect(start.value).toBe('16')
+    await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
+    await user.keyboard('{Delete}')
+    expect(screen.queryByRole('button', { name: 'Delete window', exact: true })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Undo', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
+    expect(screen.getByTitle('Visible section starts here').querySelector('input')!.value).toBe('16')
+    await user.click(screen.getByRole('button', { name: 'Done editing', exact: true }))
+    expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Continuous', exact: true }))
+    expect(screen.queryByRole('button', { name: 'Edit windows', exact: true })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Windowed', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Edit windows', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
+    expect(screen.getByTitle('Visible section starts here').querySelector('input')!.value).toBe('16')
+    expect(saves).not.toHaveBeenCalled()
+  })
   it('discards demo edits on exit and signs out without creating any project', async () => {
     const user = userEvent.setup()
     localStorage.setItem('of-thread-workspace', 'demo-ui-test')

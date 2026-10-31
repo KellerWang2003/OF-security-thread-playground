@@ -1,40 +1,26 @@
-import { useEffect, useState } from 'react'
 import { reportError } from '../cloud/notices'
-import { ImageUp, RectangleHorizontal, RectangleVertical, X } from 'lucide-react'
+import { ImageUp, RectangleHorizontal, RectangleVertical, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
 import { ColorField, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
 import { updateNote } from '../lib/store'
+import { fitSections, sectionBounds, WINDOW_STEP } from '../lib/thread'
 import type { Note } from '../lib/types'
 import { setFaceImage, type NoteRef } from './frameActions'
 
 type Change = (note: Note) => Note
 
 /** Right: the selected note's properties, Figma style */
-export function Inspector({ note, noteRef, onWindowCutsChange }: { note: Note; noteRef: NoteRef; onWindowCutsChange?: (show: boolean) => void }) {
-  const [showCuts, setShowCuts] = useState(false)
-  const [offsetHovered, setOffsetHovered] = useState(false)
-  const [offsetFocused, setOffsetFocused] = useState(false)
-  const [offsetDragging, setOffsetDragging] = useState(false)
-  useEffect(() => {
-    if (!offsetDragging) return
-    const stop = () => setOffsetDragging(false)
-    window.addEventListener('pointerup', stop)
-    window.addEventListener('pointercancel', stop)
-    window.addEventListener('blur', stop)
-    return () => {
-      window.removeEventListener('pointerup', stop)
-      window.removeEventListener('pointercancel', stop)
-      window.removeEventListener('blur', stop)
-    }
-  }, [offsetDragging])
-  useEffect(() => {
-    onWindowCutsChange?.(note.thread.windows.enabled && (showCuts || offsetHovered || offsetFocused || offsetDragging))
-    return () => onWindowCutsChange?.(false)
-  }, [note.thread.windows.enabled, showCuts, offsetHovered, offsetFocused, offsetDragging, onWindowCutsChange])
+export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChange, selectedWindowId, onWindowSelect }: {
+  note: Note
+  noteRef: NoteRef
+  editingWindows: boolean
+  onEditingWindowsChange: (editing: boolean) => void
+  selectedWindowId?: string
+  onWindowSelect: (id: string | undefined) => void
+}) {
   const update = (change: Change) => updateNote(noteRef.projectId, noteRef.noteId, change)
   const { thread } = note
   const threadLength = thread.direction === 'vertical' ? note.heightMm : note.widthMm
@@ -42,6 +28,10 @@ export function Inspector({ note, noteRef, onWindowCutsChange }: { note: Note; n
   const { windows } = thread
   const setWindows = (patch: Partial<Note['thread']['windows']>) =>
     update((n) => ({ ...n, thread: { ...n.thread, windows: { ...n.thread.windows, ...patch } } }))
+  const selectedWindow = windows.sections.find((s) => s.id === selectedWindowId)
+  const bounds = sectionBounds(windows.sections, selectedWindowId ?? '', threadLength)
+  const updateWindow = (patch: { startMm?: number; endMm?: number }) =>
+    setWindows({ sections: windows.sections.map((s) => s.id === selectedWindowId ? { ...s, ...patch } : s) })
   const acrossOf = (n: Pick<Note, 'widthMm' | 'heightMm'>, direction: Note['thread']['direction']) =>
     direction === 'vertical' ? n.widthMm : n.heightMm
   const setSize = (widthMm: number, heightMm: number) =>
@@ -49,7 +39,8 @@ export function Inspector({ note, noteRef, onWindowCutsChange }: { note: Note; n
       ...n,
       widthMm,
       heightMm,
-      thread: { ...n.thread, positionMm: clamp(n.thread.positionMm, 0, acrossOf({ widthMm, heightMm }, n.thread.direction)) },
+      thread: { ...n.thread, positionMm: clamp(n.thread.positionMm, 0, acrossOf({ widthMm, heightMm }, n.thread.direction)),
+        windows: { ...n.thread.windows, sections: fitSections(n.thread.windows.sections, n.thread.direction === 'vertical' ? heightMm : widthMm) } },
     }))
   // Turning the thread keeps it at the same relative position across the note
   const setDirection = (direction: Note['thread']['direction']) =>
@@ -58,6 +49,7 @@ export function Inspector({ note, noteRef, onWindowCutsChange }: { note: Note; n
       thread: {
         ...n.thread,
         direction,
+        windows: { ...n.thread.windows, sections: fitSections(n.thread.windows.sections, direction === 'vertical' ? n.heightMm : n.widthMm) },
         positionMm: Math.round((n.thread.positionMm / acrossOf(n, n.thread.direction)) * acrossOf(n, direction) * 2) / 2,
       },
     }))
@@ -67,7 +59,7 @@ export function Inspector({ note, noteRef, onWindowCutsChange }: { note: Note; n
       const flipped = { widthMm: n.heightMm, heightMm: n.widthMm }
       const across = acrossOf(n, n.thread.direction)
       const positionMm = Math.round((n.thread.positionMm / across) * acrossOf(flipped, n.thread.direction) * 2) / 2
-      return { ...n, ...flipped, thread: { ...n.thread, positionMm } }
+      return { ...n, ...flipped, thread: { ...n.thread, positionMm, windows: { ...n.thread.windows, sections: fitSections(n.thread.windows.sections, n.thread.direction === 'vertical' ? flipped.heightMm : flipped.widthMm) } } }
     })
   const portrait = note.heightMm >= note.widthMm
   const background = useImageUrl(note.faceImageId)
@@ -186,26 +178,33 @@ export function Inspector({ note, noteRef, onWindowCutsChange }: { note: Note; n
         />
       </Section>
 
-      <Section
-        title="Windows"
-        action={<Switch size="sm" aria-label="Windowed thread" checked={windows.enabled} onCheckedChange={(enabled) => setWindows({ enabled })} />}
-      >
+      <Section title="Windows">
+        <Segmented
+          value={windows.enabled ? 'windowed' : 'continuous'}
+          options={[{ value: 'continuous', label: 'Continuous' }, { value: 'windowed', label: 'Windowed' }]}
+          onChange={(mode) => {
+            setWindows({ enabled: mode === 'windowed' })
+            if (mode === 'continuous') onEditingWindowsChange(false)
+          }}
+        />
         {windows.enabled && (
           <>
-            <div className="grid grid-cols-2 gap-2">
-              <ScrubField label="Open" title="Window length" value={windows.windowMm} min={1} max={threadLength} step={0.5} unit="mm" onChange={(windowMm) => setWindows({ windowMm })} />
-              <ScrubField label="Bridge" title="Covered length between windows" value={windows.gapMm} min={0.5} max={threadLength} step={0.5} unit="mm" onChange={(gapMm) => setWindows({ gapMm })} />
-            </div>
-            <div
-              onPointerDownCapture={() => setOffsetDragging(true)}
-              onPointerEnter={() => setOffsetHovered(true)}
-              onPointerLeave={() => setOffsetHovered(false)}
-              onFocusCapture={() => setOffsetFocused(true)}
-              onBlurCapture={() => setOffsetFocused(false)}
-            >
-              <ScrubField label="Offset" title="Shift the cuts along the artwork; preview cuts on the canvas" value={windows.offsetMm} min={-threadLength} max={threadLength} step={0.5} unit="mm" onChange={(offsetMm) => setWindows({ offsetMm })} />
-            </div>
-            <SwitchField label="Show cuts" checked={showCuts} onChange={setShowCuts} />
+            <Button variant={editingWindows ? 'secondary' : 'outline'} size="sm" aria-pressed={editingWindows}
+              onClick={() => onEditingWindowsChange(!editingWindows)}>
+              {editingWindows ? 'Done editing' : 'Edit windows'}
+            </Button>
+            {editingWindows && selectedWindow && (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <ScrubField label="Start" title="Visible section starts here" value={selectedWindow.startMm} min={bounds.min} max={selectedWindow.endMm - Math.min(WINDOW_STEP, selectedWindow.endMm - selectedWindow.startMm)} step={WINDOW_STEP} unit="mm" onChange={(startMm) => updateWindow({ startMm })} />
+                  <ScrubField label="End" title="Visible section ends here" value={selectedWindow.endMm} min={selectedWindow.startMm + Math.min(WINDOW_STEP, selectedWindow.endMm - selectedWindow.startMm)} max={bounds.max} step={WINDOW_STEP} unit="mm" onChange={(endMm) => updateWindow({ endMm })} />
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => {
+                  setWindows({ sections: windows.sections.filter((s) => s.id !== selectedWindowId) })
+                  onWindowSelect(undefined)
+                }}><Trash2 />Delete window</Button>
+              </>
+            )}
           </>
         )}
       </Section>

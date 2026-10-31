@@ -32,7 +32,7 @@ Design tool for previewing lenticular security threads on banknotes (Oberthur Fi
 - **Tilt:** only back-and-forth (up/down) tilt animates. Manual dragging is limited to ±60° (`TILT_LIMIT`). Default playback starts flat at 0°, tilts upward through the full Cycle angle, and returns to flat; it never splits the cycle above and below flat. The timeline starts at 0° too. Side to side only matters for diagonal lenses, which are planned for later. Tilting must read as up vs down, using a strong per-note perspective.
 - **Timeline:** each frame has a relative `length`, and its share of the total is its share of the cycle. `tilt.cycleDeg` (Cycle) and `tilt.transition` (Fade) are project-wide. They are stored on each note but always edited for all notes together, and must never resize the timeline. Past one cycle the frames loop. The timeline shows one cycle with no angle ruler.
 - **Images:** they always stay upright, even on horizontal threads. Complete images fill the thread thickness at their own aspect ratio and repeat to the banknote edge. Image gap sets optional spacing between copies (0 mm by default); it is separate from the paper bridges between windows.
-- **Threads:** they are windowed (open, gap, offset) and can run vertically or horizontally. There is no white surround.
+- **Threads:** they can run vertically or horizontally, with Continuous or Windowed visibility. Windows are individual start/end sections edited directly on the canvas: draw, move, resize, or delete, snapping to 0.5 mm. Start/End fields provide precise adjustment. Editing pauses playback and shows the banknote flat with hidden artwork faintly visible. Legacy repeating patterns migrate to sections. There is no white surround.
 
 ## Data
 

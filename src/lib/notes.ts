@@ -1,4 +1,5 @@
-import type { Frame, Note, Project, ThreadWindows } from './types'
+import { migrateWindows, threadLength } from './thread'
+import type { Frame, Note, Project } from './types'
 
 export const MIN_FRAMES = 2
 export const MAX_FRAMES = 5
@@ -11,7 +12,6 @@ export const THREAD_WIDTH = { min: 3, max: 6, step: 0.5 }
 export const NOTE_SIZE = { min: 20, max: 250 }
 export const FRAME_COLORS = ['#D9A441', '#2E9C8F', '#C2456B', '#4A6FD1', '#7C4DBA']
 export const DEFAULT_NOTE = { widthMm: 150, heightMm: 70, color: '#5B6B8C' }
-export const DEFAULT_WINDOWS: ThreadWindows = { enabled: true, windowMm: 8, gapMm: 6, offsetMm: 0 }
 /** Space left between notes when they are placed on the canvas */
 export const NOTE_GAP = 20
 
@@ -55,7 +55,7 @@ export function createNote({
     heightMm,
     background: 'solid',
     color,
-    thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, imageGapMm: 0, windows: DEFAULT_WINDOWS },
+    thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, imageGapMm: 0, windows: migrateWindows(undefined, heightMm) },
     frames: [colorFrame(0), colorFrame(1)],
     tilt: DEFAULT_TILT,
   }
@@ -117,7 +117,7 @@ export function migrateProject(raw: unknown): Project {
         positionMm: raw.thread.positionMm ?? (raw.thread as { xMm?: number }).xMm ?? raw.widthMm / 2,
         // Retire the old cropping length; existing artwork now repeats whole, with no gap.
         imageGapMm: Math.max(0, raw.thread.imageGapMm ?? 0),
-        windows: raw.thread.windows ?? DEFAULT_WINDOWS,
+        windows: migrateWindows(raw.thread.windows, threadLength({ ...raw, thread: { direction: raw.thread.direction ?? 'vertical' } })),
       },
     }
     placed.push(Number.isFinite(n.x) && Number.isFinite(n.y) ? n : { ...n, ...nextNotePosition(placed) })

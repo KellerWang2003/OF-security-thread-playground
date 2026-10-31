@@ -21,13 +21,16 @@ export interface ThreadSettings {
   windows: ThreadWindows
 }
 
-/** A windowed thread is woven into the paper: it shows in windows separated by covered bridges */
+/** A visible section, measured along the thread from the banknote's top/left edge. */
+export interface ThreadWindow {
+  id: string
+  startMm: number
+  endMm: number
+}
+
 export interface ThreadWindows {
   enabled: boolean
-  windowMm: number
-  gapMm: number
-  /** Shifts the windows along the thread, from the note's top edge */
-  offsetMm: number
+  sections: ThreadWindow[]
 }
 
 export interface TiltSettings {

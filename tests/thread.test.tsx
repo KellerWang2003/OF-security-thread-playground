@@ -2,7 +2,7 @@
 import React from 'react'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { windowEdges } from '../src/lib/thread'
+import { migrateWindows, windowEdges } from '../src/lib/thread'
 import { FrameFill, NoteView } from '../src/components/NoteView'
 import { createNote, createProject, migrateProject } from '../src/lib/notes'
 import type { Frame } from '../src/lib/types'
@@ -53,19 +53,19 @@ describe('whole image repeats', () => {
     const { container, rerender } = render(<NoteView note={note} scale={2} />)
     const strip = container.firstElementChild?.children[0] as HTMLElement
     expect(strip.style.backgroundColor).toBe('rgb(255, 0, 136)')
-    expect(strip.style.maskImage).toContain('repeating-linear-gradient')
+    expect(strip.style.maskImage).toContain('linear-gradient')
     rerender(<NoteView note={{ ...note, thread: { ...note.thread, backgroundColor: undefined } }} scale={2} />)
     expect(strip.style.backgroundColor).toBe('')
   })
 
   it('shows cut guides on the banknote and shifts the cuts without moving the artwork', () => {
     const note = makeNote()
-    note.thread.windows = { enabled: true, windowMm: 8, gapMm: 6, offsetMm: 0 }
+    note.thread.windows = migrateWindows({ enabled: true, windowMm: 8, gapMm: 6, offsetMm: 0 }, 70)
     const { container, rerender } = render(<NoteView note={note} scale={2} showWindowCuts />)
     const ghost = container.querySelector('[data-window-ghost]') as HTMLElement
     expect(ghost.style.opacity).toBe('0.2')
     expect(container.querySelector('[data-window-cuts]')?.children[0].getAttribute('style')).toContain('top: 0px')
-    note.thread.windows.offsetMm = 3
+    note.thread.windows.sections = note.thread.windows.sections.map((s) => ({ ...s, startMm: s.startMm + 3, endMm: s.endMm + 3 }))
     rerender(<NoteView note={note} scale={2} showWindowCuts />)
     expect(container.querySelector('[data-window-cuts]')?.children[0].getAttribute('style')).toContain('top: 6px')
     expect((container.querySelector('[data-window-ghost]') as HTMLElement).style.top).toBe(ghost.style.top)
@@ -76,11 +76,11 @@ describe('whole image repeats', () => {
 
   it('handles positive, negative, and wrapped offsets including partial edge windows', () => {
     const thread = makeNote().thread
-    thread.windows = { enabled: true, windowMm: 8, gapMm: 6, offsetMm: 3 }
+    thread.windows = migrateWindows({ enabled: true, windowMm: 8, gapMm: 6, offsetMm: 3 }, 30)
     expect(windowEdges(thread, 30)).toEqual([3, 11, 17, 25])
-    thread.windows.offsetMm = -3
-    expect(windowEdges(thread, 30)).toEqual([5, 11, 19, 25])
-    thread.windows.offsetMm = 17
+    thread.windows = migrateWindows({ enabled: true, windowMm: 8, gapMm: 6, offsetMm: -3 }, 30)
+    expect(windowEdges(thread, 30)).toEqual([0, 5, 11, 19, 25, 30])
+    thread.windows = migrateWindows({ enabled: true, windowMm: 8, gapMm: 6, offsetMm: 17 }, 30)
     expect(windowEdges(thread, 30)).toEqual([3, 11, 17, 25])
     thread.windows.enabled = false
     expect(windowEdges(thread, 30)).toEqual([])
