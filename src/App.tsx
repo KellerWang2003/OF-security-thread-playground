@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Editor } from './app/Editor'
 import { ProjectList } from './app/ProjectList'
@@ -8,6 +8,8 @@ import { openWorkspace, closeWorkspace, useWorkspace, watchWorkspace, retrySync,
 import { readWorkspaceName, WORKSPACE_EVENT } from './cloud/identity'
 import { useNotice, runAction } from './cloud/notices'
 import { ConflictDialog } from './components/CloudStatus'
+
+const LensLab = lazy(() => import('./lab/LensLab').then((m) => ({ default: m.LensLab })))
 
 function useHash() {
   const [hash, setHash] = useState(location.hash)
@@ -45,6 +47,7 @@ function Workspace({ name }: { name: string }) {
 function App() {
   const [name, setName] = useState(readWorkspaceName)
   const notice = useNotice((s) => s.message)
+  const hash = useHash()
   useEffect(() => {
     const onChange = (event: Event) => setName((event as CustomEvent<string | null>).detail)
     window.addEventListener(WORKSPACE_EVENT, onChange)
@@ -52,6 +55,8 @@ function App() {
   }, [])
   useEffect(() => { useNotice.setState({ message: '' }) }, [name])
 
+  // The lens lab is a public explainer page: no sign-in, no projects, no cloud
+  if (hash === '#/lens-lab') return <Suspense fallback={null}><LensLab /></Suspense>
   if (!cloudConfigured) return <div className="flex h-full items-center justify-center text-sm" role="alert">Cloud connection is not configured.</div>
   return <>
     {name ? <Workspace key={name} name={name} /> : <OpenWorkspace />}

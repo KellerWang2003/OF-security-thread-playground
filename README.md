@@ -18,6 +18,10 @@ npm run dev
 - **Export:** the Export button (top right of the canvas, or beside the banknote's name when one is selected) saves one playback loop as MP4 or GIF: Banknotes are ticked in a list, side by side by default with an option for separate files; resolution (720p to 4K for MP4, 360p to 1080p for GIF), frame rate, loops (MP4) and background (transparent for GIF) are adjustable. It uses the current Cycle and Playback settings. The banknotes are redrawn on a canvas (`src/lib/exportRender.ts`) to match the live view, then encoded in the browser (`src/lib/exportMedia.ts`, loaded only when exporting).
 - **Canvas:** every banknote sits on one canvas. Scroll, drag the empty canvas, or middle-drag to pan, pinch or ⌘-scroll to zoom (100% is about true size), drag a banknote's label to move it.
 
+## Lens lab
+
+`#/lens-lab` is a standalone explainer for lenticular lenses at any angle (no sign-in, no projects, nothing saved). Set the degrees each tilt needs for one pass (↔ Cycle, ↕ Cycle) and the lens angle follows; a tilt pad, a timeline with each tilt's reach, a tilting banknote, a magnified interlaced print and a print check (close-view drift, detail across the width, repeat fit) show the result. The maths is in `src/lib/lens.ts`, for the planned lens-angle feature to reuse.
+
 ## Cloud setup and Vercel
 
 The backend is deployed to **General playground** (`swovjhbaoxlxodakauxo`). No email setup or Supabase Auth accounts are required. Use the same username on another device to open the same projects. Usernames ignore case and accept 2–32 letters, numbers, hyphens, or underscores.
