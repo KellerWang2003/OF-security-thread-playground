@@ -123,9 +123,9 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
           ]}
           onChange={setDirection}
         />
-        <div className="grid gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <ScrubField
-            label="Thickness"
+            label="T"
             title="Thread width vertically, or height horizontally"
             value={thread.widthMm}
             min={THREAD_WIDTH.min}
