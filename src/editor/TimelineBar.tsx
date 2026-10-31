@@ -11,7 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
-import { clamp, formatDeg, frameMix, sliceRange, tiltRange } from '../lib/frames'
+import { TILT_LIMIT, clamp, formatDeg, frameMix, sliceRange, tiltRange } from '../lib/frames'
 import { pickFiles } from '../lib/images'
 import { MAX_FRAMES, MIN_FRAMES, SPAN_LIMITS } from '../lib/notes'
 import type { Frame, Note } from '../lib/types'
@@ -57,9 +57,16 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
   const { frames, tilt } = note
   const spans = frames.map((f) => f.spanDeg)
   const range = tiltRange(spans)
+  const cycle = 2 * range
   const { current } = frameMix(angle, spans, tilt.transition)
   const playing = source === 'wobble'
-  const x = (deg: number) => PAD + (deg + range) * pxPerDeg
+  // The track covers the whole tilt, so you can see and scrub into the repeats past the main cycle
+  const extent = Math.max(TILT_LIMIT, range)
+  const x = (deg: number) => PAD + (deg + extent) * pxPerDeg
+  // Which repeat of the cycle the playhead is in; 0 is the editable one around flat
+  const playheadRepeat = cycle > 0 ? Math.floor((angle + range) / cycle) : 0
+  const repeats: number[] = []
+  if (cycle > 0) for (let k = -Math.ceil(extent / cycle) - 1; k <= Math.ceil(extent / cycle) + 1; k++) repeats.push(k)
 
   // Wheel: ⌘/Ctrl zooms the timeline, a plain vertical wheel scrolls it sideways
   useEffect(() => {
@@ -78,17 +85,23 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
     return () => element.removeEventListener('wheel', onWheel)
   }, [])
 
+  // Keep flat (0°) in the middle when the timeline opens or is zoomed
+  useEffect(() => {
+    const element = scroller.current
+    if (element) element.scrollLeft = PAD + extent * pxPerDeg - element.clientWidth / 2
+  }, [pxPerDeg, extent])
+
   const scrubTo = (clientX: number) => {
     const rect = track.current?.getBoundingClientRect()
     if (!rect) return
-    setTilt({ source: 'slider', target: clamp((clientX - rect.left - PAD) / pxPerDeg - range, -range, range) })
+    setTilt({ source: 'slider', target: clamp((clientX - rect.left - PAD) / pxPerDeg - extent, -TILT_LIMIT, TILT_LIMIT) })
   }
 
   // Ruler ticks every 5° (every degree when zoomed in), labelled every 15° (every 5° when zoomed in)
   const minor = pxPerDeg >= 14 ? 1 : 5
   const major = pxPerDeg >= 18 ? 5 : 15
   const ticks: number[] = []
-  for (let d = Math.ceil(-range / minor) * minor; d <= range + 1e-6; d += minor) ticks.push(d)
+  for (let d = Math.ceil(-extent / minor) * minor; d <= extent + 1e-6; d += minor) ticks.push(d)
 
   const starts = spans.map((_, i) => sliceRange(i, spans)[0])
 
@@ -111,8 +124,8 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
       <div ref={scroller} className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden rounded-lg bg-muted/40">
         <div
           ref={track}
-          className="relative h-full touch-none select-none"
-          style={{ width: x(range) + PAD }}
+          className="relative h-full touch-none overflow-hidden select-none"
+          style={{ width: x(extent) + PAD }}
           onPointerDown={(e) => {
             const el = e.target as HTMLElement
             if (el.closest('button') || el.closest('[role=menu]')) return
@@ -154,15 +167,20 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
             })}
           </div>
 
-          {frames.map((frame, i) => {
-            const left = x(starts.at(i) ?? -range)
+          {repeats.flatMap((k) =>
+            frames.map((frame, i) => {
+            const from = (starts.at(i) ?? -range) + k * cycle
+            if (from + frame.spanDeg < -extent || from > extent) return null
+            const left = x(from)
             const width = frame.spanDeg * pxPerDeg
+            const main = k === 0
             return (
               <div
-                key={frame.id}
+                key={`${k}-${frame.id}`}
                 className={cn(
                   'group absolute top-6 bottom-1 overflow-hidden rounded-md border bg-background',
-                  i === current && 'ring-2 ring-primary/60',
+                  !main && 'opacity-45',
+                  i === current && k === playheadRepeat && 'ring-2 ring-primary/60',
                 )}
                 style={{ left: left + 1, width: Math.max(width - 2, 4) }}
               >
@@ -172,7 +190,7 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
                     {i + 1}
                   </span>
                 )}
-                {noteRef && (
+                {noteRef && main && (
                   <>
                     <FrameMenu frame={frame} index={i} count={frames.length} noteRef={noteRef} />
                     <div
@@ -184,9 +202,15 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
                 )}
               </div>
             )
-          })}
+            }),
+          )}
 
-          <div className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: x(clamp(angle, -range, range)) }}>
+          {cycle > 0 && (
+            // Marks the editable cycle around flat
+            <div className="pointer-events-none absolute top-5 h-0.5 rounded-full bg-primary/40" style={{ left: x(-range), width: cycle * pxPerDeg }} />
+          )}
+
+          <div className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: x(clamp(angle, -extent, extent)) }}>
             <div className="absolute -top-0.5 left-1/2 size-2 -translate-x-1/2 rotate-45 bg-primary" />
           </div>
         </div>

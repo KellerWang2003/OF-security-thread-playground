@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
-import { clamp } from '../lib/frames'
+import { TILT_LIMIT, clamp } from '../lib/frames'
 
 export type TiltSource = 'drag' | 'wobble' | 'slider'
 
@@ -29,8 +29,11 @@ export const useTilt = create<TiltState>()(() => ({
 
 export const setTilt = (patch: Partial<TiltState>) => useTilt.setState(patch)
 
-/** Moves the angle towards the target with a critically damped spring, so every source feels physical */
-export function useTiltLoop(rangeDeg: number) {
+/**
+ * Moves the angle towards the target with a critically damped spring, so every source feels physical.
+ * Wobbling sweeps `amplitude` either way, which is one full cycle of the frames.
+ */
+export function useTiltLoop(amplitude: number) {
   useEffect(() => {
     let raf = 0
     let last = performance.now()
@@ -47,9 +50,9 @@ export function useTiltLoop(rangeDeg: number) {
       if (s.source === 'wobble') {
         // Speed 1 is one full back-and-forth every two seconds
         phase += dt * s.wobbleSpeed * Math.PI
-        target = rangeDeg * Math.sin(phase)
+        target = Math.min(amplitude, TILT_LIMIT) * Math.sin(phase)
       }
-      target = clamp(target, -rangeDeg, rangeDeg)
+      target = clamp(target, -TILT_LIMIT, TILT_LIMIT)
       velocity += ((target - s.angle) * stiffness - velocity * damping) * dt
       let angle = s.angle + velocity * dt
       if (Math.abs(target - angle) < 0.01 && Math.abs(velocity) < 0.01) {
@@ -62,5 +65,5 @@ export function useTiltLoop(rangeDeg: number) {
 
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [rangeDeg])
+  }, [amplitude])
 }

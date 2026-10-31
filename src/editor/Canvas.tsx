@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { IconButton } from '../components/controls'
 import { NoteView } from '../components/NoteView'
-import { clamp, tiltRange } from '../lib/frames'
+import { TILT_LIMIT, clamp, tiltRange } from '../lib/frames'
 import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
 import { setTilt, useTilt, useTiltLoop } from '../tilt/tilt'
@@ -28,7 +28,7 @@ interface View {
 type Gesture =
   | { mode: 'pan'; startX: number; startY: number; view: View; onBackground: boolean }
   | { mode: 'move'; noteId: string; startX: number; startY: number; noteX: number; noteY: number }
-  | { mode: 'tilt'; startX: number; startY: number; start: number; range: number }
+  | { mode: 'tilt'; startX: number; startY: number; start: number }
 
 function fitView(notes: Note[], size: { width: number; height: number }): View {
   const minX = Math.min(...notes.map((n) => n.x))
@@ -201,7 +201,6 @@ export function Canvas({
             startX: e.clientX,
             startY: e.clientY,
             start,
-            range: tiltRange(note.frames.map((f) => f.spanDeg)),
           }
           setTilt({ source: 'drag', target: start })
         }
@@ -220,7 +219,8 @@ export function Canvas({
         } else {
           // About 160 px of drag sweeps half the range
           // Lenticular lenses respond to tilting back and forth, so only vertical drags tilt
-          setTilt({ target: clamp(g.start - (dy * g.range) / 160, -g.range, g.range) })
+          // About 160 px of drag tilts the note 30°; past one cycle the frames loop
+          setTilt({ target: clamp(g.start - (dy * 30) / 160, -TILT_LIMIT, TILT_LIMIT) })
         }
       }}
       onPointerUp={(e) => {

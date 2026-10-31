@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
-import { frameMix, tiltRange } from '../lib/frames'
+import { TILT_LIMIT, frameMix } from '../lib/frames'
 import { useImageUrl } from '../lib/images'
 import type { Frame, Note } from '../lib/types'
 
@@ -110,9 +110,9 @@ export function NoteView({
   const mix = frameMix(angle, spans, tilt.transition)
   const baseFrame = frames.at(mix.base)
   const nextFrame = frames.at(mix.next)
-  const t = angle / Math.max(tiltRange(spans), 1)
+  const t = angle / TILT_LIMIT
   const rotate = perspective ? `rotateX(${angle}deg)` : undefined
-  const sheenAt = 50 + t * 70
+  const sheenAt = 50 + t * 120
   const direction = '180deg'
   const horizontal = thread.direction === 'horizontal'
   const lengthMm = horizontal ? note.widthMm : note.heightMm
