@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { IconButton } from '../components/controls'
 import { NoteView } from '../components/NoteView'
-import { clamp, formatDeg } from '../lib/frames'
+import { clamp } from '../lib/frames'
 import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
 import { setTilt, useTilt, useTiltLoop } from '../tilt/tilt'
@@ -15,7 +15,10 @@ import { useElementSize } from './useElementSize'
 const PX_PER_MM = 96 / 25.4
 const MIN_ZOOM = 0.1
 const MAX_ZOOM = 8
-const FIT_PADDING = 72
+const FIT_PADDING = 56
+/** Extra room at the bottom for the floating tilt bar, and at the top for labels */
+const FIT_BOTTOM = 96
+const FIT_TOP = 48
 
 /** Zoom level and where the canvas origin (0, 0 mm) sits on screen, in px */
 interface View {
@@ -25,7 +28,7 @@ interface View {
 }
 
 type Gesture =
-  | { mode: 'pan'; startX: number; startY: number; view: View }
+  | { mode: 'pan'; startX: number; startY: number; view: View; onBackground: boolean }
   | { mode: 'move'; noteId: string; startX: number; startY: number; noteX: number; noteY: number }
   | { mode: 'tilt'; startX: number; startY: number; start: number; axis: Note['tilt']['axis']; range: number }
 
@@ -37,7 +40,7 @@ function fitView(notes: Note[], size: { width: number; height: number }): View {
   const zoom = clamp(
     Math.min(
       (size.width - 2 * FIT_PADDING) / ((maxX - minX) * PX_PER_MM),
-      (size.height - 2 * FIT_PADDING) / ((maxY - minY) * PX_PER_MM),
+      (size.height - FIT_TOP - FIT_BOTTOM) / ((maxY - minY) * PX_PER_MM),
     ),
     MIN_ZOOM,
     MAX_ZOOM,
@@ -46,8 +49,7 @@ function fitView(notes: Note[], size: { width: number; height: number }): View {
   return {
     zoom,
     x: size.width / 2 - ((minX + maxX) / 2) * scale,
-    // A little lower than centre, to leave room for the labels above the notes
-    y: size.height / 2 - ((minY + maxY) / 2) * scale + 10,
+    y: FIT_TOP + (size.height - FIT_TOP - FIT_BOTTOM) / 2 - ((minY + maxY) / 2) * scale,
   }
 }
 
@@ -65,7 +67,7 @@ export function Canvas({
   projectId: string
   notes: Note[]
   selectedId: string | undefined
-  onSelect: (noteId: string) => void
+  onSelect: (noteId: string | undefined) => void
   /** Centres the canvas on a note whenever the token changes */
   focus?: { noteId: string; token: number }
 }) {
@@ -76,10 +78,10 @@ export function Canvas({
   const [activeMode, setActiveMode] = useState<Gesture['mode']>()
   const [spaceDown, setSpaceDown] = useState(false)
   const [dropping, setDropping] = useState(false)
-  const { angle, source, perspective, sheen } = useTilt()
+  const { angle, perspective, sheen } = useTilt()
 
   const selected = notes.find((n) => n.id === selectedId)
-  useTiltLoop(selected?.tilt.rangeDeg ?? 30)
+  useTiltLoop((selected ?? notes.at(0))?.tilt.rangeDeg ?? 30)
 
   // Until the first pan or zoom, the view simply fits every note
   const current = view ?? (size && notes.length ? fitView(notes, size) : undefined)
@@ -187,7 +189,7 @@ export function Canvas({
         const bodyId = noteAt(e.target, 'data-note-body')
         const note = notes.find((n) => n.id === (labelId ?? bodyId))
         if (spaceDown || e.button === 1 || !note) {
-          gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, view: v }
+          gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, view: v, onBackground: !note }
         } else if (labelId) {
           onSelect(note.id)
           gesture.current = { mode: 'move', noteId: note.id, startX: e.clientX, startY: e.clientY, noteX: note.x, noteY: note.y }
@@ -223,8 +225,11 @@ export function Canvas({
           setTilt({ target: clamp(g.start + (delta * g.range) / 160, -g.range, g.range) })
         }
       }}
-      onPointerUp={() => {
-        if (gesture.current?.mode === 'tilt' && useTilt.getState().springBack) setTilt({ target: 0 })
+      onPointerUp={(e) => {
+        const g = gesture.current
+        if (g?.mode === 'tilt' && useTilt.getState().springBack) setTilt({ target: 0 })
+        // A click on empty canvas, without dragging, clears the selection
+        if (g?.mode === 'pan' && g.onBackground && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) onSelect(undefined)
         gesture.current = null
         setActiveMode(undefined)
       }}
@@ -277,13 +282,8 @@ export function Canvas({
           )
         })}
 
-      <div className="pointer-events-none absolute top-3 left-4 flex items-baseline gap-2 text-xs text-muted-foreground">
-        <span className="w-12 text-lg font-medium text-foreground tabular-nums">{formatDeg(angle)}</span>
-        <span>{source === 'wobble' ? 'Auto-wobble' : source === 'slider' ? 'Slider' : 'Drag a note to tilt'}</span>
-      </div>
-
-      <div className="pointer-events-none absolute bottom-3 left-4 text-xs text-muted-foreground/80">
-        Scroll or space-drag to pan · pinch or ⌘-scroll to zoom · drag a label to move · drop images on a note
+      <div className="pointer-events-none absolute top-3 left-4 text-xs text-muted-foreground/80">
+        Drag a note to tilt · drag its label to move · scroll or space-drag to pan · pinch or ⌘-scroll to zoom
       </div>
 
       {current && size && (

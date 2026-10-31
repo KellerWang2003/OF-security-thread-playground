@@ -16,6 +16,10 @@ npm run dev
 - **Canvas:** every note of a project sits on one canvas. Scroll or space-drag to pan, pinch or ⌘-scroll to zoom (100% is about true size), drag a note's label to move it, and use the zoom controls to fit everything.
 - **Tilt:** drag on a note, auto-wobble or an angle slider; back and forth or side to side; range, crossfade, perspective and a moving highlight.
 
+## Layout of the editor
+
+Left: the selected note's frames, with the notes accordion at the bottom. Centre: the canvas, with the universal tilt bar floating at the bottom (wobble, angle scrubber split into frame slices, spring-back, perspective, highlight). Right: the selected note's properties (note, thread, animation), shown only while a note is selected.
+
 ## UI
 
 The UI is built on shadcn (same setup as Banknote Ergo Research). Add components with `npx shadcn@latest add <name>`; theme tokens live in `src/index.css`.
@@ -25,7 +29,8 @@ The UI is built on shadcn (same setup as Banknote Ergo Research). Add components
 ```
 src/
   app/          project list and editor screens
-  editor/       Canvas (pan, zoom, move, tilt), NotesPanel, AddNoteDialog, FrameStrip, Inspector, frame actions
+  editor/       Canvas (pan, zoom, move, tilt), TiltBar, FramesPanel (left), NotesPanel (accordion),
+                Inspector (right, properties of the selected note), AddNoteDialog, frame actions
   components/   ui/ = shadcn components (base-nova, Base UI), restyle these for the platform look;
                 controls.tsx = playground compositions of them; NoteView = the note and thread
   tilt/         preview tilt state and the spring-smoothed tilt loop
