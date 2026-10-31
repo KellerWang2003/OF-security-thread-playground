@@ -49,3 +49,10 @@ describe('lens maths', () => {
     expect(repeatFit(lens, { ...thread, repeatMm: fittingRepeat(lens, 'vertical', 4.02, 40) }, 40, 5).fits).toBe(true)
   })
 })
+
+describe('cycle end', () => {
+  it('shows the last frame at exactly one cycle, then loops', () => {
+    expect(frameAt(cycleFraction(64, 64, 'start'), 5)).toBe(4)
+    expect(frameAt(cycleFraction(70, 64, 'start'), 5)).toBe(0)
+  })
+})

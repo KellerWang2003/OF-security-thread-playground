@@ -62,11 +62,14 @@ const wrap01 = (v: number) => ((v % 1) + 1) % 1
 /** Position in the cycle (0 to 1, looping) for a tilt across the ridges */
 export function cycleFraction(s: number, cycleDeg: number, flatAt: FlatAt) {
   if (cycleDeg <= 0) return flatFraction(flatAt)
-  return wrap01(flatFraction(flatAt) + s / cycleDeg)
+  const raw = flatFraction(flatAt) + s / cycleDeg
+  // Like the editor, the cycle's own end shows the last frame; only angles beyond it loop
+  return raw >= 0 && raw <= 1 ? raw : wrap01(raw)
 }
 
 /** Which of `count` equal frames shows at a cycle position */
-export const frameAt = (fraction: number, count: number) => Math.min(count - 1, Math.floor(wrap01(fraction) * count))
+export const frameAt = (fraction: number, count: number) =>
+  Math.min(count - 1, Math.floor((fraction === 1 ? 1 : wrap01(fraction)) * count))
 
 /**
  * How far along the cycle one tilt alone can move from flat, as a fraction of the cycle (each way).

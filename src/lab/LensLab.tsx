@@ -100,23 +100,30 @@ export function LensLab() {
     [lens, s.flatAt, s.count],
   )
 
-  // Sweeps: left/right, up/down, or one after the other, out to the reach and back
+  // Sweeps, like the editor's playback: from flat, through that tilt's full cycle (in the direction that
+  // plays the frames forward), and back to flat. A cycle beyond the tilt limit stops at the limit.
   useEffect(() => {
     if (!sweep) return
     let raf = 0
     const start = performance.now()
-    const period = 2.4
+    const period = 3
+    const target = (axis: 'x' | 'y') => {
+      const cycle = axis === 'x' ? (s.xOn ? s.cycleX : null) : (s.yOn ? s.cycleY : null)
+      const sign = axisDirection(lens, axis) || 1
+      return sign * Math.min(cycle ?? s.reach, TILT_LIMIT)
+    }
     const tick = (now: number) => {
       const t = (now - start) / 1000
       const round = Math.floor(t / period)
-      const v = s.reach * Math.sin((2 * Math.PI * t) / period)
+      const ease = (1 - Math.cos((2 * Math.PI * t) / period)) / 2
       const axis = sweep === 'both' ? (round % 2 === 0 ? 'x' : 'y') : sweep
+      const v = target(axis) * ease
       setTilt(axis === 'x' ? { x: v, y: 0 } : { x: 0, y: v })
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [sweep, s.reach])
+  }, [sweep, s.reach, s.xOn, s.yOn, s.cycleX, s.cycleY, lens])
 
   return (
     <div className="h-full overflow-auto bg-muted/30">
