@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, ImagePlus, MoreHorizontal, Palette, Pause, Play, Plus, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ImagePlus, MoreHorizontal, Palette, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,9 +9,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { IconButton, Panel, ScrubField, Segmented } from '../components/controls'
+import { IconButton, Panel, ScrubField } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
-import { TILT_LIMIT, clamp, frameMix, frameSpans } from '../lib/frames'
+import { clamp, frameMix, frameSpans } from '../lib/frames'
 import { pickFiles } from '../lib/images'
 import { CYCLE_LIMITS, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
 import { updateNote } from '../lib/store'
@@ -28,30 +28,16 @@ function pickColor(initial: string, onPick: (color: string) => void) {
   input.click()
 }
 
-/** The note seen edge-on from the side, so you can tell which way it is tilting; the dot is its top edge */
-function TiltIndicator({ angle }: { angle: number }) {
-  return (
-    <svg viewBox="-16 -16 32 32" className="size-8 shrink-0 text-foreground" aria-hidden>
-      <circle r="15" className="fill-muted" />
-      <g transform={`rotate(${angle})`}>
-        <line x1="0" y1="-10" x2="0" y2="10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-        <circle cx="0" cy="-10" r="2.5" fill="currentColor" />
-      </g>
-    </svg>
-  )
-}
-
 const PAD = 12
 /** Pixels per unit of frame length; a new frame (10 units) starts 100 px wide */
 const ZOOM = { min: 3, max: 40, initial: 10 }
-const SPEEDS = ['0.5', '1', '2'] as const
 
 /**
- * Bottom of the canvas. On the left, the universal tilt controls; with a banknote selected the panel
- * widens to show that banknote's frames and its frame settings.
+ * Bottom of the canvas: play and pause; with a banknote selected the panel widens to show that
+ * banknote's frame settings and frames.
  */
 export function TimelineBar({ note, noteRef, besidePanel }: { note?: Note; noteRef?: NoteRef; besidePanel: boolean }) {
-  const { angle, source, target, wobbleSpeed } = useTilt()
+  const { angle, source, target } = useTilt()
   const playing = source === 'wobble'
 
   return (
@@ -61,45 +47,52 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note?: Note; noteR
         note && (besidePanel ? 'right-[268px]' : 'right-3'),
       )}
     >
-      <div className="grid w-[188px] shrink-0 grid-cols-[auto_1fr] grid-rows-2 items-center gap-x-2 gap-y-1.5">
-        <IconButton
-          label={playing ? 'Pause' : 'Play'}
-          variant={playing ? 'default' : 'outline'}
-          size="icon"
-          className="row-span-2 size-[68px] rounded-lg [&_svg:not([class*='size-'])]:size-6"
-          onClick={() => setTilt({ source: playing ? 'slider' : 'wobble', target: playing ? angle : target })}
-        >
-          {playing ? <Pause /> : <Play />}
-        </IconButton>
-        <div className="flex min-w-0 items-center gap-1">
-          <TiltIndicator angle={angle} />
-          <ScrubField
-            className="min-w-0 flex-1"
-            label="∠"
-            title="Tilt angle"
-            value={Math.round(angle)}
-            min={-TILT_LIMIT}
-            max={TILT_LIMIT}
-            unit="°"
-            onChange={(next) => setTilt({ source: 'slider', target: next })}
-          />
-        </div>
-        <div className="flex min-w-0 items-center gap-1">
-          <div className="min-w-0 flex-1" title="Playback speed">
-            <Segmented
-              value={SPEEDS.find((s) => Number(s) === wobbleSpeed) ?? '1'}
-              options={SPEEDS.map((s) => ({ value: s, label: `${s}×` }))}
-              onChange={(s) => setTilt({ wobbleSpeed: Number(s) })}
-            />
-          </div>
-          <IconButton label="Back to flat" onClick={() => setTilt({ source: 'slider', target: 0 })}>
-            <RotateCcw />
-          </IconButton>
-        </div>
-      </div>
+      <IconButton
+        label={playing ? 'Pause' : 'Play'}
+        variant={playing ? 'default' : 'outline'}
+        size="icon"
+        className="size-[68px] rounded-lg [&_svg:not([class*='size-'])]:size-6"
+        onClick={() => setTilt({ source: playing ? 'slider' : 'wobble', target: playing ? angle : target })}
+      >
+        {playing ? <Pause /> : <Play />}
+      </IconButton>
 
-      {note && noteRef && <FrameTrack note={note} noteRef={noteRef} />}
+      {note && noteRef && (
+        <>
+          <FrameSettings note={note} noteRef={noteRef} />
+          <FrameTrack note={note} noteRef={noteRef} />
+        </>
+      )}
     </Panel>
+  )
+}
+
+/** The selected banknote's frame settings: degrees of tilt for one full cycle, and the crossfade */
+function FrameSettings({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
+  const { tilt } = note
+  const setTiltSettings = (patch: Partial<Note['tilt']>) =>
+    updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, tilt: { ...n.tilt, ...patch } }))
+  return (      <div className="flex w-[148px] shrink-0 flex-col justify-center gap-1.5">
+      <ScrubField
+        label="Cycle"
+        title="Degrees of tilt for one full cycle of the frames"
+        value={tilt.cycleDeg}
+        min={CYCLE_LIMITS.min}
+        max={CYCLE_LIMITS.max}
+        unit="°"
+        onChange={(cycleDeg) => setTiltSettings({ cycleDeg })}
+      />
+      <ScrubField
+        label="Fade"
+        title="How much neighbouring frames blend into each other"
+        value={Math.round(tilt.transition * 100)}
+        min={0}
+        max={100}
+        step={5}
+        unit="%"
+        onChange={(v) => setTiltSettings({ transition: v / 100 })}
+      />
+    </div>
   )
 }
 
@@ -123,8 +116,6 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const x = (units: number) => PAD + units * pxPerUnit
   const cycle = tilt.cycleDeg
   const phase = cycle > 0 ? (((angle + cycle / 2) % cycle) + cycle) % cycle / cycle : 0
-  const setTiltSettings = (patch: Partial<Note['tilt']>) =>
-    updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, tilt: { ...n.tilt, ...patch } }))
 
   // Wheel: ⌘/Ctrl zooms the timeline, a plain vertical wheel scrolls it sideways
   useEffect(() => {
@@ -253,27 +244,6 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
         </DropdownMenu>
       )}
 
-      <div className="flex w-[148px] shrink-0 flex-col justify-center gap-1.5">
-        <ScrubField
-          label="Cycle"
-          title="Degrees of tilt for one full cycle of the frames"
-          value={tilt.cycleDeg}
-          min={CYCLE_LIMITS.min}
-          max={CYCLE_LIMITS.max}
-          unit="°"
-          onChange={(cycleDeg) => setTiltSettings({ cycleDeg })}
-        />
-        <ScrubField
-          label="Fade"
-          title="How much neighbouring frames blend into each other"
-          value={Math.round(tilt.transition * 100)}
-          min={0}
-          max={100}
-          step={5}
-          unit="%"
-          onChange={(v) => setTiltSettings({ transition: v / 100 })}
-        />
-      </div>
     </>
   )
 }
