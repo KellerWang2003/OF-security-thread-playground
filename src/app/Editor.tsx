@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import type { Project } from '../lib/types'
 import { AddNoteDialog } from '../editor/AddNoteDialog'
 import { Canvas } from '../editor/Canvas'
+import { ExportDialog } from '../editor/ExportDialog'
 import { Inspector } from '../editor/Inspector'
 import { ProjectPanel } from '../editor/ProjectPanel'
 import { TimelineBar } from '../editor/TimelineBar'
@@ -21,6 +22,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   const [selectedWindowId, setSelectedWindowId] = useState<string>()
   const editingWindows = editingNoteId !== undefined && editingNoteId === selectedId
   const [adding, setAdding] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [focus, setFocus] = useState<{ noteId: string; token: number }>()
   const isEmpty = project.notes.length === 0
 
@@ -127,18 +129,20 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
           </Button>
         </div>
       ) : (
-        <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={setSelectedId} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} />
+        <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={setSelectedId} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} onExport={() => setExporting(true)} />
       )}
 
       <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} />
       {!isEmpty && (
         <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
       )}
-      {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId}
+      {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} onExport={() => setExporting(true)} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId}
         onEditingWindowsChange={(editing) => {
           setEditingNoteId(editing ? note.id : undefined)
           setSelectedWindowId(undefined)
         }} />}
+
+      {exporting && <ExportDialog project={project} selectedId={note?.id} open={exporting} onOpenChange={setExporting} />}
 
       {adding && (
         <AddNoteDialog

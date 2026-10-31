@@ -62,3 +62,11 @@ export function windowEdges(thread: ThreadSettings, lengthMm: number): number[] 
   if (!thread.windows.enabled) return []
   return [...new Set(fitSections(thread.windows.sections ?? [], lengthMm).flatMap((s) => [s.startMm, s.endMm]))].sort((a, b) => a - b)
 }
+
+/** Where complete image copies sit along the thread, in px from its top/left end: each copy's start and length. */
+export function imageTiles(thicknessPx: number, lengthPx: number, gapPx: number, aspect: number, direction: ThreadSettings['direction']) {
+  const naturalPx = direction === 'vertical' ? thicknessPx * aspect : thicknessPx / aspect
+  if (!(naturalPx > 0)) return { naturalPx: 0, starts: [] }
+  const step = naturalPx + Math.max(0, gapPx)
+  return { naturalPx, starts: Array.from({ length: Math.ceil(lengthPx / step) }, (_, i) => i * step) }
+}

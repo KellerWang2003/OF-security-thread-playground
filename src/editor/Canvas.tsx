@@ -1,5 +1,5 @@
 import { runAction } from '../cloud/notices'
-import { Maximize, Minus, Plus } from 'lucide-react'
+import { Download, Maximize, Minus, Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -66,6 +66,7 @@ export function Canvas({
   editingWindows = false,
   selectedWindowId,
   onWindowSelect,
+  onExport,
 }: {
   projectId: string
   notes: Note[]
@@ -76,6 +77,7 @@ export function Canvas({
   editingWindows?: boolean
   selectedWindowId?: string
   onWindowSelect: (id: string | undefined) => void
+  onExport: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const size = useElementSize(ref)
@@ -302,13 +304,10 @@ export function Canvas({
 
 
       {current && size && (
-        // Top right, clear of the properties panel when one is open
-        <div
-          className={cn(
-            'absolute top-3 flex items-center gap-0.5 rounded-lg border border-border/70 bg-background/95 p-0.5 shadow-panel backdrop-blur [&>[data-slot=button]]:rounded-[calc(var(--radius)-3px)]',
-            selected ? 'right-[268px]' : 'right-3',
-          )}
-        >
+        // Top right, clear of the properties panel when one is open; Export floats here only without a selection
+        // Its own pointer events, or the canvas captures the pointer and the buttons never get a click
+        <div className={cn('absolute top-3 flex items-center gap-2', selected ? 'right-[268px]' : 'right-3')} onPointerDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-0.5 rounded-lg border border-border/70 bg-background/95 p-0.5 shadow-panel backdrop-blur [&>[data-slot=button]]:rounded-[calc(var(--radius)-3px)]">
           <IconButton label="Zoom out" onClick={() => zoomAround(1 / 1.25, size.width / 2, size.height / 2)}>
             <Minus />
           </IconButton>
@@ -327,6 +326,13 @@ export function Canvas({
           <IconButton label="Fit all notes" onClick={() => setView(fitView(notes, size))}>
             <Maximize />
           </IconButton>
+        </div>
+        {!selected && (
+          <Button variant="outline" className="bg-background/95 shadow-panel backdrop-blur" onClick={onExport}>
+            <Download />
+            Export
+          </Button>
+        )}
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
 import { TILT_LIMIT, frameMix, frameSpans } from '../lib/frames'
 import { useImageUrl } from '../lib/images'
-import { threadWindowMask, windowEdges } from '../lib/thread'
+import { imageTiles, threadWindowMask, windowEdges } from '../lib/thread'
 import type { Frame, Note } from '../lib/types'
 
 // Height ÷ width of each image, once loaded
@@ -52,18 +52,16 @@ export function FrameFill({
     backgroundSize: vertical ? '100% auto' : 'auto 100%',
     backgroundPosition: 'left top',
   }
-  const naturalPx = aspect ? (vertical ? thicknessPx * aspect : thicknessPx / aspect) : undefined
-  const gap = Math.max(0, gapPx)
+  const { naturalPx, starts } = imageTiles(thicknessPx, lengthPx, gapPx, aspect ?? 0, direction)
 
-  if (!naturalPx || gap === 0) {
+  if (!naturalPx || gapPx <= 0) {
     return <div className="absolute inset-0" style={{ ...image, opacity, backgroundRepeat: vertical ? 'repeat-y' : 'repeat-x' }} />
   }
-  const tiles = Math.ceil(lengthPx / (naturalPx + gap))
   return (
-    <div className={cn('absolute inset-0 flex overflow-hidden', vertical ? 'flex-col' : 'flex-row')} style={{ opacity, gap }}>
-      {Array.from({ length: tiles }, (_, i) => (
+    <div className={cn('absolute inset-0 flex overflow-hidden', vertical ? 'flex-col' : 'flex-row')} style={{ opacity, gap: gapPx }}>
+      {starts.map((start) => (
         <div
-          key={i}
+          key={start}
           className="shrink-0"
           style={{ ...image, backgroundRepeat: 'no-repeat', ...(vertical ? { height: naturalPx, width: '100%' } : { width: naturalPx, height: '100%' }) }}
         />

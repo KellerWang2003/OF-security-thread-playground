@@ -1,5 +1,5 @@
 import { reportError } from '../cloud/notices'
-import { ImageUp, RectangleHorizontal, RectangleVertical, Trash2, X } from 'lucide-react'
+import { Download, ImageUp, RectangleHorizontal, RectangleVertical, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ColorField, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
@@ -13,8 +13,9 @@ import { setFaceImage, type NoteRef } from './frameActions'
 type Change = (note: Note) => Note
 
 /** Right: the selected note's properties, Figma style */
-export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChange, selectedWindowId, onWindowSelect }: {
+export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChange, selectedWindowId, onWindowSelect, onExport }: {
   note: Note
+  onExport: () => void
   noteRef: NoteRef
   editingWindows: boolean
   onEditingWindowsChange: (editing: boolean) => void
@@ -66,7 +67,10 @@ export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChang
 
   return (
     <Panel className="absolute top-3 right-3 bottom-3 flex w-[248px] flex-col overflow-y-auto">
-      <div className="truncate border-b border-border/60 px-4 py-3 text-sm font-medium">{note.name}</div>
+      <div className="flex items-center justify-between gap-2 border-b border-border/60 py-2 pr-2 pl-4">
+        <span className="truncate text-sm font-medium">{note.name}</span>
+        <Button variant="outline" size="sm" onClick={onExport}><Download />Export</Button>
+      </div>
 
       <Section title="Note">
         <Segmented

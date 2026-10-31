@@ -1,5 +1,6 @@
 import { useState, type ComponentProps, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
@@ -232,6 +233,15 @@ export function SwitchField({ label, checked, onChange }: { label: string; check
     <Label className="flex cursor-pointer items-center justify-between gap-3 text-xs font-normal text-muted-foreground">
       {label}
       <Switch checked={checked} onCheckedChange={onChange} />
+    </Label>
+  )
+}
+
+export function CheckboxField({ label, checked, onChange }: { label: ReactNode; checked: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <Label className="flex cursor-pointer items-center gap-2 text-sm font-normal">
+      <Checkbox checked={checked} onCheckedChange={onChange} />
+      <span className="min-w-0 truncate">{label}</span>
     </Label>
   )
 }

@@ -36,6 +36,9 @@ async function resolveUrl(id: string) {
   return request
 }
 
+/** The artwork's object URL, downloading it if needed (for drawing outside React) */
+export const loadImageUrl = (id: string) => resolveUrl(id)
+
 export async function storeImage(blob: Blob) {
   const original = imageWorkspace()
   if (blob.size > 25 * 1024 * 1024) throw new Error('Artwork must be smaller than 25 MB.')
