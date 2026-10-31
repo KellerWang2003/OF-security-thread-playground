@@ -9,11 +9,12 @@ import { AddNoteDialog } from '../editor/AddNoteDialog'
 import { FrameStrip } from '../editor/FrameStrip'
 import { Inspector } from '../editor/Inspector'
 import { NotesPanel } from '../editor/NotesPanel'
-import { Stage } from '../editor/Stage'
+import { Canvas } from '../editor/Canvas'
 
 export function Editor({ project }: { project: Project }) {
   const [selectedId, setSelectedId] = useState<string>()
   const [adding, setAdding] = useState(false)
+  const [focus, setFocus] = useState<{ noteId: string; token: number }>()
   const isEmpty = project.notes.length === 0
 
   // A new project has no notes yet, so it opens straight into adding the first one. Opening after mount
@@ -47,13 +48,22 @@ export function Editor({ project }: { project: Project }) {
           projectId={project.id}
           notes={project.notes}
           selectedId={note?.id}
-          onSelect={setSelectedId}
+          onSelect={(noteId) => {
+            setSelectedId(noteId)
+            setFocus({ noteId, token: Date.now() })
+          }}
           onAdd={() => setAdding(true)}
         />
         {note && noteRef ? (
           <>
             <main className="flex min-w-0 flex-1 flex-col">
-              <Stage note={note} noteRef={noteRef} />
+              <Canvas
+                projectId={project.id}
+                notes={project.notes}
+                selectedId={note.id}
+                onSelect={setSelectedId}
+                focus={focus}
+              />
               <FrameStrip note={note} />
             </main>
             <Inspector key={note.id} note={note} noteRef={noteRef} />
@@ -74,7 +84,10 @@ export function Editor({ project }: { project: Project }) {
           notes={project.notes}
           open={adding}
           onOpenChange={setAdding}
-          onAdded={setSelectedId}
+          onAdded={(noteId) => {
+            setSelectedId(noteId)
+            setFocus({ noteId, token: Date.now() })
+          }}
         />
       )}
     </div>

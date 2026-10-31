@@ -30,7 +30,6 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
       <ThreadSection note={note} update={update} />
       <FramesSection note={note} noteRef={noteRef} />
       <TiltSection note={note} update={update} />
-      <ViewSection />
     </aside>
   )
 }
@@ -277,15 +276,6 @@ function TiltSection({ note, update }: { note: Note; update: (change: Change) =>
       <SwitchField label="Spring back after dragging" checked={springBack} onChange={(v) => setTilt({ springBack: v })} />
       <SwitchField label="Show tilt in perspective" checked={perspective} onChange={(v) => setTilt({ perspective: v })} />
       <SwitchField label="Highlight on thread" checked={sheen} onChange={(v) => setTilt({ sheen: v })} />
-    </Section>
-  )
-}
-
-function ViewSection() {
-  const zoom = useTilt((s) => s.zoom)
-  return (
-    <Section title="View">
-      <RangeField label="Zoom" value={Math.round(zoom * 100)} min={50} max={300} step={10} unit="%" onChange={(v) => setTilt({ zoom: v / 100 })} />
     </Section>
   )
 }

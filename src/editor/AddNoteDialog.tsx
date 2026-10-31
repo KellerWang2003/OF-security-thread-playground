@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { ColorField, Field, IconButton, NumberField } from '../components/controls'
-import { DEFAULT_NOTE, NOTE_SIZE, createNote } from '../lib/notes'
+import { DEFAULT_NOTE, NOTE_SIZE, createNote, nextNotePosition } from '../lib/notes'
 import { addNote } from '../lib/store'
 import type { Note } from '../lib/types'
 
@@ -38,7 +38,12 @@ export function AddNoteDialog({
           className="contents"
           onSubmit={(e) => {
             e.preventDefault()
-            const note = createNote({ name: name.trim() || `Note ${notes.length + 1}`, ...size, color })
+            const note = createNote({
+              name: name.trim() || `Note ${notes.length + 1}`,
+              ...nextNotePosition(notes),
+              ...size,
+              color,
+            })
             addNote(projectId, note)
             onAdded(note.id)
             onOpenChange(false)

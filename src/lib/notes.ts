@@ -6,6 +6,14 @@ export const THREAD_WIDTH = { min: 3, max: 6, step: 0.5 }
 export const NOTE_SIZE = { min: 20, max: 250 }
 export const FRAME_COLORS = ['#D9A441', '#2E9C8F', '#C2456B', '#4A6FD1', '#7C4DBA']
 export const DEFAULT_NOTE = { widthMm: 150, heightMm: 70, color: '#5B6B8C' }
+/** Space left between notes when they are placed on the canvas */
+export const NOTE_GAP = 20
+
+/** Where a new note goes: to the right of everything already on the canvas */
+export function nextNotePosition(notes: Pick<Note, 'x' | 'y' | 'widthMm'>[]) {
+  if (notes.length === 0) return { x: 0, y: 0 }
+  return { x: Math.max(...notes.map((n) => n.x + n.widthMm)) + NOTE_GAP, y: Math.min(...notes.map((n) => n.y)) }
+}
 
 export function colorFrame(index: number): Frame {
   return {
@@ -18,11 +26,15 @@ export function colorFrame(index: number): Frame {
 
 export function createNote({
   name,
+  x,
+  y,
   widthMm,
   heightMm,
   color,
 }: {
   name: string
+  x: number
+  y: number
   widthMm: number
   heightMm: number
   color: string
@@ -30,6 +42,8 @@ export function createNote({
   return {
     id: crypto.randomUUID(),
     name,
+    x,
+    y,
     widthMm,
     heightMm,
     color,
@@ -52,11 +66,14 @@ export function migrateProject(raw: unknown): Project {
     frames?: Frame[]
     tilt?: Note['tilt']
   }
-  if (Array.isArray(p.notes)) return p
   const { note, thread, frames, tilt, ...rest } = p
-  const notes: Note[] =
-    note && thread && frames && tilt
-      ? [{ id: crypto.randomUUID(), name: `${note.widthMm} × ${note.heightMm}`, ...note, thread, frames, tilt }]
+  const notes: Note[] = Array.isArray(p.notes)
+    ? p.notes
+    : note && thread && frames && tilt
+      ? [{ id: crypto.randomUUID(), name: `${note.widthMm} × ${note.heightMm}`, x: 0, y: 0, ...note, thread, frames, tilt }]
       : []
-  return { ...rest, notes }
+  // Notes saved before the canvas had no position: lay them out in a row
+  const placed: Note[] = []
+  for (const n of notes) placed.push(Number.isFinite(n.x) && Number.isFinite(n.y) ? n : { ...n, ...nextNotePosition(placed) })
+  return { ...rest, notes: placed }
 }

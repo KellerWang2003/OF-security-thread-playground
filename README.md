@@ -13,7 +13,8 @@ npm run dev
 - **Notes:** a project holds any number of notes, like pages in a document. Each has its own name, size in mm, colour, optional face artwork, thread, frames and tilt settings. Add, duplicate and delete them from the left panel.
 - **Thread:** width 3 to 6 mm, position from the left edge, white surround, frames stretched full length or repeated as a tile.
 - **Frames:** upload, reorder, replace, rename and delete; colour frames as placeholders. Drop images on the note to add them.
-- **Tilt:** drag on the note, auto-wobble or an angle slider; back and forth or side to side; range, crossfade, perspective and a moving highlight.
+- **Canvas:** every note of a project sits on one canvas. Scroll or space-drag to pan, pinch or ⌘-scroll to zoom (100% is about true size), drag a note's label to move it, and use the zoom controls to fit everything.
+- **Tilt:** drag on a note, auto-wobble or an angle slider; back and forth or side to side; range, crossfade, perspective and a moving highlight.
 
 ## UI
 
@@ -24,7 +25,7 @@ The UI is built on shadcn (same setup as Banknote Ergo Research). Add components
 ```
 src/
   app/          project list and editor screens
-  editor/       Stage (note + drag), FrameStrip, Inspector (side panel), frame actions
+  editor/       Canvas (pan, zoom, move, tilt), NotesPanel, AddNoteDialog, FrameStrip, Inspector, frame actions
   components/   ui/ = shadcn components (base-nova, Base UI), restyle these for the platform look;
                 controls.tsx = playground compositions of them; NoteView = the note and thread
   tilt/         preview tilt state and the spring-smoothed tilt loop

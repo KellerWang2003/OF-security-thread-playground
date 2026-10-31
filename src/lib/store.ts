@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import * as db from './db'
 import { copyImage, removeImage } from './images'
+import { nextNotePosition } from './notes'
 import type { Note, Project } from './types'
 
 // Edits land in memory immediately and are written to IndexedDB shortly after, per project
@@ -109,8 +110,10 @@ export const addNote = (projectId: string, note: Note) =>
 export async function duplicateNote(projectId: string, noteId: string) {
   const source = findNote(projectId, noteId)
   if (!source) return undefined
-  const copy = { ...(await copyNote(source)), name: `${source.name} copy` }
+  const copied = { ...(await copyNote(source)), name: `${source.name} copy` }
+  let copy = copied
   updateProject(projectId, (p) => {
+    copy = { ...copied, ...nextNotePosition(p.notes) }
     const at = p.notes.findIndex((n) => n.id === noteId)
     const notes = [...p.notes]
     notes.splice(at + 1, 0, copy)

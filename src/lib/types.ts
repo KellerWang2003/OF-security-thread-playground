@@ -34,6 +34,9 @@ export interface TiltSettings {
 export interface Note {
   id: string
   name: string
+  /** Top-left corner on the canvas, in mm */
+  x: number
+  y: number
   widthMm: number
   heightMm: number
   color: string

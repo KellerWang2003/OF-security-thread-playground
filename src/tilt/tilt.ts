@@ -14,7 +14,6 @@ interface TiltState {
   springBack: boolean
   perspective: boolean
   sheen: boolean
-  zoom: number
 }
 
 // Preview state only: it is not part of a project and is not saved
@@ -26,7 +25,6 @@ export const useTilt = create<TiltState>()(() => ({
   springBack: true,
   perspective: true,
   sheen: true,
-  zoom: 1,
 }))
 
 export const setTilt = (patch: Partial<TiltState>) => useTilt.setState(patch)
