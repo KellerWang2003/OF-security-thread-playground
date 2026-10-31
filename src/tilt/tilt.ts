@@ -3,7 +3,8 @@ import { create } from 'zustand'
 import { advancePlayback, playbackEase, playbackSettings, type PlaybackSettings } from '../lib/playback'
 import { TILT_LIMIT, clamp } from '../lib/frames'
 
-export type TiltSource = 'drag' | 'wobble' | 'slider'
+/** drag springs back on release, slider scrubs within one cycle, hold stays at a set angle */
+export type TiltSource = 'drag' | 'wobble' | 'slider' | 'hold'
 
 interface TiltState {
   source: TiltSource

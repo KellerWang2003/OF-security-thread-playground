@@ -25,6 +25,7 @@ Design tool for previewing lenticular security threads on banknotes (Oberthur Fi
 - Editor layout: full-screen canvas with floating panels.
   - **Top left:** back to Projects, the project name, and the collapsible Banknotes list.
   - **Bottom:** play/pause plus Cycle and Playback settings, always. A selected banknote's frames appear as clips on a track.
+  - **Left edge:** the tilt bar, a ridged thumbwheel you drag up/down to tilt every banknote (it holds where you let go), with an angle field to type an exact tilt and a back-to-flat button.
   - **Right:** properties, only while a banknote is selected.
   - **Export:** top right. On the banknote-name row of the right panel when a banknote is selected, otherwise a floating button beside the zoom controls. Never in the playback bar.
 - `exportRender.ts` redraws NoteView on a canvas for MP4/GIF export. When you change how NoteView draws a banknote, change the export renderer to match.

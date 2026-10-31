@@ -32,6 +32,7 @@ See [backend and save behavior](docs/SUPABASE.md) for schema, deployment, recove
 
 A full-screen canvas with floating panels:
 
+- **Left edge:** the tilt bar. Drag its ridges up or down to tilt every banknote; it stays at that angle. Type an angle to hold it exactly, double-click the ridges or press ↺ for flat, and use the arrow keys (Shift for 5°) when it's focused.
 - **Top left:** back to Projects, the project name, and the collapsible Banknotes list (double-click to rename, + to add, duplicate, delete).
 - **Bottom:** play/pause, Cycle and a Playback settings popover, always. With a banknote selected, its frames follow as clips on a track: drag a frame's right edge to change its length, drag to scrub, scroll to move along, ⌘-scroll to zoom. The playhead shows where in the cycle the tilt is.
 - **Right, while a banknote is selected:** name, size and orientation, background, thread (direction, width, position, repeat) and windows.

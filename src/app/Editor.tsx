@@ -11,6 +11,7 @@ import { ExportDialog } from '../editor/ExportDialog'
 import { Inspector } from '../editor/Inspector'
 import { ProjectPanel } from '../editor/ProjectPanel'
 import { TimelineBar } from '../editor/TimelineBar'
+import { TiltRail } from '../editor/TiltRail'
 
 /**
  * A full-screen canvas with floating panels: project and banknotes top left, the frame timeline along
@@ -132,6 +133,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
         <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={setSelectedId} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} onExport={() => setExporting(true)} />
       )}
 
+      {!isEmpty && !editingWindows && <TiltRail />}
       <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} />
       {!isEmpty && (
         <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
