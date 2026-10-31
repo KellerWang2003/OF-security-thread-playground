@@ -24,7 +24,8 @@ import {
 } from '@/lib/lens'
 import { drawFrame, frameFill } from './frameArt'
 
-const TILT_LIMIT = 60
+/** The lab lets you tilt further than the editor's ±60° so you can run past a cycle */
+const TILT_LIMIT = 80
 const RAD = Math.PI / 180
 
 interface Settings {
@@ -167,7 +168,7 @@ export function LensLab() {
           </div>
           <Card
             title="Timeline"
-            caption="One sequence for both tilts. The brackets show how far each tilt alone reaches from flat; the letters show which way it plays. Tinted parts are reached by one tilt only, grey parts by neither."
+            caption="One sequence for both tilts. The brackets show how far each tilt alone reaches from flat; the letters show which way it plays. Past the cycle the frames repeat (faded). Tinted frames are reached by one tilt only, grey parts by neither."
           >
             <Timeline lens={lens} s={s} tilt={tilt} aircraft={aircraft} />
           </Card>
@@ -263,7 +264,7 @@ function Controls({ s, set, lens }: { s: Settings; set: (p: Partial<Settings>) =
             ))}
           </div>
         </InlineField>
-        <InlineField label="Reach" title="How far people tilt a banknote (manual tilt stops at ±60°)">
+        <InlineField label="Reach" title="How far people tilt a banknote">
           <ScrubField label="±" value={s.reach} onChange={(reach) => set({ reach })} min={5} max={TILT_LIMIT} step={1} unit="°" />
         </InlineField>
         <div className="grid grid-cols-2 gap-2 rounded-md bg-muted/50 p-2.5 text-xs">
@@ -465,83 +466,91 @@ function CloseUp({ index, count, aircraft, aspect }: { index: number; count: num
   )
 }
 
-/** A bracket end that ran past either end of the track, brought back onto it */
-const wrapEnd = (v: number) => (v > 1 ? v - 1 : v < 0 ? v + 1 : v)
-
-/** Splits a span of the cycle that may run past either end into pieces inside 0–1 */
-function wrapSpan(from: number, to: number): [number, number][] {
-  if (to - from >= 1) return [[0, 1]]
-  const a = ((from % 1) + 1) % 1
-  const b = a + (to - from)
-  return b <= 1 ? [[a, b]] : [[a, 1], [0, b - 1]]
-}
+/** Cycles shown at most on either side of the main one */
+const MAX_REPEATS = 2
 
 function Timeline({ lens, s, tilt, aircraft }: { lens: Lens; s: Settings; tilt: { x: number; y: number }; aircraft: boolean[] }) {
   const VW = 1000
-  const left = 40
-  const right = 40
-  const span = VW - left - right
-  const X = (f: number) => left + f * span
+  const left = 24
+  const right = 24
   const flat = flatFraction(s.flatAt)
-  const rx = Math.min(0.5, reachFraction(s.reach, s.xOn ? s.cycleX : null))
-  const ry = Math.min(0.5, reachFraction(s.reach, s.yOn ? s.cycleY : null))
+  // Reaches in cycles, not capped: a tilt can run past the cycle and the frames repeat
+  const rx = reachFraction(s.reach, s.xOn ? s.cycleX : null)
+  const ry = reachFraction(s.reach, s.yOn ? s.cycleY : null)
+  const r = Math.max(rx, ry)
+  const s0 = acrossTilt(lens, tilt.x, tilt.y)
+  const head = lens.cycleDeg > 0 ? flat + s0 / lens.cycleDeg : flat
+  // Show every cycle the reach or the current tilt runs into, up to a few repeats each way
+  const lo = Math.max(-MAX_REPEATS, Math.min(0, Math.floor(Math.min(flat - r, head) + 1e-9)))
+  const hi = Math.min(1 + MAX_REPEATS, Math.max(1, Math.ceil(Math.max(flat + r, head) - 1e-9)))
+  const X = (f: number) => left + ((Math.max(lo, Math.min(hi, f)) - lo) / (hi - lo)) * (VW - left - right)
   const runs = coverageRuns(flat, rx, ry)
-  const head = cycleFraction(acrossTilt(lens, tilt.x, tilt.y), lens.cycleDeg, s.flatAt)
   const trackY = 120
   const trackH = 56
+  const cycles = Array.from({ length: hi - lo }, (_, i) => lo + i)
+  const boxW = (X(1) - X(0)) / s.count
 
-  const bracket = (r: number, y: number, color: string, name: string, axis: 'x' | 'y') => {
-    if (r <= 0) return null
+  const bracket = (reach: number, y: number, color: string, name: string, axis: 'x' | 'y') => {
+    if (reach <= 0) return null
     const dir = axisDirection(lens, axis)
     const pos = axis === 'x' ? 'R' : 'U'
     const neg = axis === 'x' ? 'L' : 'D'
     const fwd = dir >= 0 ? pos : neg
     const back = dir >= 0 ? neg : pos
-    const full = r >= 0.5
+    const a = flat - reach
+    const b = flat + reach
+    const clipA = a < lo
+    const clipB = b > hi
+    const passes = reach * 2 >= 1 ? ` · ${fmt(reach * 2, 1)} ${fmt(reach * 2, 1) === '1' ? 'cycle' : 'cycles'}` : ''
     return (
       <g>
-        {wrapSpan(flat - r, flat + r).map(([a, b], i) => (
-          <rect key={i} x={X(a)} y={y} width={X(b) - X(a)} height={6} rx={3} fill={color} />
-        ))}
-        <text x={full ? X(0.5) : X(flat === 0 ? Math.min(r, 0.5) / 2 : flat)} y={y - 8} textAnchor="middle" fontSize={14} fontWeight={600} fill="currentColor">{name}{full ? ' · whole cycle' : ''}</text>
-        {!full && (
-          <>
-            <text x={X(wrapEnd(flat + r))} y={y - 8} textAnchor="middle" fontSize={13} fill={color} fontWeight={600}>{fwd}</text>
-            <text x={X(wrapEnd(flat - r))} y={y - 8} textAnchor="middle" fontSize={13} fill={color} fontWeight={600}>{back}</text>
-          </>
-        )}
+        <rect x={X(a)} y={y} width={X(b) - X(a)} height={6} rx={3} fill={color} />
+        {clipA && <path d={`M${X(lo) - 2} ${y + 3}l10 -7v14z`} fill={color} />}
+        {clipB && <path d={`M${X(hi) + 2} ${y + 3}l-10 -7v14z`} fill={color} />}
+        <text x={(X(a) + X(b)) / 2} y={y - 8} textAnchor="middle" fontSize={14} fontWeight={600} fill="currentColor">{name}{passes}</text>
+        {!clipB && <text x={X(b)} y={y - 8} textAnchor="middle" fontSize={13} fill={color} fontWeight={600}>{fwd}</text>}
+        {!clipA && <text x={X(a)} y={y - 8} textAnchor="middle" fontSize={13} fill={color} fontWeight={600}>{back}</text>}
       </g>
     )
   }
 
   return (
-    <svg viewBox={`0 0 ${VW} 230`} className="w-full text-foreground">
+    <svg viewBox={`0 0 ${VW} 240`} className="w-full text-foreground">
       {bracket(ry, 36, 'hsl(18 80% 52%)', '↕ up/down', 'y')}
       {bracket(rx, 84, 'hsl(214 80% 52%)', '↔ left/right', 'x')}
-      {Array.from({ length: s.count }, (_, i) => {
-        const a = i / s.count
-        const b = (i + 1) / s.count
-        return (
-          <g key={i}>
-            <rect x={X(a) + 2} y={trackY} width={X(b) - X(a) - 4} height={trackH} rx={8} fill={frameFill(i)} stroke="currentColor" strokeOpacity={0.25} />
-            <text x={(X(a) + X(b)) / 2} y={trackY + (aircraft[i] ? 25 : 33)} textAnchor="middle" fontSize={14} fill="currentColor">Frame {i + 1}</text>
-            {aircraft[i] && <text x={(X(a) + X(b)) / 2} y={trackY + 43} textAnchor="middle" fontSize={12} fill="currentColor" fillOpacity={0.7}>+ aircraft</text>}
-          </g>
-        )
-      })}
-      {runs.filter((r) => r.coverage === 'none').map((r, i) => (
-        <rect key={`n${i}`} x={X(r.from)} y={trackY} width={X(r.to) - X(r.from)} height={trackH} fill="hsl(0 0% 50%)" fillOpacity={0.45} />
+      {cycles.map((k) => (
+        <g key={k} opacity={k === 0 ? 1 : 0.5}>
+          {Array.from({ length: s.count }, (_, i) => {
+            const a = k + i / s.count
+            const b = k + (i + 1) / s.count
+            const cx = (X(a) + X(b)) / 2
+            return (
+              <g key={i}>
+                <rect x={X(a) + 2} y={trackY} width={X(b) - X(a) - 4} height={trackH} rx={8} fill={frameFill(i)} stroke="currentColor" strokeOpacity={0.25} />
+                <text x={cx} y={trackY + (aircraft[i] ? 25 : 33)} textAnchor="middle" fontSize={14} fill="currentColor">{boxW > 90 ? `Frame ${i + 1}` : i + 1}</text>
+                {aircraft[i] && <text x={cx} y={trackY + 43} textAnchor="middle" fontSize={12} fill="currentColor" fillOpacity={0.7}>{boxW > 90 ? '+ aircraft' : '✈'}</text>}
+              </g>
+            )
+          })}
+          {k !== 0 && (
+            <text x={(X(k) + X(k + 1)) / 2} y={trackY + trackH + 22} textAnchor="middle" fontSize={12} fill="currentColor">repeat</text>
+          )}
+          {k !== lo && <line x1={X(k)} x2={X(k)} y1={trackY - 8} y2={trackY + trackH + 8} stroke="currentColor" strokeOpacity={0.5} />}
+        </g>
       ))}
-      {rx > 0 && ry > 0 && runs.filter((r) => r.coverage === 'x' || r.coverage === 'y').map((r, i) => (
+      {runs.filter((run) => run.coverage === 'none').map((run, i) => (
+        <rect key={`n${i}`} x={X(run.from)} y={trackY} width={X(run.to) - X(run.from)} height={trackH} fill="hsl(0 0% 50%)" fillOpacity={0.45} />
+      ))}
+      {rx > 0 && ry > 0 && runs.filter((run) => run.coverage === 'x' || run.coverage === 'y').map((run, i) => (
         <g key={`o${i}`}>
-          <rect x={X(r.from)} y={trackY + trackH + 8} width={X(r.to) - X(r.from)} height={8} rx={3} fill={r.coverage === 'x' ? 'hsl(214 80% 52%)' : 'hsl(18 80% 52%)'} fillOpacity={0.35} />
-          {X(r.to) - X(r.from) > 50 && (
-            <text x={(X(r.from) + X(r.to)) / 2} y={trackY + trackH + 34} textAnchor="middle" fontSize={13} fill="currentColor">{r.coverage === 'x' ? '↔ only' : '↕ only'}</text>
+          <rect x={X(run.from)} y={trackY + trackH + 8} width={X(run.to) - X(run.from)} height={8} rx={3} fill={run.coverage === 'x' ? 'hsl(214 80% 52%)' : 'hsl(18 80% 52%)'} fillOpacity={0.35} />
+          {X(run.to) - X(run.from) > 50 && (
+            <text x={(X(run.from) + X(run.to)) / 2} y={trackY + trackH + 34} textAnchor="middle" fontSize={13} fill="currentColor">{run.coverage === 'x' ? '↔ only' : '↕ only'}</text>
           )}
         </g>
       ))}
       <line x1={X(flat)} x2={X(flat)} y1={trackY - 14} y2={trackY} stroke="currentColor" strokeDasharray="3 3" />
-      <text x={X(flat) + (s.flatAt === 'start' ? 4 : 6)} y={trackY - 4} fontSize={12} fill="currentColor" fillOpacity={0.7}>flat</text>
+      <text x={X(flat) + 5} y={trackY - 4} fontSize={12} fill="currentColor" fillOpacity={0.7}>flat</text>
       <line x1={X(head)} x2={X(head)} y1={trackY - 4} y2={trackY + trackH + 4} stroke="currentColor" strokeWidth={2.5} />
     </svg>
   )
