@@ -53,23 +53,48 @@ export function acrossTilt(lens: Lens, x: number, y: number) {
   return y * Math.cos(a) - x * Math.sin(a)
 }
 
-/** Where the banknote lies flat in the cycle: at its start (today's lenses) or its centre */
+/**
+ * How the frames run from flat. Either way the flat banknote shows frame 1.
+ * - 'start': frame 1 starts at flat and the frames run one way (today's lenses): 1, 2, 3, 4, 5.
+ * - 'centre': flat sits in the middle of frame 1 and the frames run outward both ways: tilting one way
+ *   gives 2, 3, the other way 4, 5. Along the cycle that reads 5, 4, 1, 2, 3.
+ */
 export type FlatAt = 'start' | 'centre'
-export const flatFraction = (flatAt: FlatAt) => (flatAt === 'centre' ? 0.5 : 0)
+
+/** Frames on the backward side of frame 1 when they run outward */
+const backwardCount = (count: number) => Math.floor((count - 1) / 2)
+
+/** Where flat sits in the cycle, 0 to 1 */
+export const flatFraction = (flatAt: FlatAt, count: number) =>
+  flatAt === 'centre' ? (backwardCount(count) + 0.5) / Math.max(1, count) : 0
+
+/** The frame (0-based) in each slot along the cycle */
+export function slotOrder(count: number, flatAt: FlatAt) {
+  const frames = Array.from({ length: count }, (_, i) => i)
+  if (flatAt === 'start' || count < 3) return frames
+  const back = backwardCount(count)
+  const forward = frames.slice(1, count - back)
+  const backward = frames.slice(count - back).reverse()
+  return [...backward, 0, ...forward]
+}
 
 const wrap01 = (v: number) => ((v % 1) + 1) % 1
 
 /** Position in the cycle (0 to 1, looping) for a tilt across the ridges */
-export function cycleFraction(s: number, cycleDeg: number, flatAt: FlatAt) {
-  if (cycleDeg <= 0) return flatFraction(flatAt)
-  const raw = flatFraction(flatAt) + s / cycleDeg
+export function cycleFraction(s: number, cycleDeg: number, flatAt: FlatAt, count: number) {
+  const flat = flatFraction(flatAt, count)
+  if (cycleDeg <= 0) return flat
+  const raw = flat + s / cycleDeg
   // Like the editor, the cycle's own end shows the last frame; only angles beyond it loop
   return raw >= 0 && raw <= 1 ? raw : wrap01(raw)
 }
 
-/** Which of `count` equal frames shows at a cycle position */
-export const frameAt = (fraction: number, count: number) =>
+/** Which slot along the cycle a position falls in */
+export const slotAt = (fraction: number, count: number) =>
   Math.min(count - 1, Math.floor((fraction === 1 ? 1 : wrap01(fraction)) * count))
+
+/** Which frame (0-based) shows at a cycle position */
+export const frameAt = (fraction: number, count: number, flatAt: FlatAt) => slotOrder(count, flatAt)[slotAt(fraction, count)] ?? 0
 
 /**
  * How far along the cycle one tilt alone can move from flat, as a fraction of the cycle (each way).

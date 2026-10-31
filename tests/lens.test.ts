@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { acrossTilt, axisDirection, coverageAt, cyclesFrom, cycleFraction, fittingRepeat, frameAt, lensFrom, repeatFit, samplesAcrossWidth } from '../src/lib/lens'
+import { slotOrder, acrossTilt, axisDirection, coverageAt, cyclesFrom, cycleFraction, fittingRepeat, frameAt, lensFrom, repeatFit, samplesAcrossWidth } from '../src/lib/lens'
 
 describe('lens maths', () => {
   it('turns two tilt cycles into a lens and back', () => {
@@ -30,9 +30,12 @@ describe('lens maths', () => {
   })
 
   it('finds frames from a centred cycle', () => {
-    expect(frameAt(cycleFraction(0, 64, 'centre'), 5)).toBe(2)
-    expect(frameAt(cycleFraction(-25, 64, 'centre'), 5)).toBe(0)
-    expect(frameAt(cycleFraction(0, 64, 'start'), 5)).toBe(0)
+    // Flat is frame 1 either way; outward, one side runs 2, 3 and the other 4, 5
+    expect(slotOrder(5, 'centre')).toEqual([4, 3, 0, 1, 2])
+    expect(frameAt(cycleFraction(0, 64, 'centre', 5), 5, 'centre')).toBe(0)
+    expect(frameAt(cycleFraction(25, 64, 'centre', 5), 5, 'centre')).toBe(2)
+    expect(frameAt(cycleFraction(-25, 64, 'centre', 5), 5, 'centre')).toBe(4)
+    expect(frameAt(cycleFraction(0, 64, 'start', 5), 5, 'start')).toBe(0)
   })
 
   it('marks sideways-only parts of the cycle', () => {
@@ -52,7 +55,7 @@ describe('lens maths', () => {
 
 describe('cycle end', () => {
   it('shows the last frame at exactly one cycle, then loops', () => {
-    expect(frameAt(cycleFraction(64, 64, 'start'), 5)).toBe(4)
-    expect(frameAt(cycleFraction(70, 64, 'start'), 5)).toBe(0)
+    expect(frameAt(cycleFraction(64, 64, 'start', 5), 5, 'start')).toBe(4)
+    expect(frameAt(cycleFraction(70, 64, 'start', 5), 5, 'start')).toBe(0)
   })
 })

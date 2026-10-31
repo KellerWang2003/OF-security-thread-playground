@@ -14,6 +14,7 @@ import {
   fittingRepeat,
   flatFraction,
   frameAt,
+  slotOrder,
   lensFrom,
   reachFraction,
   repeatFit,
@@ -61,7 +62,7 @@ const BASE: Settings = {
   flatAt: 'centre',
   count: 5,
   reach: 30,
-  aircraft: [true, false, false, false, true],
+  aircraft: [false, false, true, false, true],
   direction: 'vertical',
   widthMm: 5,
   aspect: 1,
@@ -77,8 +78,8 @@ const BASE: Settings = {
 
 const PRESETS: { id: string; label: string; title: string; patch: Partial<Settings> }[] = [
   { id: 'today', label: 'Today', title: 'Horizontal lens: only up/down animates', patch: { xOn: false, yOn: true, cycleY: 64, flatAt: 'start', aircraft: [false, false, false, false, false] } },
-  { id: '45', label: '45°', title: 'Both tilts play the sequence at the same speed', patch: { xOn: true, yOn: true, cycleX: 64, cycleY: 64, flatAt: 'centre', aircraft: [true, false, false, false, true] } },
-  { id: 'steep', label: 'Steep', title: 'About 73°: a sideways tilt reaches the aircraft, up/down never does', patch: { xOn: true, yOn: true, cycleX: 60, cycleY: 200, flatAt: 'centre', aircraft: [true, false, false, false, true] } },
+  { id: '45', label: '45°', title: 'Both tilts play the sequence at the same speed', patch: { xOn: true, yOn: true, cycleX: 64, cycleY: 64, flatAt: 'centre', aircraft: [false, false, true, false, true] } },
+  { id: 'steep', label: 'Steep', title: 'About 73°: a sideways tilt reaches the aircraft, up/down never does', patch: { xOn: true, yOn: true, cycleX: 60, cycleY: 200, flatAt: 'centre', aircraft: [false, false, true, false, true] } },
   { id: 'vertical', label: 'Vertical', title: 'Vertical lens: only left/right animates', patch: { xOn: true, yOn: false, cycleX: 64, flatAt: 'start', aircraft: [false, false, false, false, false] } },
 ]
 
@@ -96,34 +97,41 @@ export function LensLab() {
   )
   const aircraft = useMemo(() => s.aircraft.slice(0, s.count), [s.aircraft, s.count])
   const frameFor = useCallback(
-    (x: number, y: number) => frameAt(cycleFraction(acrossTilt(lens, x, y), lens.cycleDeg, s.flatAt), s.count),
+    (x: number, y: number) => frameAt(cycleFraction(acrossTilt(lens, x, y), lens.cycleDeg, s.flatAt, s.count), s.count, s.flatAt),
     [lens, s.flatAt, s.count],
   )
 
-  // Sweeps, like the editor's playback: from flat, through that tilt's full cycle (in the direction that
-  // plays the frames forward), and back to flat. A cycle beyond the tilt limit stops at the limit.
+  // Sweeps, like the editor's playback: from flat through the frames and back to flat. When the frames run
+  // one way, a sweep tilts through the full cycle (in the direction that plays them forward). When they run
+  // outward, it goes out to the last frame on one side, back through flat, out to the other side, and back.
+  // Tilts beyond the limit stop at the limit.
   useEffect(() => {
     if (!sweep) return
     let raf = 0
     const start = performance.now()
     const period = 3
-    const target = (axis: 'x' | 'y') => {
+    const flat = flatFraction(s.flatAt, s.count)
+    const extent = (axis: 'x' | 'y', side: 1 | -1) => {
       const cycle = axis === 'x' ? (s.xOn ? s.cycleX : null) : (s.yOn ? s.cycleY : null)
       const sign = axisDirection(lens, axis) || 1
-      return sign * Math.min(cycle ?? s.reach, TILT_LIMIT)
+      const share = s.flatAt === 'start' ? 1 : side === 1 ? 1 - flat : flat
+      return side * sign * Math.min((cycle ?? s.reach) * share, TILT_LIMIT)
     }
     const tick = (now: number) => {
       const t = (now - start) / 1000
       const round = Math.floor(t / period)
       const ease = (1 - Math.cos((2 * Math.PI * t) / period)) / 2
+      const outward = s.flatAt === 'centre'
+      // One way: every round is a full sweep. Outward: rounds alternate sides
+      const side: 1 | -1 = outward && Math.floor(round / (sweep === 'both' ? 2 : 1)) % 2 === 1 ? -1 : 1
       const axis = sweep === 'both' ? (round % 2 === 0 ? 'x' : 'y') : sweep
-      const v = target(axis) * ease
+      const v = extent(axis, side) * ease
       setTilt(axis === 'x' ? { x: v, y: 0 } : { x: 0, y: v })
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [sweep, s.reach, s.xOn, s.yOn, s.cycleX, s.cycleY, lens])
+  }, [sweep, s.reach, s.xOn, s.yOn, s.cycleX, s.cycleY, s.flatAt, s.count, lens])
 
   return (
     <div className="h-full overflow-auto bg-muted/30">
@@ -252,8 +260,8 @@ function Controls({ s, set, lens }: { s: Settings; set: (p: Partial<Settings>) =
         <InlineField label="Lean" title="Which way the ridges slant">
           <Segmented value={String(s.lean)} options={[{ value: '1', label: '/' }, { value: '-1', label: '\\' }]} onChange={(v) => set({ lean: v === '1' ? 1 : -1 })} />
         </InlineField>
-        <InlineField label="Flat at" title="Where the flat banknote sits in the cycle">
-          <Segmented value={s.flatAt} options={[{ value: 'start', label: 'Start' }, { value: 'centre', label: 'Centre' }]} onChange={(flatAt) => set({ flatAt })} />
+        <InlineField label="Frames run" title="Flat always shows frame 1. One way: 1 to 5 in one tilt direction. Outward: 2, 3 one way and 4, 5 the other">
+          <Segmented value={s.flatAt} options={[{ value: 'start', label: 'One way' }, { value: 'centre', label: 'Outward' }]} onChange={(flatAt) => set({ flatAt })} />
         </InlineField>
         <InlineField label="Frames">
           <Segmented value={String(s.count)} options={[2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) }))} onChange={(v) => set({ count: Number(v) })} />
@@ -480,7 +488,8 @@ function Timeline({ lens, s, tilt, aircraft }: { lens: Lens; s: Settings; tilt: 
   const VW = 1000
   const left = 24
   const right = 24
-  const flat = flatFraction(s.flatAt)
+  const flat = flatFraction(s.flatAt, s.count)
+  const order = slotOrder(s.count, s.flatAt)
   // Reaches in cycles, not capped: a tilt can run past the cycle and the frames repeat
   const rx = reachFraction(s.reach, s.xOn ? s.cycleX : null)
   const ry = reachFraction(s.reach, s.yOn ? s.cycleY : null)
@@ -527,9 +536,9 @@ function Timeline({ lens, s, tilt, aircraft }: { lens: Lens; s: Settings; tilt: 
       {bracket(rx, 84, 'hsl(214 80% 52%)', '↔ left/right', 'x')}
       {cycles.map((k) => (
         <g key={k} opacity={k === 0 ? 1 : 0.5}>
-          {Array.from({ length: s.count }, (_, i) => {
-            const a = k + i / s.count
-            const b = k + (i + 1) / s.count
+          {order.map((i, slot) => {
+            const a = k + slot / s.count
+            const b = k + (slot + 1) / s.count
             const cx = (X(a) + X(b)) / 2
             return (
               <g key={i}>
@@ -566,6 +575,7 @@ function Timeline({ lens, s, tilt, aircraft }: { lens: Lens; s: Settings; tilt: 
 function PrintView({ lens, s, aircraft }: { lens: Lens; s: Settings; aircraft: boolean[] }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const { imgLen } = threadCopies(s)
+  const order = useMemo(() => slotOrder(s.count, s.flatAt), [s.count, s.flatAt])
   const copyW = s.direction === 'vertical' ? s.widthMm : imgLen
   const copyH = s.direction === 'vertical' ? imgLen : s.widthMm
   const maxW = 560
@@ -596,7 +606,7 @@ function PrintView({ lens, s, aircraft }: { lens: Lens; s: Settings; aircraft: b
       for (let x = 0; x < w; x++) {
         const u = x * sin + y * cos
         const m = ((u % P) + P) % P
-        const strip = Math.min(s.count - 1, Math.floor((m / P) * s.count))
+        const strip = order[Math.min(s.count - 1, Math.floor((m / P) * s.count))]
         const i = (y * w + x) * 4
         const src = frames[strip]
         const edge = s.ridges && m < 1
@@ -607,7 +617,7 @@ function PrintView({ lens, s, aircraft }: { lens: Lens; s: Settings; aircraft: b
       }
     }
     ctx.putImageData(out, 0, 0)
-  }, [lens, s.count, s.zoomPx, s.ridges, w, h, aircraft])
+  }, [lens, s.count, s.zoomPx, s.ridges, w, h, aircraft, order])
 
   return (
     <div className="flex flex-col gap-3">
