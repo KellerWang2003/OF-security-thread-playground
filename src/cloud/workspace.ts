@@ -5,11 +5,13 @@ import { readCache, writeCache, writeArtwork } from './cache'
 import { createRepository, projectImageIds } from './repository'
 import { ProjectSync, type SyncStatus } from './sync'
 import * as legacy from '../lib/db'
+import { createDemoProject } from '../lib/demo'
 import { setImageWorkspace } from '../lib/images'
 import type { Project } from '../lib/types'
 
 interface WorkspaceState {
   projects: Project[]
+  sharedDemo?: Project
   loaded: boolean
   status: SyncStatus
   error: string
@@ -31,8 +33,9 @@ export async function openWorkspace(workspace: string) {
   sync?.stop()
   clearTimeout(timer)
   setImageWorkspace(workspace)
-  useWorkspace.setState({ projects: [], loaded: false, status: 'saving', error: '', conflicts: [], workspace, legacyProjects: [] })
-  const engine = new ProjectSync(createRepository(workspace), (records) => writeCache(workspace, records), () => {
+  useWorkspace.setState({ projects: [], sharedDemo: undefined, loaded: false, status: 'saving', error: '', conflicts: [], workspace, legacyProjects: [] })
+  const repository = createRepository(workspace)
+  const engine = new ProjectSync(repository, (records) => writeCache(workspace, records), () => {
     if (token !== generation) return
     useWorkspace.setState({
       projects: engine.records.filter((r) => !r.deleted).map((r) => r.project),
@@ -55,9 +58,34 @@ export async function openWorkspace(workspace: string) {
     engine.records = cached
     useWorkspace.setState({ projects: cached.filter((r) => !r.deleted).map((r) => r.project), loaded: true })
     await engine.initialize(cached)
+    if (repository.demo) {
+      // The personal workspace can open even if the shared library is temporarily offline.
+      void repository.demo().then((sharedDemo) => {
+        if (token === generation) useWorkspace.setState({ sharedDemo })
+      }).catch(() => {})
+    }
   } catch (error) {
     if (token === generation) useWorkspace.setState({ loaded: false, status: 'error', error: error instanceof Error ? error.message : 'Couldn’t open projects.' })
   }
+}
+
+/** A shared demo is a template. Every edit belongs to a new project in the current workspace. */
+export async function createWorkspaceDemo() {
+  const { workspace, sharedDemo } = useWorkspace.getState()
+  const token = generation
+  if (!workspace) throw new Error('Open a workspace first.')
+  const template = sharedDemo ?? await createRepository(workspace).demo?.()
+  const now = Date.now()
+  const project = template ? {
+    ...structuredClone(template), id: crypto.randomUUID(), createdAt: now, updatedAt: now,
+    notes: template.notes.map((note) => ({
+      ...structuredClone(note), id: crypto.randomUUID(),
+      frames: note.frames.map((frame) => ({ ...frame, id: crypto.randomUUID() })),
+    })),
+  } : await createDemoProject()
+  if (token !== generation) throw new Error('The workspace changed. Try again.')
+  putProject(project)
+  return project
 }
 
 export function putProject(project: Project, deleted = false) {
@@ -84,7 +112,7 @@ export function closeWorkspace() {
   sync = undefined
   clearTimeout(timer)
   setImageWorkspace(undefined)
-  useWorkspace.setState({ projects: [], loaded: false, workspace: undefined, conflicts: [], error: '', legacyProjects: [], importing: false })
+  useWorkspace.setState({ projects: [], sharedDemo: undefined, loaded: false, workspace: undefined, conflicts: [], error: '', legacyProjects: [], importing: false })
 }
 
 export async function importBrowserProjects() {

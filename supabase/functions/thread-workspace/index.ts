@@ -1,5 +1,7 @@
 import { withSupabase } from '@supabase/server'
 
+const DEMO_WORKSPACE = 'public-demos'
+const DEMO_ID = '82e5f8ec-e552-4bdf-a578-cb3c6a509001'
 const TABLE = 'thread_playground_projects'
 const BUCKET = 'thread-playground-artwork'
 const MAX_IMAGE = 25 * 1024 * 1024
@@ -29,6 +31,7 @@ const handler = withSupabase({ auth: 'publishable' }, async (req, ctx) => {
     if (req.headers.get('content-type')?.includes('multipart/form-data')) {
       const form = await req.formData()
       const workspace = username(form.get('workspace'))
+      if (workspace === DEMO_WORKSPACE) throw new BadRequest('Shared demos are read-only.')
       const id = uuid(form.get('id'))
       const file = form.get('file')
       if (!(file instanceof File) || !MIME_TYPES.has(file.type)) throw new BadRequest('Choose a PNG, JPEG, SVG, or WebP image.')
@@ -40,6 +43,12 @@ const handler = withSupabase({ auth: 'publishable' }, async (req, ctx) => {
     const body = await req.json()
     const workspace = username(body.workspace)
     const columns = 'data,revision,deleted_at'
+    if (body.action === 'demo') {
+      const { data, error } = await db.from(TABLE).select(columns).eq('workspace', DEMO_WORKSPACE).eq('id', DEMO_ID).is('deleted_at', null).maybeSingle()
+      check(error)
+      return Response.json(data)
+    }
+    if (workspace === DEMO_WORKSPACE && body.action !== 'download') throw new BadRequest('Shared demos are read-only.')
     if (body.action === 'list') {
       const offset = body.offset ?? 0
       if (!Number.isSafeInteger(offset) || offset < 0) throw new BadRequest('Invalid page.')

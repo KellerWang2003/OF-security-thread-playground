@@ -26,6 +26,7 @@ describe('username entry', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Use 2–32')
     expect(readWorkspaceName()).toBeNull()
     expect(() => normalizeWorkspace('a')).toThrow()
+    expect(() => normalizeWorkspace('public-demos')).toThrow('reserved')
     expect(normalizeWorkspace('  My-Workspace_2  ')).toBe('my-workspace_2')
   })
 })

@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createNote, createProject } from '../src/lib/notes'
 import * as legacy from '../src/lib/db'
-import { openWorkspace, closeWorkspace, importBrowserProjects, useWorkspace, putProject } from '../src/cloud/workspace'
+import { openWorkspace, closeWorkspace, importBrowserProjects, useWorkspace, putProject, createWorkspaceDemo } from '../src/cloud/workspace'
 import { readArtwork, readCache } from '../src/cloud/cache'
 import { createRepository } from '../src/cloud/repository'
 
@@ -82,4 +82,24 @@ describe('username workspaces and browser import', () => {
     expect(useWorkspace.getState().projects.filter((p) => p.name === project.name)).toHaveLength(1)
     await legacy.deleteProject(project.id)
   })
+  it('opens a shared demo as a separate editable project in the current workspace', async () => {
+    const template = createProject('Shared demo source')
+    template.notes.push(createNote({ name: 'Demo banknote', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' }))
+    const original = structuredClone(template)
+    vi.mocked(createRepository).mockReturnValueOnce({
+      list: async () => [],
+      save: async (record) => ({ project: record.project, revision: record.revision, deleted: false }),
+      demo: async () => template,
+    })
+    await openWorkspace('demo-copy-test')
+    await vi.waitFor(() => expect(useWorkspace.getState().sharedDemo).toBeDefined())
+    const copy = await createWorkspaceDemo()
+    expect(copy.id).not.toBe(template.id)
+    expect(copy.notes[0].id).not.toBe(template.notes[0].id)
+    expect(copy.notes[0].frames[0].id).not.toBe(template.notes[0].frames[0].id)
+    expect(useWorkspace.getState().projects[0].id).toBe(copy.id)
+    copy.notes[0].name = 'My edits'
+    expect(template).toEqual(original)
+  })
+
 })

@@ -26,6 +26,12 @@ Find the publishable key under Supabase → Project Settings → API Keys. These
 
 Vercel uses the Vite preset, `npm run build`, and `dist`. `vercel.json` records these defaults. The existing hash-based project URLs need no rewrite. The Supabase function allows browser requests from Vercel and local development, so deploying a new Vercel domain requires no Auth redirect changes.
 
+## Shared demo and migrated originals
+
+**Untitled project** was imported from the original Dia browser into `keller`, with its artwork and banknote settings. **Silly bird demo** was published as the shared template in the reserved `public-demos` namespace. Its original five images were verified byte for byte. The original browser stores remain untouched.
+
+Every username sees the shared demo card. Opening it, or pressing Demo, creates an editable copy in the current workspace with new project, banknote, and frame IDs. Shared artwork is cached locally for previews, then uploaded into the destination workspace before that copy is saved. The canonical template is read-only through the app API, and `public-demos` is reserved so it cannot be selected as an ordinary username.
+
 ## Saving and recovery
 
 Edits appear immediately and are queued in IndexedDB before a cloud save. Saves are debounced, serialized, and include all referenced artwork before committing the project. The status indicator reports Saving, Saved, or Couldn’t save; Retry attempts reconnection. Returning to the tab, regaining connectivity, and a 30-second refresh also reconcile with Supabase.

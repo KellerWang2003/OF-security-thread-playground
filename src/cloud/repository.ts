@@ -4,6 +4,8 @@ import { migrateProject } from '../lib/notes'
 import { SaveConflict, type CachedProject, type CloudProject, type ProjectRepository } from './sync'
 import type { Project } from '../lib/types'
 
+export const SHARED_DEMO_WORKSPACE = 'public-demos'
+
 export const projectImageIds = (project: Project) => [...new Set(project.notes.flatMap(
   (note) => [note.faceImageId, ...note.frames.map((f) => f.imageId)],
 ).filter((id): id is string => !!id))]
@@ -17,10 +19,21 @@ export async function downloadArtwork(workspace: string, id: string) {
   await writeArtwork(workspace, id, blob)
   return blob
 }
-export function createRepository(workspace: string): ProjectRepository {
+export function createRepository(workspace: string): ProjectRepository & { demo?: () => Promise<Project | undefined> } {
   const uploaded = new Set<string>()
   const read = (id: string) => workspaceJson<Row | null>(workspace, 'get', { id })
   return {
+    async demo() {
+      const row = await workspaceJson<Row | null>(workspace, 'demo')
+      if (!row || row.deleted_at) return undefined
+      const project = migrateProject(row.data)
+      // Cache template artwork in this workspace for thumbnails and editable copies.
+      await Promise.all(projectImageIds(project).map(async (id) => {
+        const blob = await downloadArtwork(SHARED_DEMO_WORKSPACE, id)
+        await writeArtwork(workspace, id, blob)
+      }))
+      return project
+    },
     async list() {
       const rows: CloudProject[] = []
       for (let offset = 0; ; offset += 100) {

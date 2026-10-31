@@ -10,7 +10,7 @@ npm run dev
 
 ## What it does
 
-- **Projects:** create (just a name), open, rename, duplicate and delete. **Demo** builds a ready-made flapping-bird project. Enter a username to open its shared workspace. Projects and uploaded images autosave to Supabase and are available on other browsers and devices. Browser storage keeps recovery copies while offline. Anyone who knows a username can open and edit its workspace.
+- **Projects:** create (just a name), open, rename, duplicate and delete. **Demo** opens a personal copy of the shared flapping-bird template; the shared demo also appears in every workspace. Enter a username to open its shared workspace. Projects and uploaded images autosave to Supabase and are available on other browsers and devices. Browser storage keeps recovery copies while offline. Anyone who knows a username can open and edit its workspace.
 - **Banknotes:** a project holds any number of banknotes, like artboards. Each has its own name, size in mm (portrait or landscape), background (solid colour or an uploaded design), thread and frames.
 - **Thread:** vertical or horizontal, width 3 to 6 mm, position across the note, and windows (open length, gap, offset). Frame images stay upright, keep their aspect ratio at the thread's thickness and repeat along it with no gaps. One repeat length applies to every frame of a banknote: it can crop the image, never stretch it, and is set from the first upload.
 - **Frames:** up to 5 per banknote, images or colours. Each frame has a length on the timeline; its share of the total is its share of the cycle. Replace, recolour, reorder or delete from a frame's ⋯ menu, or drop images on a banknote.

@@ -22,10 +22,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Field, IconButton } from '../components/controls'
 import { CloudStatus } from '../components/CloudStatus'
-import { importBrowserProjects, useWorkspace } from '../cloud/workspace'
+import { importBrowserProjects, useWorkspace, createWorkspaceDemo } from '../cloud/workspace'
 import { runAction, reportError } from '../cloud/notices'
 import { NoteView } from '../components/NoteView'
-import { createDemoProject } from '../lib/demo'
 import { createProject } from '../lib/notes'
 import { updateProject, useProjects } from '../lib/store'
 import type { Project } from '../lib/types'
@@ -34,7 +33,7 @@ const open = (id: string) => (location.hash = `#/p/${id}`)
 
 export function ProjectList() {
   const projects = useProjects((s) => s.projects)
-  const { legacyProjects, importing } = useWorkspace()
+  const { legacyProjects, importing, sharedDemo } = useWorkspace()
   const [creating, setCreating] = useState(projects.length === 0)
   const sorted = [...projects].sort((a, b) => b.updatedAt - a.updatedAt)
 
@@ -51,8 +50,7 @@ export function ProjectList() {
               variant="outline"
               onClick={async () => {
                 try {
-                  const project = await createDemoProject()
-                  useProjects.getState().add(project)
+                  const project = await createWorkspaceDemo()
                   open(project.id)
                 } catch (error) { reportError(error) }
               }}
@@ -70,14 +68,15 @@ export function ProjectList() {
         </header>
 
         {legacyProjects.length > 0 && <div className="flex items-center justify-between rounded-lg border bg-background px-4 py-3">
-          <span className="text-sm">{legacyProjects.length} browser {legacyProjects.length === 1 ? 'project' : 'projects'}</span>
+          <div className="flex flex-col gap-1"><span className="text-sm">{legacyProjects.length} browser {legacyProjects.length === 1 ? 'project' : 'projects'}</span><span className="text-xs text-muted-foreground">{legacyProjects.map((project) => project.name).join(' · ')}</span></div>
           <Button variant="outline" disabled={importing} onClick={() => runAction(importBrowserProjects())}>{importing ? 'Importing…' : 'Import browser projects'}</Button>
         </div>}
 
         {creating && <NewProject onCancel={projects.length ? () => setCreating(false) : undefined} />}
 
-        {sorted.length > 0 && (
+        {(sorted.length > 0 || sharedDemo) && (
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+            {sharedDemo && <ProjectCard project={sharedDemo} shared />}
             {sorted.map((project) => (
               <ProjectCard key={project.id} project={project} />
             ))}
@@ -132,7 +131,15 @@ function NewProject({ onCancel }: { onCancel?: () => void }) {
   )
 }
 
-function ProjectCard({ project }: { project: Project }) {
+function ProjectCard({ project, shared = false }: { project: Project; shared?: boolean }) {
+  const [opening, setOpening] = useState(false)
+  const openProject = async () => {
+    if (opening) return
+    setOpening(true)
+    try { open(shared ? (await createWorkspaceDemo()).id : project.id) }
+    catch (error) { reportError(error) }
+    finally { setOpening(false) }
+  }
   const [renaming, setRenaming] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const shown = project.notes.slice(0, 4)
@@ -146,7 +153,8 @@ function ProjectCard({ project }: { project: Project }) {
       <Card className="group gap-0 py-0">
         <button
           type="button"
-          onClick={() => open(project.id)}
+          disabled={opening}
+          onClick={() => void openProject()}
           className="flex h-[196px] items-center justify-center bg-muted/50 transition-colors group-hover:bg-muted"
         >
           {shown.length ? (
@@ -160,13 +168,14 @@ function ProjectCard({ project }: { project: Project }) {
           )}
         </button>
         <div className="flex items-center gap-0.5 px-3 py-2">
-          <button type="button" onClick={() => open(project.id)} className="min-w-0 flex-1 text-left">
+          <button type="button" disabled={opening} onClick={() => void openProject()} className="min-w-0 flex-1 text-left">
             <div className="truncate text-sm font-medium">{project.name}</div>
             <div className="text-xs text-muted-foreground">
-              {project.notes.length} {project.notes.length === 1 ? 'banknote' : 'banknotes'}
+              {shared ? 'Shared demo' : `${project.notes.length} ${project.notes.length === 1 ? 'banknote' : 'banknotes'}`}
             </div>
           </button>
-          <IconButton label="Rename" onClick={() => setRenaming(true)}>
+          {!shared && <>
+            <IconButton label="Rename" onClick={() => setRenaming(true)}>
             <Pencil />
           </IconButton>
           <IconButton label="Duplicate" onClick={() => runAction(useProjects.getState().duplicate(project.id))}>
@@ -175,6 +184,7 @@ function ProjectCard({ project }: { project: Project }) {
           <IconButton label="Delete" onClick={() => setDeleting(true)}>
             <Trash2 />
           </IconButton>
+          </>}
         </div>
       </Card>
 
