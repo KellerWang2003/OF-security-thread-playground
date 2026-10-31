@@ -1,4 +1,4 @@
-import { Bird, Copy, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Bird, ChevronDown, Copy, LogOut, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import {
   AlertDialog,
@@ -11,7 +11,16 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Dialog,
   DialogContent,
@@ -20,9 +29,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Field, IconButton } from '../components/controls'
+import { IconButton } from '../components/controls'
 import { CloudStatus } from '../components/CloudStatus'
-import { importBrowserProjects, useWorkspace, openDemoPreview } from '../cloud/workspace'
+import { importBrowserProjects, useWorkspace, openDemoPreview, signOut } from '../cloud/workspace'
 import { runAction, reportError } from '../cloud/notices'
 import { NoteView } from '../components/NoteView'
 import { createProject } from '../lib/notes'
@@ -34,98 +43,168 @@ const open = (id: string) => (location.hash = `#/p/${id}`)
 export function ProjectList() {
   const projects = useProjects((s) => s.projects)
   const { legacyProjects, importing } = useWorkspace()
-  const [creating, setCreating] = useState(projects.length === 0)
+  const [creating, setCreating] = useState(false)
   const sorted = [...projects].sort((a, b) => b.updatedAt - a.updatedAt)
 
   return (
-    <div className="h-full overflow-y-auto bg-muted/40">
-      <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-10">
-        <header className="flex items-end justify-between gap-4">
-          <div>
-            <h1 className="font-heading text-xl font-semibold">Security thread playground</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <CloudStatus showWorkspace />
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  await openDemoPreview()
-                } catch (error) { reportError(error) }
-              }}
-            >
-              <Bird />
-              Demo
-            </Button>
-            {!creating && (
+    <div className="flex h-full flex-col bg-muted/40">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-background px-6">
+        <span className="font-heading text-sm font-semibold">Security thread playground</span>
+        <div className="flex items-center gap-3">
+          <CloudStatus />
+          <AccountMenu />
+        </div>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto grid max-w-6xl gap-8 px-6 py-8 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <main className="flex min-w-0 flex-col gap-4">
+            <div className="flex items-center justify-between gap-4">
+              <h1 className="font-heading text-lg font-semibold">
+                Projects <span className="font-normal text-muted-foreground tabular-nums">{projects.length}</span>
+              </h1>
               <Button onClick={() => setCreating(true)}>
                 <Plus />
                 New project
               </Button>
+            </div>
+
+            {legacyProjects.length > 0 && (
+              <div className="flex items-center justify-between gap-4 rounded-lg border bg-background px-4 py-3">
+                <div className="flex min-w-0 flex-col gap-1">
+                  <span className="text-sm">
+                    {legacyProjects.length} browser {legacyProjects.length === 1 ? 'project' : 'projects'}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">{legacyProjects.map((project) => project.name).join(' · ')}</span>
+                </div>
+                <Button variant="outline" disabled={importing} onClick={() => runAction(importBrowserProjects())}>
+                  {importing ? 'Importing…' : 'Import browser projects'}
+                </Button>
+              </div>
             )}
-          </div>
-        </header>
 
-        {legacyProjects.length > 0 && <div className="flex items-center justify-between rounded-lg border bg-background px-4 py-3">
-          <div className="flex flex-col gap-1"><span className="text-sm">{legacyProjects.length} browser {legacyProjects.length === 1 ? 'project' : 'projects'}</span><span className="text-xs text-muted-foreground">{legacyProjects.map((project) => project.name).join(' · ')}</span></div>
-          <Button variant="outline" disabled={importing} onClick={() => runAction(importBrowserProjects())}>{importing ? 'Importing…' : 'Import browser projects'}</Button>
-        </div>}
+            {sorted.length > 0 ? (
+              <ul className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+                {sorted.map((project) => (
+                  <ProjectCard key={project.id} project={project} />
+                ))}
+              </ul>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCreating(true)}
+                className="flex h-56 flex-col items-center justify-center gap-2 rounded-lg border border-dashed text-sm text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+              >
+                <Plus className="size-5" />
+                No projects yet
+              </button>
+            )}
+          </main>
 
-        {creating && <NewProject onCancel={projects.length ? () => setCreating(false) : undefined} />}
-
-        {sorted.length > 0 && (
-          <ul className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
-            {sorted.map((project) => (
-              <ProjectCard key={project.id} project={project} />
-            ))}
-          </ul>
-        )}
+          <aside className="flex flex-col gap-3">
+            <DemoCard />
+          </aside>
+        </div>
       </div>
+
+      <NewProjectDialog open={creating} onOpenChange={setCreating} />
     </div>
   )
 }
 
-function NewProject({ onCancel }: { onCancel?: () => void }) {
-  const [name, setName] = useState('')
+/** Username and sign-out, tucked into a menu in the top bar */
+function AccountMenu() {
+  const workspace = useWorkspace((s) => s.workspace) ?? ''
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="ghost" size="sm" className="gap-2 px-1.5" aria-label={`Account: ${workspace}`}>
+            <span className="flex size-6 items-center justify-center rounded-full bg-foreground text-[11px] font-medium text-background uppercase">
+              {workspace.slice(0, 1)}
+            </span>
+            <span className="max-w-32 truncate">{workspace}</span>
+            <ChevronDown className="text-muted-foreground" />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="truncate">Workspace · {workspace}</DropdownMenuLabel>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => runAction(signOut())}>
+          <LogOut />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
-  const create = () => {
-    const project = createProject(name.trim() || 'Untitled project')
-    useProjects.getState().add(project)
-    open(project.id)
-  }
+function DemoCard() {
+  return (
+    <Card className="gap-3 rounded-lg py-0">
+      <div className="flex h-28 items-center justify-center gap-2 bg-muted/60">
+        <span className="h-16 w-28 rounded-sm bg-[#DBECC6] shadow-sm [background-image:linear-gradient(90deg,transparent_74%,#8A8F80_74%,#8A8F80_77%,transparent_77%)]" />
+        <span className="h-20 w-10 rounded-sm bg-[#CDBBE6] shadow-sm [background-image:linear-gradient(180deg,transparent_22%,#F26B5B_22%,#F26B5B_28%,transparent_28%)]" />
+      </div>
+      <CardContent className="flex flex-col gap-3 px-4 pb-4">
+        <div>
+          <div className="text-sm font-medium">Demo</div>
+          <div className="text-xs text-muted-foreground">Two sample banknotes. Changes aren’t saved.</div>
+        </div>
+        <Button
+          variant="outline"
+          onClick={async () => {
+            try {
+              await openDemoPreview()
+            } catch (error) {
+              reportError(error)
+            }
+          }}
+        >
+          <Bird />
+          Open demo
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+function NewProjectDialog({ open: isOpen, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const [name, setName] = useState('')
+  const nameRef = useRef<HTMLInputElement>(null)
 
   return (
-    <Card>
-      <form
-        className="contents"
-        onSubmit={(e) => {
-          e.preventDefault()
-          create()
-        }}
-      >
-        <CardHeader>
-          <CardTitle>New project</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Field label="Name">
-            <Input
-              autoFocus
-              placeholder="Untitled project"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </Field>
-        </CardContent>
-        <CardFooter className="justify-end gap-2">
-          {onCancel && (
-            <Button variant="ghost" onClick={onCancel}>
-              Cancel
-            </Button>
-          )}
-          <Button type="submit">Create</Button>
-        </CardFooter>
-      </form>
-    </Card>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(next) => {
+        if (next) setName('')
+        onOpenChange(next)
+      }}
+    >
+      <DialogContent className="sm:max-w-sm" initialFocus={nameRef}>
+        <form
+          className="contents"
+          onSubmit={(e) => {
+            e.preventDefault()
+            const project = createProject(name.trim() || 'Untitled project')
+            useProjects.getState().add(project)
+            onOpenChange(false)
+            open(project.id)
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>New project</DialogTitle>
+          </DialogHeader>
+          <Input ref={nameRef} placeholder="Untitled project" value={name} onChange={(e) => setName(e.target.value)} aria-label="Project name" />
+          <DialogFooter>
+            <Button type="submit">Create</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
