@@ -130,7 +130,12 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
           </Button>
         </div>
       ) : (
-        <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={setSelectedId} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} onExport={() => setExporting(true)} />
+        <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={setSelectedId} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} onExport={() => setExporting(true)}
+          onEditWindow={(noteId, windowId) => {
+            setSelectedId(noteId)
+            setEditingNoteId(noteId)
+            setSelectedWindowId(windowId)
+          }} />
       )}
 
       {!isEmpty && !editingWindows && <TiltRail />}

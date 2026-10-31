@@ -144,7 +144,8 @@ export function NoteView({
       )}
 
       <div
-        className="absolute overflow-hidden"
+        data-thread=""
+        className={cn('absolute overflow-hidden', horizontal ? 'cursor-ns-resize' : 'cursor-ew-resize')}
         style={{ ...strip, ...windowMask, backgroundColor: thread.backgroundColor }}
       >
         {baseFrame && <FrameFill frame={baseFrame} {...fill} />}

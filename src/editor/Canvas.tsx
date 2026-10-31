@@ -31,6 +31,7 @@ type Gesture =
   | { mode: 'pan'; startX: number; startY: number; view: View; onBackground: boolean }
   | { mode: 'move'; noteId: string; startX: number; startY: number; noteX: number; noteY: number }
   | { mode: 'tilt'; startX: number; startY: number; start: number }
+  | { mode: 'thread'; noteId: string; startX: number; startY: number; startPosition: number; alongMm: number }
 
 function fitView(notes: Note[], size: { width: number; height: number }): View {
   const minX = Math.min(...notes.map((n) => n.x))
@@ -67,6 +68,7 @@ export function Canvas({
   selectedWindowId,
   onWindowSelect,
   onExport,
+  onEditWindow,
 }: {
   projectId: string
   notes: Note[]
@@ -78,6 +80,8 @@ export function Canvas({
   selectedWindowId?: string
   onWindowSelect: (id: string | undefined) => void
   onExport: () => void
+  /** A click on a thread window opens it for editing */
+  onEditWindow?: (noteId: string, windowId: string) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const size = useElementSize(ref)
@@ -197,8 +201,20 @@ export function Canvas({
         const labelId = noteAt(e.target, 'data-note-label')
         const bodyId = noteAt(e.target, 'data-note-body')
         const note = notes.find((n) => n.id === (labelId ?? bodyId))
+        const onThread = !labelId && (e.target as HTMLElement).closest('[data-thread]') !== null
         if (e.button === 1 || !note) {
           gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, view: v, onBackground: !note }
+        } else if (onThread && e.button === 0) {
+          // The thread moves across the banknote, along the axis its position is measured on
+          onSelect(note.id)
+          const rect = (e.target as HTMLElement).closest('[data-note-body]')?.firstElementChild?.getBoundingClientRect()
+          const horizontal = note.thread.direction === 'horizontal'
+          const alongMm = rect
+            ? horizontal
+              ? ((e.clientX - rect.left) / rect.width) * note.widthMm
+              : ((e.clientY - rect.top) / rect.height) * note.heightMm
+            : -1
+          gesture.current = { mode: 'thread', noteId: note.id, startX: e.clientX, startY: e.clientY, startPosition: note.thread.positionMm, alongMm }
         } else if (labelId) {
           onSelect(note.id)
           gesture.current = { mode: 'move', noteId: note.id, startX: e.clientX, startY: e.clientY, noteX: note.x, noteY: note.y }
@@ -219,10 +235,24 @@ export function Canvas({
       onPointerMove={(e) => {
         const g = gesture.current
         if (!g) return
+        // A release that never reached us: stop following the pointer
+        if (e.buttons === 0) {
+          gesture.current = null
+          setActiveMode(undefined)
+          return
+        }
         const dx = e.clientX - g.startX
         const dy = e.clientY - g.startY
         if (g.mode === 'pan') {
           setView({ ...g.view, x: g.view.x + dx, y: g.view.y + dy })
+        } else if (g.mode === 'thread') {
+          updateNote(projectId, g.noteId, (n) => {
+            const horizontal = n.thread.direction === 'horizontal'
+            const across = horizontal ? n.heightMm : n.widthMm
+            const half = n.thread.widthMm / 2
+            const positionMm = clamp(Math.round((g.startPosition + (horizontal ? dy : dx) / scale) * 2) / 2, half, across - half)
+            return positionMm === n.thread.positionMm ? n : { ...n, thread: { ...n.thread, positionMm } }
+          })
         } else if (g.mode === 'move') {
           const snap = (mm: number) => Math.round(mm * 2) / 2
           updateNote(projectId, g.noteId, (n) => ({ ...n, x: snap(g.noteX + dx / scale), y: snap(g.noteY + dy / scale) }))
@@ -236,6 +266,14 @@ export function Canvas({
       onPointerUp={(e) => {
         const g = gesture.current
         if (g?.mode === 'tilt' && useTilt.getState().springBack) setTilt({ target: 0 })
+        // A click on a window, without dragging, opens it for resizing
+        if (g?.mode === 'thread' && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) {
+          const note = notes.find((n) => n.id === g.noteId)
+          const section = note?.thread.windows.enabled
+            ? note.thread.windows.sections.find((s) => g.alongMm >= s.startMm && g.alongMm <= s.endMm)
+            : undefined
+          if (note && section) onEditWindow?.(note.id, section.id)
+        }
         // A click on empty canvas, without dragging, clears the selection
         if (g?.mode === 'pan' && g.onBackground && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) onSelect(undefined)
         gesture.current = null
