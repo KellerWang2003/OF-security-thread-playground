@@ -4,7 +4,7 @@ import { Switch } from '@/components/ui/switch'
 import { ColorField, IconButton, Panel, ScrubField, Section, Segmented } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
-import { CYCLE_LIMITS, NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
+import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
 import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
 import { setFaceImage, type NoteRef } from './frameActions'
@@ -14,12 +14,11 @@ type Change = (note: Note) => Note
 /** Right: the selected note's properties, Figma style */
 export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const update = (change: Change) => updateNote(noteRef.projectId, noteRef.noteId, change)
-  const { thread, tilt } = note
+  const { thread } = note
   const setThread = (patch: Partial<Note['thread']>) => update((n) => ({ ...n, thread: { ...n.thread, ...patch } }))
   const { windows } = thread
   const setWindows = (patch: Partial<Note['thread']['windows']>) =>
     update((n) => ({ ...n, thread: { ...n.thread, windows: { ...n.thread.windows, ...patch } } }))
-  const setTiltSettings = (patch: Partial<Note['tilt']>) => update((n) => ({ ...n, tilt: { ...n.tilt, ...patch } }))
   const acrossOf = (n: Pick<Note, 'widthMm' | 'heightMm'>, direction: Note['thread']['direction']) =>
     direction === 'vertical' ? n.widthMm : n.heightMm
   const setSize = (widthMm: number, heightMm: number) =>
@@ -168,30 +167,6 @@ export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
         )}
       </Section>
 
-      <Section title="Frames">
-        <div className="grid grid-cols-1 gap-2">
-          <ScrubField
-            label="Full cycle"
-            title="Degrees of tilt for one full cycle of the frames"
-            value={tilt.cycleDeg}
-            min={CYCLE_LIMITS.min}
-            max={CYCLE_LIMITS.max}
-            step={1}
-            unit="°"
-            onChange={(cycleDeg) => setTiltSettings({ cycleDeg })}
-          />
-          <ScrubField
-            label="Crossfade"
-            title="How much neighbouring frames blend into each other"
-            value={Math.round(tilt.transition * 100)}
-            min={0}
-            max={100}
-            step={5}
-            unit="%"
-            onChange={(v) => setTiltSettings({ transition: v / 100 })}
-          />
-        </div>
-      </Section>
     </Panel>
   )
 }

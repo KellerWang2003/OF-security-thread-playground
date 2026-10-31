@@ -39,8 +39,6 @@ export function Editor({ project }: { project: Project }) {
 
   const note = project.notes.find((n) => n.id === selectedId)
   const noteRef = note ? { projectId: project.id, noteId: note.id } : undefined
-  // The timeline follows the selected note, or the first note when nothing is selected
-  const timelineNote = note ?? project.notes.at(0)
 
   const selectAndFocus = (noteId: string) => {
     setSelectedId(noteId)
@@ -61,7 +59,7 @@ export function Editor({ project }: { project: Project }) {
       )}
 
       <ProjectPanel project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} />
-      {timelineNote && <TimelineBar note={timelineNote} noteRef={noteRef} besidePanel={note !== undefined} />}
+      {!isEmpty && <TimelineBar note={note} noteRef={noteRef} besidePanel={note !== undefined} />}
       {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} />}
 
       {adding && (
