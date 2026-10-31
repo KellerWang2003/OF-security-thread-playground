@@ -1,6 +1,8 @@
 import { ChevronDown, ChevronUp, ImagePlus, Palette, RefreshCw, Trash2, Upload, X } from 'lucide-react'
 import { FrameFill } from '../components/NoteView'
-import { Button, ColorField, Field, NumberField, RangeField, Section, Segmented, Switch } from '../components/ui'
+import { ColorField, Field, IconButton, NumberField, RangeField, Section, Segmented, SwitchField } from '../components/controls'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { clamp } from '../lib/frames'
 import { pickFiles } from '../lib/images'
 import { MAX_FRAMES, MIN_FRAMES, NOTE_PRESETS, THREAD_WIDTH, defaultThreadX, presetNote } from '../lib/notes'
@@ -22,7 +24,7 @@ type Change = (project: Project) => Project
 export function Inspector({ project }: { project: Project }) {
   const update = (change: Change) => updateProject(project.id, change)
   return (
-    <aside className="flex w-[300px] shrink-0 flex-col overflow-y-auto border-l border-neutral-200 bg-white">
+    <aside className="flex w-[300px] shrink-0 flex-col overflow-y-auto border-l bg-background">
       <NoteSection project={project} update={update} />
       <ThreadSection project={project} update={update} />
       <FramesSection project={project} />
@@ -70,23 +72,24 @@ function NoteSection({ project, update }: { project: Project; update: (change: C
       <Field label="Face artwork" hint="Optional. Export at trim size; it sits behind the thread.">
         <div className="flex gap-2">
           <Button
+            variant="outline"
             className="flex-1"
             onClick={async () => {
               const [file] = await pickFiles()
               if (file) await setFaceImage(project, file)
             }}
           >
-            <Upload className="size-3.5" />
+            <Upload />
             {note.faceImageId ? 'Replace' : 'Upload'}
           </Button>
           {note.faceImageId && (
-            <Button size="icon" className="size-8" title="Remove face artwork" onClick={() => void setFaceImage(project, undefined)}>
-              <X className="size-3.5" />
-            </Button>
+            <IconButton variant="outline" size="icon" label="Remove face artwork" onClick={() => void setFaceImage(project, undefined)}>
+              <X />
+            </IconButton>
           )}
         </div>
       </Field>
-      {thread.xMm > note.widthMm && <p className="text-xs text-red-600">The thread sits outside the note.</p>}
+      {thread.xMm > note.widthMm && <p className="text-xs text-destructive">The thread sits outside the note.</p>}
     </Section>
   )
 }
@@ -116,10 +119,10 @@ function ThreadSection({ project, update }: { project: Project; update: (change:
         onChange={(xMm) => set({ xMm })}
       />
       <div className="-mt-1 flex gap-1.5">
-        <Button size="sm" onClick={() => set({ xMm: note.widthMm / 2 })}>
+        <Button variant="outline" size="sm" onClick={() => set({ xMm: note.widthMm / 2 })}>
           Centre
         </Button>
-        <Button size="sm" onClick={() => set({ xMm: defaultThreadX(note.widthMm) })}>
+        <Button variant="outline" size="sm" onClick={() => set({ xMm: defaultThreadX(note.widthMm) })}>
           Right of centre
         </Button>
       </div>
@@ -165,15 +168,16 @@ function FramesSection({ project }: { project: Project }) {
     <Section title={`Frames · ${frames.length} of ${MAX_FRAMES}`}>
       <ol className="flex flex-col gap-1.5">
         {frames.map((frame, i) => (
-          <li key={frame.id} className="flex items-center gap-2 rounded-lg border border-neutral-200 p-1.5">
-            <div className="relative h-11 w-4 shrink-0 overflow-hidden rounded-sm bg-white ring-1 ring-neutral-200">
+          <li key={frame.id} className="flex items-center gap-2 rounded-lg border p-1.5">
+            <div className="relative h-11 w-4 shrink-0 overflow-hidden rounded-sm bg-white ring-1 ring-border">
               <FrameFill frame={frame} fit={thread.fit} tilePx={12} />
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <div className="flex items-center gap-1 text-[11px] text-neutral-400">
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                 <span className="tabular-nums">{i + 1}</span>
-                <input
-                  className="min-w-0 flex-1 truncate bg-transparent text-xs text-neutral-800 outline-none"
+                <Input
+                  aria-label="Frame name"
+                  className="h-6 min-w-0 flex-1 border-transparent px-1 text-xs shadow-none hover:border-input"
                   value={frame.name}
                   onChange={(e) => updateFrame(project.id, frame.id, { name: e.target.value })}
                 />
@@ -181,53 +185,42 @@ function FramesSection({ project }: { project: Project }) {
               {frame.kind === 'color' ? (
                 <ColorField value={frame.color} onChange={(color) => updateFrame(project.id, frame.id, { color })} />
               ) : (
-                <span className="text-[11px] text-neutral-400">Image</span>
+                <span className="text-[11px] text-muted-foreground">Image</span>
               )}
             </div>
             <div className="flex flex-col">
-              <Button variant="ghost" size="icon" className="size-6" title="Move up" disabled={i === 0} onClick={() => moveFrame(project.id, frame.id, -1)}>
-                <ChevronUp className="size-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-6"
-                title="Move down"
+              <IconButton size="icon-xs" label="Move up" disabled={i === 0} onClick={() => moveFrame(project.id, frame.id, -1)}>
+                <ChevronUp />
+              </IconButton>
+              <IconButton size="icon-xs" label="Move down"
                 disabled={i === frames.length - 1}
                 onClick={() => moveFrame(project.id, frame.id, 1)}
               >
-                <ChevronDown className="size-3.5" />
-              </Button>
+                <ChevronDown />
+              </IconButton>
             </div>
             <div className="flex flex-col">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-6"
-                title={frame.kind === 'color' ? 'Use an image instead' : 'Replace image'}
+              <IconButton size="icon-xs" label={frame.kind === 'color' ? 'Use an image instead' : 'Replace image'}
                 onClick={async () => {
                   const [file] = await pickFiles()
                   if (file) await replaceFrameImage(project.id, frame.id, file)
                 }}
               >
-                <RefreshCw className="size-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-6"
-                title={frames.length <= MIN_FRAMES ? `A thread needs at least ${MIN_FRAMES} frames` : 'Delete frame'}
+                <RefreshCw />
+              </IconButton>
+              <IconButton size="icon-xs" label={frames.length <= MIN_FRAMES ? `A thread needs at least ${MIN_FRAMES} frames` : 'Delete frame'}
                 disabled={frames.length <= MIN_FRAMES}
                 onClick={() => void deleteFrame(project.id, frame.id)}
               >
-                <Trash2 className="size-3.5" />
-              </Button>
+                <Trash2 />
+              </IconButton>
             </div>
           </li>
         ))}
       </ol>
       <div className="flex gap-2">
         <Button
+          variant="outline"
           className="flex-1"
           disabled={full && !frames.every((f) => f.kind === 'color')}
           onClick={async () => {
@@ -235,15 +228,15 @@ function FramesSection({ project }: { project: Project }) {
             if (files.length) await addImageFrames(project.id, files)
           }}
         >
-          <ImagePlus className="size-3.5" />
+          <ImagePlus />
           Upload images
         </Button>
-        <Button disabled={full} onClick={() => addColorFrame(project.id)}>
-          <Palette className="size-3.5" />
+        <Button variant="outline" disabled={full} onClick={() => addColorFrame(project.id)}>
+          <Palette />
           Colour
         </Button>
       </div>
-      <p className="text-[11px] leading-snug text-neutral-400">
+      <p className="text-[11px] leading-snug text-muted-foreground/80">
         PNG, JPG or SVG, drawn at the thread's proportions. Uploading 2 or more images replaces the colour placeholders.
         Frame 1 shows at the start of the tilt range.
       </p>
@@ -299,9 +292,9 @@ function TiltSection({ project, update }: { project: Project; update: (change: C
         unit="%"
         onChange={(v) => set({ transition: v / 100 })}
       />
-      <Switch label="Spring back after dragging" checked={springBack} onChange={(v) => setTilt({ springBack: v })} />
-      <Switch label="Show tilt in perspective" checked={perspective} onChange={(v) => setTilt({ perspective: v })} />
-      <Switch label="Highlight on thread" checked={sheen} onChange={(v) => setTilt({ sheen: v })} />
+      <SwitchField label="Spring back after dragging" checked={springBack} onChange={(v) => setTilt({ springBack: v })} />
+      <SwitchField label="Show tilt in perspective" checked={perspective} onChange={(v) => setTilt({ perspective: v })} />
+      <SwitchField label="Highlight on thread" checked={sheen} onChange={(v) => setTilt({ sheen: v })} />
     </Section>
   )
 }

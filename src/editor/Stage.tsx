@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { NoteView } from '../components/NoteView'
-import { cn } from '../lib/cn'
+import { cn } from '@/lib/utils'
 import { clamp, formatDeg } from '../lib/frames'
 import type { Project } from '../lib/types'
 import { setTilt, useTilt, useTiltLoop } from '../tilt/tilt'
@@ -32,7 +32,7 @@ export function Stage({ project }: { project: Project }) {
       className={cn(
         'relative flex flex-1 touch-none items-center justify-center overflow-hidden select-none',
         dragging ? 'cursor-grabbing' : 'cursor-grab',
-        dropping && 'bg-neutral-200/70',
+        dropping ? 'bg-muted' : 'bg-muted/40',
       )}
       style={{ perspective: 1600 }}
       onPointerDown={(e) => {
@@ -72,14 +72,14 @@ export function Stage({ project }: { project: Project }) {
         </div>
       )}
 
-      <div className="pointer-events-none absolute top-3 left-4 flex items-baseline gap-2 text-xs text-neutral-500">
-        <span className="w-12 text-lg font-medium text-neutral-900 tabular-nums">{formatDeg(angle)}</span>
+      <div className="pointer-events-none absolute top-3 left-4 flex items-baseline gap-2 text-xs text-muted-foreground">
+        <span className="w-12 text-lg font-medium text-foreground tabular-nums">{formatDeg(angle)}</span>
         <span>
           {source === 'wobble' ? 'Auto-wobble' : source === 'slider' ? 'Slider' : 'Drag'} ·{' '}
           {note.widthMm} × {note.heightMm} mm
         </span>
       </div>
-      <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-neutral-400">
+      <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-muted-foreground/80">
         {vertical ? 'Drag up and down' : 'Drag left and right'} to tilt · drop images here to add frames
       </div>
     </div>

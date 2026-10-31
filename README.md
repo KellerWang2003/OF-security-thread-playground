@@ -15,13 +15,18 @@ npm run dev
 - **Frames:** upload, reorder, replace, rename and delete; colour frames as placeholders. Drop images on the note to add them.
 - **Tilt:** drag on the note, auto-wobble or an angle slider; back and forth or side to side; range, crossfade, perspective and a moving highlight.
 
+## UI
+
+The UI is built on shadcn (same setup as Banknote Ergo Research). Add components with `npx shadcn@latest add <name>`; theme tokens live in `src/index.css`.
+
 ## Layout
 
 ```
 src/
   app/          project list and editor screens
   editor/       Stage (note + drag), FrameStrip, Inspector (side panel), frame actions
-  components/   NoteView (the note and thread) and small UI controls
+  components/   ui/ = shadcn components (base-nova, Base UI), restyle these for the platform look;
+                controls.tsx = playground compositions of them; NoteView = the note and thread
   tilt/         preview tilt state and the spring-smoothed tilt loop
   lib/          types, note presets, IndexedDB, project store, frame maths
 ```
