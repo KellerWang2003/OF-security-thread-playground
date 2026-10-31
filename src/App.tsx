@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Analytics } from '@vercel/analytics/react'
 import { Button } from '@/components/ui/button'
 import { Editor } from './app/Editor'
 import { ProjectList } from './app/ProjectList'
@@ -59,6 +60,7 @@ function App() {
       <span>{notice}</span>
       <Button variant="ghost" size="sm" onClick={() => useNotice.setState({ message: '' })}>Dismiss</Button>
     </div>}
+    <Analytics />
   </>
 }
 
