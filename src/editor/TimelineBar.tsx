@@ -11,7 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
-import { TILT_LIMIT, clamp, formatDeg, frameMix, sliceRange, tiltRange } from '../lib/frames'
+import { clamp, formatDeg, frameMix, sliceRange, tiltRange } from '../lib/frames'
 import { pickFiles } from '../lib/images'
 import { MAX_FRAMES, MIN_FRAMES, SPAN_LIMITS } from '../lib/notes'
 import type { Frame, Note } from '../lib/types'
@@ -44,9 +44,10 @@ const PAD = 12
 const ZOOM = { min: 3, max: 40, initial: 10 }
 
 /**
- * Bottom of the canvas: play and pause, then the selected note's frames on a timeline measured in degrees
- * of tilt, like clips on a track. A frame's width is how long it shows; drag its right edge to change
- * that. Drag the ruler or a frame to scrub, scroll to move along, ⌘-scroll to zoom.
+ * Bottom of the canvas: play and pause, then one cycle of the selected note's frames, like clips on a
+ * track. A frame's width is how long it shows; drag its right edge to change that. The playhead shows
+ * where in the cycle the current tilt is, wrapping around as the frames loop. Drag to scrub, scroll to
+ * move along, ⌘-scroll to zoom.
  */
 export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRef: NoteRef | undefined; besidePanel: boolean }) {
   const scroller = useRef<HTMLDivElement>(null)
@@ -60,13 +61,9 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
   const cycle = 2 * range
   const { current } = frameMix(angle, spans, tilt.transition)
   const playing = source === 'wobble'
-  // The track covers the whole tilt, so you can see and scrub into the repeats past the main cycle
-  const extent = Math.max(TILT_LIMIT, range)
-  const x = (deg: number) => PAD + (deg + extent) * pxPerDeg
-  // Which repeat of the cycle the playhead is in; 0 is the editable one around flat
-  const playheadRepeat = cycle > 0 ? Math.floor((angle + range) / cycle) : 0
-  const repeats: number[] = []
-  if (cycle > 0) for (let k = -Math.ceil(extent / cycle) - 1; k <= Math.ceil(extent / cycle) + 1; k++) repeats.push(k)
+  // The track is one cycle; past either end the frames simply loop, so the playhead wraps around
+  const x = (deg: number) => PAD + (deg + range) * pxPerDeg
+  const wrapped = cycle > 0 ? ((((angle + range) % cycle) + cycle) % cycle) - range : 0
 
   // Wheel: ⌘/Ctrl zooms the timeline, a plain vertical wheel scrolls it sideways
   useEffect(() => {
@@ -85,28 +82,16 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
     return () => element.removeEventListener('wheel', onWheel)
   }, [])
 
-  // Keep flat (0°) in the middle when the timeline opens or is zoomed
-  useEffect(() => {
-    const element = scroller.current
-    if (element) element.scrollLeft = PAD + extent * pxPerDeg - element.clientWidth / 2
-  }, [pxPerDeg, extent])
-
   const scrubTo = (clientX: number) => {
     const rect = track.current?.getBoundingClientRect()
     if (!rect) return
-    setTilt({ source: 'slider', target: clamp((clientX - rect.left - PAD) / pxPerDeg - extent, -TILT_LIMIT, TILT_LIMIT) })
+    setTilt({ source: 'slider', target: clamp((clientX - rect.left - PAD) / pxPerDeg - range, -range, range) })
   }
-
-  // Ruler ticks every 5° (every degree when zoomed in), labelled every 15° (every 5° when zoomed in)
-  const minor = pxPerDeg >= 14 ? 1 : 5
-  const major = pxPerDeg >= 18 ? 5 : 15
-  const ticks: number[] = []
-  for (let d = Math.ceil(-extent / minor) * minor; d <= extent + 1e-6; d += minor) ticks.push(d)
 
   const starts = spans.map((_, i) => sliceRange(i, spans)[0])
 
   return (
-    <Panel className={cn('absolute bottom-3 left-3 flex h-[104px] items-stretch gap-2 p-2', besidePanel ? 'right-[268px]' : 'right-3')}>
+    <Panel className={cn('absolute bottom-3 left-3 flex h-[88px] items-stretch gap-2 p-2', besidePanel ? 'right-[268px]' : 'right-3')}>
       <div className="flex w-[84px] shrink-0 flex-col items-center justify-center gap-1.5">
         <div className="flex items-center gap-0.5">
           <IconButton
@@ -125,7 +110,7 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
         <div
           ref={track}
           className="relative h-full touch-none overflow-hidden select-none"
-          style={{ width: x(extent) + PAD }}
+          style={{ width: x(range) + PAD }}
           onPointerDown={(e) => {
             const el = e.target as HTMLElement
             if (el.closest('button') || el.closest('[role=menu]')) return
@@ -151,36 +136,15 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
             gesture.current = null
           }}
         >
-          <div className="absolute inset-x-0 top-0 h-5 cursor-ew-resize border-b">
-            {ticks.map((d) => {
-              const isMajor = Math.abs(d % major) < 1e-6
-              return (
-                <div key={d} className="absolute bottom-0" style={{ left: x(d) }}>
-                  <div className={cn('w-px bg-foreground/25', isMajor ? 'h-2' : 'h-1')} />
-                  {isMajor && (
-                    <span className="absolute bottom-2 -translate-x-1/2 text-[9px] text-muted-foreground tabular-nums">
-                      {formatDeg(d)}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          {repeats.flatMap((k) =>
-            frames.map((frame, i) => {
-            const from = (starts.at(i) ?? -range) + k * cycle
-            if (from + frame.spanDeg < -extent || from > extent) return null
-            const left = x(from)
+          {frames.map((frame, i) => {
+            const left = x(starts.at(i) ?? -range)
             const width = frame.spanDeg * pxPerDeg
-            const main = k === 0
             return (
               <div
-                key={`${k}-${frame.id}`}
+                key={frame.id}
                 className={cn(
-                  'group absolute top-6 bottom-1 overflow-hidden rounded-md border bg-background',
-                  !main && 'opacity-45',
-                  i === current && k === playheadRepeat && 'ring-2 ring-primary/60',
+                  'group absolute inset-y-1 overflow-hidden rounded-md border bg-background',
+                  i === current && 'ring-2 ring-primary/60',
                 )}
                 style={{ left: left + 1, width: Math.max(width - 2, 4) }}
               >
@@ -190,7 +154,7 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
                     {i + 1}
                   </span>
                 )}
-                {noteRef && main && (
+                {noteRef && (
                   <>
                     <FrameMenu frame={frame} index={i} count={frames.length} noteRef={noteRef} />
                     <div
@@ -202,15 +166,9 @@ export function TimelineBar({ note, noteRef, besidePanel }: { note: Note; noteRe
                 )}
               </div>
             )
-            }),
-          )}
+          })}
 
-          {cycle > 0 && (
-            // Marks the editable cycle around flat
-            <div className="pointer-events-none absolute top-5 h-0.5 rounded-full bg-primary/40" style={{ left: x(-range), width: cycle * pxPerDeg }} />
-          )}
-
-          <div className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: x(clamp(angle, -extent, extent)) }}>
+          <div className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: x(wrapped) }}>
             <div className="absolute -top-0.5 left-1/2 size-2 -translate-x-1/2 rotate-45 bg-primary" />
           </div>
         </div>

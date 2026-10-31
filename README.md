@@ -18,7 +18,7 @@ npm run dev
 
 ## Layout of the editor
 
-A full-screen canvas with floating panels. Top left: back to Projects, the project name and a collapsible Banknotes list (double-click a name to rename). Bottom: play/pause and the selected note's frames on a timeline measured in degrees of tilt, like clips on a track: each frame has its own length (drag its right edge), the ruler shows the angle, drag to scrub, scroll to move along and ⌘-scroll to zoom. Up to 5 frames; the full cycle is the sum of their lengths. Right, while a note is selected: size, background (solid colour or uploaded design), thread width and position, and the frame cycle (direction, full-cycle angle, crossfade).
+A full-screen canvas with floating panels. Top left: back to Projects, the project name and a collapsible Banknotes list (double-click a name to rename). Bottom: play/pause and the selected note's frames on a timeline measured in degrees of tilt, like clips on a track: one cycle, each frame with its own length (drag its right edge); the playhead shows where in the cycle the tilt is and wraps as the frames loop. Drag to scrub, scroll to move along, ⌘-scroll to zoom. Up to 5 frames; the full cycle is the sum of their lengths. Right, while a note is selected: size, background (solid colour or uploaded design), thread width and position, and the frame cycle (direction, full-cycle angle, crossfade).
 
 ## UI
 
