@@ -81,6 +81,7 @@ export async function deleteFrame({ projectId, noteId }: NoteRef, frameId: strin
 export async function setFaceImage({ projectId, noteId }: NoteRef, file: File | undefined) {
   const old = findNote(projectId, noteId)?.faceImageId
   const faceImageId = file ? await storeImage(file) : undefined
-  updateNote(projectId, noteId, (n) => ({ ...n, faceImageId }))
+  // Uploading a design switches the background to it; removing it falls back to the solid colour
+  updateNote(projectId, noteId, (n) => ({ ...n, faceImageId, background: faceImageId ? 'image' : 'solid' }))
   if (old) await removeImage(old)
 }

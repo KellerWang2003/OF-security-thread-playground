@@ -45,7 +45,7 @@ export function NoteView({
 }) {
   const { thread, frames, tilt } = note
   const mm = (value: number) => value * scale
-  const face = useImageUrl(note.faceImageId)
+  const face = useImageUrl(note.background === 'image' ? note.faceImageId : undefined)
   const mix = frameMix(angle, tilt.rangeDeg, frames.length, tilt.transition)
   const baseFrame = frames.at(mix.base)
   const nextFrame = frames.at(mix.next)
@@ -67,14 +67,6 @@ export function NoteView({
       }}
     >
       {face && <img src={face} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />}
-
-      <div
-        className="absolute inset-y-0 bg-white"
-        style={{
-          left: mm(thread.xMm - thread.widthMm / 2 - thread.surroundMm),
-          width: mm(thread.widthMm + 2 * thread.surroundMm),
-        }}
-      />
 
       <div
         className="absolute inset-y-0 overflow-hidden bg-white"

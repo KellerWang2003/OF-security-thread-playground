@@ -1,7 +1,7 @@
 import { ArrowLeftRight } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { ColorField, Field, IconButton, NumberField } from '../components/controls'
 import { DEFAULT_NOTE, NOTE_SIZE, createNote, nextNotePosition } from '../lib/notes'
@@ -39,7 +39,7 @@ export function AddNoteDialog({
           onSubmit={(e) => {
             e.preventDefault()
             const note = createNote({
-              name: name.trim() || `Note ${notes.length + 1}`,
+              name: name.trim() || `Banknote ${notes.length + 1}`,
               ...nextNotePosition(notes),
               ...size,
               color,
@@ -50,11 +50,10 @@ export function AddNoteDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>Add note</DialogTitle>
-            <DialogDescription>Any size; each note keeps its own thread and frames.</DialogDescription>
+            <DialogTitle>New banknote</DialogTitle>
           </DialogHeader>
           <Field label="Name">
-            <Input ref={nameRef} placeholder={`e.g. Note ${notes.length + 1}, or its denomination`} value={name} onChange={(e) => setName(e.target.value)} />
+            <Input ref={nameRef} placeholder={`Banknote ${notes.length + 1}`} value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
             <Field label="Width">
@@ -89,7 +88,7 @@ export function AddNoteDialog({
             <ColorField value={color} onChange={setColor} />
           </Field>
           <DialogFooter>
-            <Button type="submit">Add note</Button>
+            <Button type="submit">Add</Button>
           </DialogFooter>
         </form>
       </DialogContent>

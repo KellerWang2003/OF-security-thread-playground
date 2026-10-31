@@ -12,6 +12,86 @@ import { cn } from '@/lib/utils'
 
 const round = (value: number) => Math.round(value * 100) / 100
 
+/** A floating panel over the canvas */
+export function Panel({ className, children }: { className?: string; children: ReactNode }) {
+  return <div className={cn('rounded-xl border bg-background/95 shadow-sm backdrop-blur', className)}>{children}</div>
+}
+
+/**
+ * A Figma-style number field: a short label inside the field that you can drag sideways to scrub the
+ * value, and a number you can type. Commits while typing only when the value is in range.
+ */
+export function ScrubField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  unit,
+  title,
+  className,
+}: {
+  label: ReactNode
+  /** Tooltip naming what a terse label stands for */
+  title?: string
+  value: number
+  onChange: (value: number) => void
+  min: number
+  max: number
+  step?: number
+  unit?: string
+  className?: string
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const [scrub, setScrub] = useState<{ x: number; start: number } | null>(null)
+  const snap = (v: number) => clampValue(Math.round(v / step) * step, min, max)
+
+  return (
+    <div
+      title={title}
+      className={cn(
+        'flex h-8 min-w-0 items-center rounded-md border border-transparent bg-muted/60 focus-within:border-ring hover:border-border',
+        className,
+      )}
+    >
+      <span
+        className="flex h-full w-7 shrink-0 cursor-ew-resize touch-none items-center justify-center text-xs text-muted-foreground select-none"
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId)
+          setScrub({ x: e.clientX, start: value })
+        }}
+        onPointerMove={(e) => {
+          if (scrub) onChange(snap(scrub.start + ((e.clientX - scrub.x) / 2) * step))
+        }}
+        onPointerUp={() => setScrub(null)}
+      >
+        {label}
+      </span>
+      <input
+        type="number"
+        className="h-full w-full min-w-0 bg-transparent text-sm tabular-nums outline-none [&::-webkit-inner-spin-button]:appearance-none"
+        value={draft ?? String(round(value))}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          const next = Number(e.target.value)
+          if (e.target.value !== '' && Number.isFinite(next) && next >= min && next <= max) onChange(next)
+        }}
+        onBlur={() => setDraft(null)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+        }}
+      />
+      {unit && <span className="pr-2 text-xs text-muted-foreground">{unit}</span>}
+    </div>
+  )
+}
+
+const clampValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
 /** One titled group of controls in the side panel */
 export function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (

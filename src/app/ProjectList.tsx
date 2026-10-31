@@ -39,9 +39,6 @@ export function ProjectList() {
         <header className="flex items-end justify-between gap-4">
           <div>
             <h1 className="font-heading text-xl font-semibold">Security thread playground</h1>
-            <p className="text-sm text-muted-foreground">
-              Design a lenticular thread frame by frame and tilt the note to preview it.
-            </p>
           </div>
           {!creating && (
             <Button onClick={() => setCreating(true)}>
@@ -87,10 +84,10 @@ function NewProject({ onCancel }: { onCancel?: () => void }) {
           <CardTitle>New project</CardTitle>
         </CardHeader>
         <CardContent>
-          <Field label="Name" hint="You add the notes, at any size, once the project is open.">
+          <Field label="Name">
             <Input
               autoFocus
-              placeholder="e.g. Flight series"
+              placeholder="Untitled project"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -133,14 +130,14 @@ function ProjectCard({ project }: { project: Project }) {
               ))}
             </div>
           ) : (
-            <span className="text-xs text-muted-foreground">No notes yet</span>
+            <span className="text-xs text-muted-foreground">Empty</span>
           )}
         </button>
         <div className="flex items-center gap-0.5 px-3 py-2">
           <button type="button" onClick={() => open(project.id)} className="min-w-0 flex-1 text-left">
             <div className="truncate text-sm font-medium">{project.name}</div>
             <div className="text-xs text-muted-foreground">
-              {project.notes.length} {project.notes.length === 1 ? 'note' : 'notes'}
+              {project.notes.length} {project.notes.length === 1 ? 'banknote' : 'banknotes'}
             </div>
           </button>
           <IconButton label="Rename" onClick={() => setRenaming(true)}>
@@ -161,7 +158,7 @@ function ProjectCard({ project }: { project: Project }) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{project.name}”?</AlertDialogTitle>
-            <AlertDialogDescription>All its notes and uploaded frames are deleted too. This can't be undone.</AlertDialogDescription>
+            <AlertDialogDescription>This can't be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>

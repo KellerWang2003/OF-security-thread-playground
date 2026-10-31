@@ -15,10 +15,8 @@ import { useElementSize } from './useElementSize'
 const PX_PER_MM = 96 / 25.4
 const MIN_ZOOM = 0.1
 const MAX_ZOOM = 8
-const FIT_PADDING = 56
-/** Extra room at the bottom for the floating tilt bar, and at the top for labels */
-const FIT_BOTTOM = 96
-const FIT_TOP = 48
+/** Room kept clear of the floating panels when fitting notes into view */
+const FIT_INSETS = { left: 284, right: 284, top: 48, bottom: 128 }
 
 /** Zoom level and where the canvas origin (0, 0 mm) sits on screen, in px */
 interface View {
@@ -39,8 +37,8 @@ function fitView(notes: Note[], size: { width: number; height: number }): View {
   const maxY = Math.max(...notes.map((n) => n.y + n.heightMm))
   const zoom = clamp(
     Math.min(
-      (size.width - 2 * FIT_PADDING) / ((maxX - minX) * PX_PER_MM),
-      (size.height - FIT_TOP - FIT_BOTTOM) / ((maxY - minY) * PX_PER_MM),
+      (size.width - FIT_INSETS.left - FIT_INSETS.right) / ((maxX - minX) * PX_PER_MM),
+      (size.height - FIT_INSETS.top - FIT_INSETS.bottom) / ((maxY - minY) * PX_PER_MM),
     ),
     MIN_ZOOM,
     MAX_ZOOM,
@@ -48,8 +46,8 @@ function fitView(notes: Note[], size: { width: number; height: number }): View {
   const scale = zoom * PX_PER_MM
   return {
     zoom,
-    x: size.width / 2 - ((minX + maxX) / 2) * scale,
-    y: FIT_TOP + (size.height - FIT_TOP - FIT_BOTTOM) / 2 - ((minY + maxY) / 2) * scale,
+    x: FIT_INSETS.left + (size.width - FIT_INSETS.left - FIT_INSETS.right) / 2 - ((minX + maxX) / 2) * scale,
+    y: FIT_INSETS.top + (size.height - FIT_INSETS.top - FIT_INSETS.bottom) / 2 - ((minY + maxY) / 2) * scale,
   }
 }
 
@@ -254,7 +252,7 @@ export function Canvas({
             <div
               key={note.id}
               className="absolute"
-              style={{ left: current.x + note.x * scale, top: current.y + note.y * scale, perspective: 1600 }}
+              style={{ left: current.x + note.x * scale, top: current.y + note.y * scale }}
             >
               <div
                 data-note-label={note.id}
@@ -270,6 +268,9 @@ export function Canvas({
               </div>
               <div
                 data-note-body={note.id}
+                // A short perspective, relative to the note's size, so the near edge visibly widens and the far edge
+                // narrows: you can see which way the note is tilting, not just that it got shorter
+                style={{ perspective: 2.2 * Math.max(note.widthMm, note.heightMm) * scale }}
                 className={cn(
                   'rounded-[2px] outline-offset-4',
                   isSelected ? 'outline-2 outline-primary/50' : 'outline-0',
@@ -282,12 +283,15 @@ export function Canvas({
           )
         })}
 
-      <div className="pointer-events-none absolute top-3 left-4 text-xs text-muted-foreground/80">
-        Drag a note to tilt · drag its label to move · scroll or space-drag to pan · pinch or ⌘-scroll to zoom
-      </div>
 
       {current && size && (
-        <div className="absolute right-3 bottom-3 flex items-center gap-0.5 rounded-lg border bg-background p-0.5 shadow-sm">
+        // Top right, clear of the properties panel when one is open
+        <div
+          className={cn(
+            'absolute top-3 flex items-center gap-0.5 rounded-lg border bg-background/95 p-0.5 shadow-sm backdrop-blur',
+            selected ? 'right-[268px]' : 'right-3',
+          )}
+        >
           <IconButton label="Zoom out" onClick={() => zoomAround(1 / 1.25, size.width / 2, size.height / 2)}>
             <Minus />
           </IconButton>

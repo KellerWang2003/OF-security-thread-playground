@@ -46,8 +46,9 @@ export function createNote({
     y,
     widthMm,
     heightMm,
+    background: 'solid',
     color,
-    thread: { widthMm: 4, xMm: widthMm / 2, surroundMm: 2, fit: 'stretch', tileMm: 10 },
+    thread: { widthMm: 4, xMm: widthMm / 2, fit: 'stretch', tileMm: 10 },
     frames: [colorFrame(0), colorFrame(1)],
     tilt: { axis: 'vertical', rangeDeg: 30, transition: 0 },
   }
@@ -70,10 +71,14 @@ export function migrateProject(raw: unknown): Project {
   const notes: Note[] = Array.isArray(p.notes)
     ? p.notes
     : note && thread && frames && tilt
-      ? [{ id: crypto.randomUUID(), name: `${note.widthMm} × ${note.heightMm}`, x: 0, y: 0, ...note, thread, frames, tilt }]
+      ? [{ id: crypto.randomUUID(), name: `${note.widthMm} × ${note.heightMm}`, x: 0, y: 0, background: 'solid' as const, ...note, thread, frames, tilt }]
       : []
   // Notes saved before the canvas had no position: lay them out in a row
   const placed: Note[] = []
-  for (const n of notes) placed.push(Number.isFinite(n.x) && Number.isFinite(n.y) ? n : { ...n, ...nextNotePosition(placed) })
+  for (const raw of notes) {
+    // Older notes had no background mode; an uploaded face meant an image background
+    const n: Note = { ...raw, background: raw.background ?? (raw.faceImageId ? 'image' : 'solid') }
+    placed.push(Number.isFinite(n.x) && Number.isFinite(n.y) ? n : { ...n, ...nextNotePosition(placed) })
+  }
   return { ...rest, notes: placed }
 }

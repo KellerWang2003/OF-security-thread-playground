@@ -16,15 +16,13 @@ export interface ThreadSettings {
   widthMm: number
   /** Thread centre, measured from the note's left edge */
   xMm: number
-  /** White band either side of the thread */
-  surroundMm: number
   fit: FrameFit
   tileMm: number
 }
 
 export interface TiltSettings {
   axis: TiltAxis
-  /** The tilt range runs from -rangeDeg to +rangeDeg */
+  /** The frames cycle once from -rangeDeg to +rangeDeg, a full cycle of 2 × rangeDeg */
   rangeDeg: number
   /** 0 = hard cut between frames, 1 = crossfade across the whole slice */
   transition: number
@@ -39,6 +37,8 @@ export interface Note {
   y: number
   widthMm: number
   heightMm: number
+  /** The note's background: a solid colour, or the uploaded design */
+  background: 'solid' | 'image'
   color: string
   faceImageId?: string
   thread: ThreadSettings
