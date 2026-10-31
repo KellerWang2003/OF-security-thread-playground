@@ -1,5 +1,3 @@
-export type NotePresetId = '0.2' | '25' | '10000' | 'custom'
-
 /** vertical = tilting the note back and forth (horizontal lenses); horizontal = side to side (vertical lenses) */
 export type TiltAxis = 'vertical' | 'horizontal'
 
@@ -12,14 +10,6 @@ export interface Frame {
   color: string
   imageId?: string
   name: string
-}
-
-export interface NoteSettings {
-  preset: NotePresetId
-  widthMm: number
-  heightMm: number
-  color: string
-  faceImageId?: string
 }
 
 export interface ThreadSettings {
@@ -40,13 +30,23 @@ export interface TiltSettings {
   transition: number
 }
 
+/** One banknote in a project, with its own size, thread and frames */
+export interface Note {
+  id: string
+  name: string
+  widthMm: number
+  heightMm: number
+  color: string
+  faceImageId?: string
+  thread: ThreadSettings
+  frames: Frame[]
+  tilt: TiltSettings
+}
+
 export interface Project {
   id: string
   name: string
   createdAt: number
   updatedAt: number
-  note: NoteSettings
-  thread: ThreadSettings
-  frames: Frame[]
-  tilt: TiltSettings
+  notes: Note[]
 }

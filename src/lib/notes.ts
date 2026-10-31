@@ -1,30 +1,11 @@
-import type { Frame, NotePresetId, NoteSettings, Project } from './types'
-
-/** The Flight series notes chosen for the studio (specs/denomination-spec.md) */
-export const NOTE_PRESETS: {
-  id: Exclude<NotePresetId, 'custom'>
-  label: string
-  widthMm: number
-  heightMm: number
-  color: string
-}[] = [
-  { id: '0.2', label: '0.2', widthMm: 68, heightMm: 120, color: '#E8743B' },
-  { id: '25', label: '25', widthMm: 68, heightMm: 134, color: '#8A4F9E' },
-  { id: '10000', label: '10,000', widthMm: 68, heightMm: 148, color: '#121A3A' },
-]
+import type { Frame, Note, Project } from './types'
 
 export const MIN_FRAMES = 2
 export const MAX_FRAMES = 5
 export const THREAD_WIDTH = { min: 3, max: 6, step: 0.5 }
+export const NOTE_SIZE = { min: 20, max: 250 }
 export const FRAME_COLORS = ['#D9A441', '#2E9C8F', '#C2456B', '#4A6FD1', '#7C4DBA']
-
-export function presetNote(id: Exclude<NotePresetId, 'custom'>): NoteSettings {
-  const preset = NOTE_PRESETS.find((p) => p.id === id) ?? NOTE_PRESETS[1]
-  return { preset: preset.id, widthMm: preset.widthMm, heightMm: preset.heightMm, color: preset.color }
-}
-
-/** The spec puts the thread just right of centre */
-export const defaultThreadX = (noteWidthMm: number) => Math.round((noteWidthMm / 2 + 6) * 2) / 2
+export const DEFAULT_NOTE = { widthMm: 150, heightMm: 70, color: '#5B6B8C' }
 
 export function colorFrame(index: number): Frame {
   return {
@@ -35,16 +16,47 @@ export function colorFrame(index: number): Frame {
   }
 }
 
-export function createProject(name: string, note: NoteSettings): Project {
-  const now = Date.now()
+export function createNote({
+  name,
+  widthMm,
+  heightMm,
+  color,
+}: {
+  name: string
+  widthMm: number
+  heightMm: number
+  color: string
+}): Note {
   return {
     id: crypto.randomUUID(),
     name,
-    createdAt: now,
-    updatedAt: now,
-    note,
-    thread: { widthMm: 4, xMm: defaultThreadX(note.widthMm), surroundMm: 2, fit: 'stretch', tileMm: 10 },
+    widthMm,
+    heightMm,
+    color,
+    thread: { widthMm: 4, xMm: widthMm / 2, surroundMm: 2, fit: 'stretch', tileMm: 10 },
     frames: [colorFrame(0), colorFrame(1)],
     tilt: { axis: 'vertical', rangeDeg: 30, transition: 0 },
   }
+}
+
+export function createProject(name: string): Project {
+  const now = Date.now()
+  return { id: crypto.randomUUID(), name, createdAt: now, updatedAt: now, notes: [] }
+}
+
+/** Projects saved before notes existed held a single note's settings at the top level */
+export function migrateProject(raw: unknown): Project {
+  const p = raw as Project & {
+    note?: { widthMm: number; heightMm: number; color: string; faceImageId?: string }
+    thread?: Note['thread']
+    frames?: Frame[]
+    tilt?: Note['tilt']
+  }
+  if (Array.isArray(p.notes)) return p
+  const { note, thread, frames, tilt, ...rest } = p
+  const notes: Note[] =
+    note && thread && frames && tilt
+      ? [{ id: crypto.randomUUID(), name: `${note.widthMm} × ${note.heightMm}`, ...note, thread, frames, tilt }]
+      : []
+  return { ...rest, notes }
 }

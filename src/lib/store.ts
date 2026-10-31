@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import * as db from './db'
 import { copyImage, removeImage } from './images'
-import type { Project } from './types'
+import type { Note, Project } from './types'
 
 // Edits land in memory immediately and are written to IndexedDB shortly after, per project
 const saveTimers = new Map<string, number>()
@@ -16,6 +16,21 @@ function scheduleSave(id: string) {
       if (project) void db.saveProject(project)
     }, 250),
   )
+}
+
+const noteImageIds = (note: Note) => [note.faceImageId, ...note.frames.map((f) => f.imageId)].filter((i) => i !== undefined)
+
+/** A copy of a note with fresh ids and its own copies of the images, so deleting one never breaks the other */
+async function copyNote(note: Note): Promise<Note> {
+  const frames = await Promise.all(
+    note.frames.map(async (f) => ({
+      ...f,
+      id: crypto.randomUUID(),
+      imageId: f.imageId ? await copyImage(f.imageId) : undefined,
+    })),
+  )
+  const faceImageId = note.faceImageId ? await copyImage(note.faceImageId) : undefined
+  return { ...note, id: crypto.randomUUID(), faceImageId, frames }
 }
 
 interface ProjectsState {
@@ -49,18 +64,9 @@ export const useProjects = create<ProjectsState>()((set, get) => ({
     scheduleSave(id)
   },
 
-  // Images are copied too, so deleting one project never breaks the other
   duplicate: async (id) => {
     const source = get().projects.find((p) => p.id === id)
     if (!source) return undefined
-    const frames = await Promise.all(
-      source.frames.map(async (f) => ({
-        ...f,
-        id: crypto.randomUUID(),
-        imageId: f.imageId ? await copyImage(f.imageId) : undefined,
-      })),
-    )
-    const faceImageId = source.note.faceImageId ? await copyImage(source.note.faceImageId) : undefined
     const now = Date.now()
     const copy: Project = {
       ...source,
@@ -68,8 +74,7 @@ export const useProjects = create<ProjectsState>()((set, get) => ({
       name: `${source.name} copy`,
       createdAt: now,
       updatedAt: now,
-      note: { ...source.note, faceImageId },
-      frames,
+      notes: await Promise.all(source.notes.map(copyNote)),
     }
     get().add(copy)
     return copy
@@ -81,10 +86,42 @@ export const useProjects = create<ProjectsState>()((set, get) => ({
     window.clearTimeout(saveTimers.get(id))
     set((s) => ({ projects: s.projects.filter((p) => p.id !== id) }))
     await db.deleteProject(id)
-    const imageIds = [project.note.faceImageId, ...project.frames.map((f) => f.imageId)]
-    await Promise.all(imageIds.filter((i) => i !== undefined).map((i) => removeImage(i)))
+    await Promise.all(project.notes.flatMap(noteImageIds).map((i) => removeImage(i)))
   },
 }))
 
 export const updateProject = (id: string, change: (project: Project) => Project) =>
   useProjects.getState().update(id, change)
+
+export const findNote = (projectId: string, noteId: string) =>
+  useProjects
+    .getState()
+    .projects.find((p) => p.id === projectId)
+    ?.notes.find((n) => n.id === noteId)
+
+export const updateNote = (projectId: string, noteId: string, change: (note: Note) => Note) =>
+  updateProject(projectId, (p) => ({ ...p, notes: p.notes.map((n) => (n.id === noteId ? change(n) : n)) }))
+
+export const addNote = (projectId: string, note: Note) =>
+  updateProject(projectId, (p) => ({ ...p, notes: [...p.notes, note] }))
+
+/** Inserts the copy right after the original and returns its id */
+export async function duplicateNote(projectId: string, noteId: string) {
+  const source = findNote(projectId, noteId)
+  if (!source) return undefined
+  const copy = { ...(await copyNote(source)), name: `${source.name} copy` }
+  updateProject(projectId, (p) => {
+    const at = p.notes.findIndex((n) => n.id === noteId)
+    const notes = [...p.notes]
+    notes.splice(at + 1, 0, copy)
+    return { ...p, notes }
+  })
+  return copy.id
+}
+
+export async function removeNote(projectId: string, noteId: string) {
+  const note = findNote(projectId, noteId)
+  if (!note) return
+  updateProject(projectId, (p) => ({ ...p, notes: p.notes.filter((n) => n.id !== noteId) }))
+  await Promise.all(noteImageIds(note).map((i) => removeImage(i)))
+}

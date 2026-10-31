@@ -1,13 +1,13 @@
 import { FrameFill } from '../components/NoteView'
 import { cn } from '@/lib/utils'
 import { formatDeg, frameMix, sliceRange } from '../lib/frames'
-import type { Project } from '../lib/types'
+import type { Note } from '../lib/types'
 import { setTilt, useTilt } from '../tilt/tilt'
 
 /** Every frame with the angles that show it; click one to jump to the middle of its slice */
-export function FrameStrip({ project }: { project: Project }) {
+export function FrameStrip({ note }: { note: Note }) {
   const angle = useTilt((s) => s.angle)
-  const { frames, tilt, thread } = project
+  const { frames, tilt, thread } = note
   const { current } = frameMix(angle, tilt.rangeDeg, frames.length, tilt.transition)
 
   return (

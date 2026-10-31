@@ -2,21 +2,21 @@ import { useRef, useState } from 'react'
 import { NoteView } from '../components/NoteView'
 import { cn } from '@/lib/utils'
 import { clamp, formatDeg } from '../lib/frames'
-import type { Project } from '../lib/types'
+import type { Note } from '../lib/types'
 import { setTilt, useTilt, useTiltLoop } from '../tilt/tilt'
-import { addImageFrames } from './frameActions'
+import { addImageFrames, type NoteRef } from './frameActions'
 import { useElementSize } from './useElementSize'
 
 const PADDING = 120
 
 /** The note in the middle of the editor: drag on it to tilt, drop images on it to add frames */
-export function Stage({ project }: { project: Project }) {
+export function Stage({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const ref = useRef<HTMLDivElement>(null)
   const size = useElementSize(ref)
   const drag = useRef<{ x: number; y: number; start: number } | null>(null)
   const [dragging, setDragging] = useState(false)
   const [dropping, setDropping] = useState(false)
-  const { note, tilt } = project
+  const { tilt } = note
   const { angle, source, zoom, perspective, sheen } = useTilt()
   useTiltLoop(tilt.rangeDeg)
 
@@ -63,20 +63,20 @@ export function Stage({ project }: { project: Project }) {
       onDrop={(e) => {
         e.preventDefault()
         setDropping(false)
-        void addImageFrames(project.id, Array.from(e.dataTransfer.files))
+        void addImageFrames(noteRef, Array.from(e.dataTransfer.files))
       }}
     >
       {scale > 0 && (
         <div className="flex flex-col items-center gap-3" style={{ transformStyle: 'preserve-3d' }}>
-          <NoteView project={project} scale={scale} angle={angle} perspective={perspective} sheen={sheen} />
+          <NoteView note={note} scale={scale} angle={angle} perspective={perspective} sheen={sheen} />
         </div>
       )}
 
       <div className="pointer-events-none absolute top-3 left-4 flex items-baseline gap-2 text-xs text-muted-foreground">
         <span className="w-12 text-lg font-medium text-foreground tabular-nums">{formatDeg(angle)}</span>
         <span>
-          {source === 'wobble' ? 'Auto-wobble' : source === 'slider' ? 'Slider' : 'Drag'} ·{' '}
-          {note.widthMm} × {note.heightMm} mm
+          {note.name} · {note.widthMm} × {note.heightMm} mm ·{' '}
+          {source === 'wobble' ? 'auto-wobble' : source === 'slider' ? 'slider' : 'drag'}
         </span>
       </div>
       <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-muted-foreground/80">

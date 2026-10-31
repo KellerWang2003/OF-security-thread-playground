@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 import { frameMix } from '../lib/frames'
 import { useImageUrl } from '../lib/images'
-import type { Frame, FrameFit, Project } from '../lib/types'
+import type { Frame, FrameFit, Note } from '../lib/types'
 
 /** One frame filling the thread: a flat colour, or the uploaded image stretched or tiled down its length */
 export function FrameFill({
@@ -31,19 +31,19 @@ export function FrameFill({
  * `perspective` the note also turns in 3D, and `sheen` adds a highlight that travels along the thread.
  */
 export function NoteView({
-  project,
+  note,
   scale,
   angle = 0,
   perspective = false,
   sheen = false,
 }: {
-  project: Project
+  note: Note
   scale: number
   angle?: number
   perspective?: boolean
   sheen?: boolean
 }) {
-  const { note, thread, frames, tilt } = project
+  const { thread, frames, tilt } = note
   const mm = (value: number) => value * scale
   const face = useImageUrl(note.faceImageId)
   const mix = frameMix(angle, tilt.rangeDeg, frames.length, tilt.transition)

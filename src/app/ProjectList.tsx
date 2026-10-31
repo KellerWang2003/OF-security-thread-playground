@@ -1,5 +1,5 @@
 import { Copy, Pencil, Plus, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,11 +20,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Field, IconButton, NumberField, Segmented } from '../components/controls'
+import { Field, IconButton } from '../components/controls'
 import { NoteView } from '../components/NoteView'
-import { NOTE_PRESETS, createProject, presetNote } from '../lib/notes'
+import { createProject } from '../lib/notes'
 import { updateProject, useProjects } from '../lib/store'
-import type { NotePresetId, Project } from '../lib/types'
+import type { Project } from '../lib/types'
 
 const open = (id: string) => (location.hash = `#/p/${id}`)
 
@@ -67,13 +67,9 @@ export function ProjectList() {
 
 function NewProject({ onCancel }: { onCancel?: () => void }) {
   const [name, setName] = useState('')
-  const [preset, setPreset] = useState<NotePresetId>('25')
-  const [size, setSize] = useState({ widthMm: 68, heightMm: 134 })
-  const presetInfo = NOTE_PRESETS.find((p) => p.id === preset)
 
   const create = () => {
-    const note = preset === 'custom' ? { preset, ...size, color: '#8A4F9E' } : presetNote(preset)
-    const project = createProject(name.trim() || `${presetInfo ? `${presetInfo.label} note` : 'Custom note'} thread`, note)
+    const project = createProject(name.trim() || 'Untitled project')
     useProjects.getState().add(project)
     open(project.id)
   }
@@ -90,30 +86,14 @@ function NewProject({ onCancel }: { onCancel?: () => void }) {
         <CardHeader>
           <CardTitle>New project</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-[1fr_320px]">
-          <Field label="Name">
+        <CardContent>
+          <Field label="Name" hint="You add the notes, at any size, once the project is open.">
             <Input
               autoFocus
-              placeholder="e.g. 25 thread, two colours"
+              placeholder="e.g. Flight series"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
-          </Field>
-          <Field
-            label="Note size"
-            hint={presetInfo ? `${presetInfo.widthMm} × ${presetInfo.heightMm} mm, portrait, Flight series` : undefined}
-          >
-            <Segmented<NotePresetId>
-              value={preset}
-              options={[...NOTE_PRESETS.map((p) => ({ value: p.id, label: p.label })), { value: 'custom', label: 'Custom' }]}
-              onChange={setPreset}
-            />
-            {preset === 'custom' && (
-              <div className="grid grid-cols-2 gap-2">
-                <NumberField value={size.widthMm} min={20} max={250} unit="mm" onChange={(widthMm) => setSize((s) => ({ ...s, widthMm }))} />
-                <NumberField value={size.heightMm} min={20} max={250} unit="mm" onChange={(heightMm) => setSize((s) => ({ ...s, heightMm }))} />
-              </div>
-            )}
           </Field>
         </CardContent>
         <CardFooter className="justify-end gap-2">
@@ -132,7 +112,11 @@ function NewProject({ onCancel }: { onCancel?: () => void }) {
 function ProjectCard({ project }: { project: Project }) {
   const [renaming, setRenaming] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const scale = 160 / Math.max(project.note.heightMm, project.note.widthMm * 1.2)
+  const shown = project.notes.slice(0, 4)
+  // Thumbnails share one scale so the notes keep their relative sizes
+  const totalWidth = shown.reduce((sum, n) => sum + n.widthMm, 0) + 6 * Math.max(0, shown.length - 1)
+  const tallest = Math.max(...shown.map((n) => n.heightMm), 1)
+  const scale = Math.min(150 / tallest, 190 / Math.max(totalWidth, 1))
 
   return (
     <li>
@@ -142,13 +126,21 @@ function ProjectCard({ project }: { project: Project }) {
           onClick={() => open(project.id)}
           className="flex h-[196px] items-center justify-center bg-muted/50 transition-colors group-hover:bg-muted"
         >
-          <NoteView project={project} scale={scale} />
+          {shown.length ? (
+            <div className="flex items-end gap-1.5">
+              {shown.map((note) => (
+                <NoteView key={note.id} note={note} scale={scale} />
+              ))}
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">No notes yet</span>
+          )}
         </button>
         <div className="flex items-center gap-0.5 px-3 py-2">
           <button type="button" onClick={() => open(project.id)} className="min-w-0 flex-1 text-left">
             <div className="truncate text-sm font-medium">{project.name}</div>
             <div className="text-xs text-muted-foreground">
-              {project.note.widthMm} × {project.note.heightMm} mm · {project.frames.length} frames
+              {project.notes.length} {project.notes.length === 1 ? 'note' : 'notes'}
             </div>
           </button>
           <IconButton label="Rename" onClick={() => setRenaming(true)}>
@@ -169,7 +161,7 @@ function ProjectCard({ project }: { project: Project }) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{project.name}”?</AlertDialogTitle>
-            <AlertDialogDescription>Its uploaded frames are deleted too. This can't be undone.</AlertDialogDescription>
+            <AlertDialogDescription>All its notes and uploaded frames are deleted too. This can't be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -193,6 +185,7 @@ function RenameDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const [name, setName] = useState(project.name)
+  const nameRef = useRef<HTMLInputElement>(null)
 
   return (
     <Dialog
@@ -202,7 +195,7 @@ function RenameDialog({
         onOpenChange(next)
       }}
     >
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-sm" initialFocus={nameRef}>
         <form
           className="contents"
           onSubmit={(e) => {
@@ -214,7 +207,7 @@ function RenameDialog({
           <DialogHeader>
             <DialogTitle>Rename project</DialogTitle>
           </DialogHeader>
-          <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} aria-label="Project name" />
+          <Input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} aria-label="Project name" />
           <DialogFooter>
             <Button type="submit">Save</Button>
           </DialogFooter>

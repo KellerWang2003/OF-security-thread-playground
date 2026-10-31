@@ -9,8 +9,8 @@ npm run dev
 
 ## What it does
 
-- **Projects:** create, open, rename, duplicate and delete. Everything autosaves to the browser's IndexedDB, including uploaded images; nothing leaves your machine.
-- **Note:** Flight presets (0.2 at 68 × 120, 25 at 68 × 134, 10,000 at 68 × 148 mm) or a custom size, colour, optional face artwork.
+- **Projects:** create (just a name), open, rename, duplicate and delete. Everything autosaves to the browser's IndexedDB, including uploaded images; nothing leaves your machine.
+- **Notes:** a project holds any number of notes, like pages in a document. Each has its own name, size in mm, colour, optional face artwork, thread, frames and tilt settings. Add, duplicate and delete them from the left panel.
 - **Thread:** width 3 to 6 mm, position from the left edge, white surround, frames stretched full length or repeated as a tile.
 - **Frames:** upload, reorder, replace, rename and delete; colour frames as placeholders. Drop images on the note to add them.
 - **Tilt:** drag on the note, auto-wobble or an angle slider; back and forth or side to side; range, crossfade, perspective and a moving highlight.

@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { clamp } from '../lib/frames'
 import { pickFiles } from '../lib/images'
-import { MAX_FRAMES, MIN_FRAMES, NOTE_PRESETS, THREAD_WIDTH, defaultThreadX, presetNote } from '../lib/notes'
-import { updateProject } from '../lib/store'
-import type { NotePresetId, Project } from '../lib/types'
+import { MAX_FRAMES, MIN_FRAMES, NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
+import { updateNote } from '../lib/store'
+import type { Note } from '../lib/types'
 import { setTilt, useTilt, type TiltSource } from '../tilt/tilt'
 import {
   addColorFrame,
@@ -17,57 +17,43 @@ import {
   replaceFrameImage,
   setFaceImage,
   updateFrame,
+  type NoteRef,
 } from './frameActions'
 
-type Change = (project: Project) => Project
+type Change = (note: Note) => Note
 
-export function Inspector({ project }: { project: Project }) {
-  const update = (change: Change) => updateProject(project.id, change)
+export function Inspector({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
+  const update = (change: Change) => updateNote(noteRef.projectId, noteRef.noteId, change)
   return (
     <aside className="flex w-[300px] shrink-0 flex-col overflow-y-auto border-l bg-background">
-      <NoteSection project={project} update={update} />
-      <ThreadSection project={project} update={update} />
-      <FramesSection project={project} />
-      <TiltSection project={project} update={update} />
+      <NoteSection note={note} noteRef={noteRef} update={update} />
+      <ThreadSection note={note} update={update} />
+      <FramesSection note={note} noteRef={noteRef} />
+      <TiltSection note={note} update={update} />
       <ViewSection />
     </aside>
   )
 }
 
-function NoteSection({ project, update }: { project: Project; update: (change: Change) => void }) {
-  const { note, thread } = project
+function NoteSection({ note, noteRef, update }: { note: Note; noteRef: NoteRef; update: (change: Change) => void }) {
   const setSize = (widthMm: number, heightMm: number) =>
-    update((p) => ({
-      ...p,
-      note: { ...p.note, preset: 'custom', widthMm, heightMm },
-      thread: { ...p.thread, xMm: clamp(p.thread.xMm, 0, widthMm) },
-    }))
+    update((n) => ({ ...n, widthMm, heightMm, thread: { ...n.thread, xMm: clamp(n.thread.xMm, 0, widthMm) } }))
 
   return (
     <Section title="Note">
-      <Segmented<NotePresetId>
-        value={note.preset}
-        options={[...NOTE_PRESETS.map((p) => ({ value: p.id, label: p.label })), { value: 'custom', label: 'Custom' }]}
-        onChange={(id) => {
-          if (id === 'custom') return update((p) => ({ ...p, note: { ...p.note, preset: 'custom' } }))
-          const next = presetNote(id)
-          update((p) => ({
-            ...p,
-            note: { ...next, faceImageId: p.note.faceImageId },
-            thread: { ...p.thread, xMm: clamp(p.thread.xMm, 0, next.widthMm) },
-          }))
-        }}
-      />
+      <Field label="Name">
+        <Input className="h-8" value={note.name} onChange={(e) => update((n) => ({ ...n, name: e.target.value }))} />
+      </Field>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Width">
-          <NumberField value={note.widthMm} min={20} max={250} step={1} unit="mm" onChange={(w) => setSize(w, note.heightMm)} />
+          <NumberField value={note.widthMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} unit="mm" onChange={(w) => setSize(w, note.heightMm)} />
         </Field>
         <Field label="Height">
-          <NumberField value={note.heightMm} min={20} max={250} step={1} unit="mm" onChange={(h) => setSize(note.widthMm, h)} />
+          <NumberField value={note.heightMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} unit="mm" onChange={(h) => setSize(note.widthMm, h)} />
         </Field>
       </div>
       <Field label="Colour">
-        <ColorField value={note.color} onChange={(color) => update((p) => ({ ...p, note: { ...p.note, color } }))} />
+        <ColorField value={note.color} onChange={(color) => update((n) => ({ ...n, color }))} />
       </Field>
       <Field label="Face artwork" hint="Optional. Export at trim size; it sits behind the thread.">
         <div className="flex gap-2">
@@ -76,27 +62,26 @@ function NoteSection({ project, update }: { project: Project; update: (change: C
             className="flex-1"
             onClick={async () => {
               const [file] = await pickFiles()
-              if (file) await setFaceImage(project, file)
+              if (file) await setFaceImage(noteRef, file)
             }}
           >
             <Upload />
             {note.faceImageId ? 'Replace' : 'Upload'}
           </Button>
           {note.faceImageId && (
-            <IconButton variant="outline" size="icon" label="Remove face artwork" onClick={() => void setFaceImage(project, undefined)}>
+            <IconButton variant="outline" size="icon" label="Remove face artwork" onClick={() => void setFaceImage(noteRef, undefined)}>
               <X />
             </IconButton>
           )}
         </div>
       </Field>
-      {thread.xMm > note.widthMm && <p className="text-xs text-destructive">The thread sits outside the note.</p>}
     </Section>
   )
 }
 
-function ThreadSection({ project, update }: { project: Project; update: (change: Change) => void }) {
-  const { note, thread } = project
-  const set = (patch: Partial<Project['thread']>) => update((p) => ({ ...p, thread: { ...p.thread, ...patch } }))
+function ThreadSection({ note, update }: { note: Note; update: (change: Change) => void }) {
+  const { thread } = note
+  const set = (patch: Partial<Note['thread']>) => update((p) => ({ ...p, thread: { ...p.thread, ...patch } }))
 
   return (
     <Section title="Thread">
@@ -121,9 +106,6 @@ function ThreadSection({ project, update }: { project: Project; update: (change:
       <div className="-mt-1 flex gap-1.5">
         <Button variant="outline" size="sm" onClick={() => set({ xMm: note.widthMm / 2 })}>
           Centre
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => set({ xMm: defaultThreadX(note.widthMm) })}>
-          Right of centre
         </Button>
       </div>
       <RangeField
@@ -160,8 +142,8 @@ function ThreadSection({ project, update }: { project: Project; update: (change:
   )
 }
 
-function FramesSection({ project }: { project: Project }) {
-  const { frames, thread } = project
+function FramesSection({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
+  const { frames, thread } = note
   const full = frames.length >= MAX_FRAMES
 
   return (
@@ -179,22 +161,22 @@ function FramesSection({ project }: { project: Project }) {
                   aria-label="Frame name"
                   className="h-6 min-w-0 flex-1 border-transparent px-1 text-xs shadow-none hover:border-input"
                   value={frame.name}
-                  onChange={(e) => updateFrame(project.id, frame.id, { name: e.target.value })}
+                  onChange={(e) => updateFrame(noteRef, frame.id, { name: e.target.value })}
                 />
               </div>
               {frame.kind === 'color' ? (
-                <ColorField value={frame.color} onChange={(color) => updateFrame(project.id, frame.id, { color })} />
+                <ColorField value={frame.color} onChange={(color) => updateFrame(noteRef, frame.id, { color })} />
               ) : (
                 <span className="text-[11px] text-muted-foreground">Image</span>
               )}
             </div>
             <div className="flex flex-col">
-              <IconButton size="icon-xs" label="Move up" disabled={i === 0} onClick={() => moveFrame(project.id, frame.id, -1)}>
+              <IconButton size="icon-xs" label="Move up" disabled={i === 0} onClick={() => moveFrame(noteRef, frame.id, -1)}>
                 <ChevronUp />
               </IconButton>
               <IconButton size="icon-xs" label="Move down"
                 disabled={i === frames.length - 1}
-                onClick={() => moveFrame(project.id, frame.id, 1)}
+                onClick={() => moveFrame(noteRef, frame.id, 1)}
               >
                 <ChevronDown />
               </IconButton>
@@ -203,14 +185,14 @@ function FramesSection({ project }: { project: Project }) {
               <IconButton size="icon-xs" label={frame.kind === 'color' ? 'Use an image instead' : 'Replace image'}
                 onClick={async () => {
                   const [file] = await pickFiles()
-                  if (file) await replaceFrameImage(project.id, frame.id, file)
+                  if (file) await replaceFrameImage(noteRef, frame.id, file)
                 }}
               >
                 <RefreshCw />
               </IconButton>
               <IconButton size="icon-xs" label={frames.length <= MIN_FRAMES ? `A thread needs at least ${MIN_FRAMES} frames` : 'Delete frame'}
                 disabled={frames.length <= MIN_FRAMES}
-                onClick={() => void deleteFrame(project.id, frame.id)}
+                onClick={() => void deleteFrame(noteRef, frame.id)}
               >
                 <Trash2 />
               </IconButton>
@@ -225,13 +207,13 @@ function FramesSection({ project }: { project: Project }) {
           disabled={full && !frames.every((f) => f.kind === 'color')}
           onClick={async () => {
             const files = await pickFiles({ multiple: true })
-            if (files.length) await addImageFrames(project.id, files)
+            if (files.length) await addImageFrames(noteRef, files)
           }}
         >
           <ImagePlus />
           Upload images
         </Button>
-        <Button variant="outline" disabled={full} onClick={() => addColorFrame(project.id)}>
+        <Button variant="outline" disabled={full} onClick={() => addColorFrame(noteRef)}>
           <Palette />
           Colour
         </Button>
@@ -244,10 +226,10 @@ function FramesSection({ project }: { project: Project }) {
   )
 }
 
-function TiltSection({ project, update }: { project: Project; update: (change: Change) => void }) {
-  const { tilt } = project
+function TiltSection({ note, update }: { note: Note; update: (change: Change) => void }) {
+  const { tilt } = note
   const { source, target, angle, wobbleSpeed, springBack, perspective, sheen } = useTilt()
-  const set = (patch: Partial<Project['tilt']>) => update((p) => ({ ...p, tilt: { ...p.tilt, ...patch } }))
+  const set = (patch: Partial<Note['tilt']>) => update((p) => ({ ...p, tilt: { ...p.tilt, ...patch } }))
 
   return (
     <Section title="Tilt">
