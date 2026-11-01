@@ -2,9 +2,8 @@ import { ArrowDown, ArrowUp, MoreHorizontal, Plus, Trash2, X } from 'lucide-reac
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { cn } from '@/lib/utils'
 import { IconButton, ScrubField } from '../components/controls'
-import { SWEEP_MAX, type LensState, type Tilt2 } from '../lib/lens'
+import { SWEEP_MAX, type LensState } from '../lib/lens'
 import {
   MOVES_MAX,
   MOVE_KINDS,
@@ -15,7 +14,6 @@ import {
   movesAxes,
   movesOf,
   newMove,
-  planPath,
   playbackPlan,
 } from '../lib/moves'
 import { HOLD_LIMITS, PLAYBACK_CURVES, SPEED_LIMITS, playbackEase, playbackSettings } from '../lib/playback'
@@ -25,7 +23,7 @@ import { saveTilt } from './playbackActions'
 const presetName = (kind: PlaybackMove['kind']) => MOVE_KINDS.find((k) => k.value === kind)?.label.slice(2) ?? 'Move'
 
 /**
- * Playback settings: presets and saved recordings on the left, added to the playlist on the right, which
+ * Playback settings: one list of moves (presets, then saved recordings) on the left, added to the playlist on the right, which
  * plays in order and loops; the motion and frame settings sit under the playlist.
  */
 export function PlaybackPanel({ projectId, tilt, lens }: { projectId: string; tilt: TiltSettings; lens: LensState }) {
@@ -43,34 +41,16 @@ export function PlaybackPanel({ projectId, tilt, lens }: { projectId: string; ti
 
   return (
     <div className="flex gap-3">
-      <div className="flex w-[176px] shrink-0 flex-col gap-3">
-        <Section title="Presets">
-          <div className="grid grid-cols-2 gap-1.5">
+      <div className="flex w-[168px] shrink-0 flex-col gap-3">
+        <Section title="Moves">
+          <ul className="flex max-h-[260px] flex-col gap-0.5 overflow-y-auto">
             {MOVE_KINDS.map((k) => (
-              <button
-                key={k.value}
-                type="button"
-                disabled={full}
-                title={`Add ${presetName(k.value).toLowerCase()} to the playlist`}
-                onClick={() => add(newMove(k.value))}
-                className="group flex flex-col items-center gap-1 rounded-md border border-transparent bg-muted/60 p-1.5 text-[11px] outline-none hover:border-border focus-visible:border-ring disabled:opacity-50"
-              >
-                <PathThumb path={pathOf({ id: k.value, kind: k.value }, tilt, lens)} limit={lens.viewDeg} className="size-10" />
-                {presetName(k.value)}
-              </button>
+              <LibraryRow key={k.value} name={presetName(k.value)} disabled={full} onAdd={() => add(newMove(k.value))} />
             ))}
-          </div>
-        </Section>
-        <Section title="Recordings">
-          {recordings.length ? (
-            <ul className="flex max-h-[168px] flex-col gap-1 overflow-y-auto">
-              {recordings.map((r) => (
-                <RecordingRow key={r.id} recording={r} tilt={tilt} lens={lens} disabled={full} onAdd={() => add(moveFromRecording(r))} onDelete={() => removeRecording(r.id)} />
-              ))}
-            </ul>
-          ) : (
-            <div className="rounded-md bg-muted/40 px-2 py-3 text-center text-[11px] text-muted-foreground">None yet</div>
-          )}
+            {recordings.map((r) => (
+              <LibraryRow key={r.id} name={r.name} seconds={gestureSeconds(r)} disabled={full} onAdd={() => add(moveFromRecording(r))} onDelete={() => removeRecording(r.id)} />
+            ))}
+          </ul>
         </Section>
       </div>
 
@@ -85,7 +65,6 @@ export function PlaybackPanel({ projectId, tilt, lens }: { projectId: string; ti
                 index={i}
                 count={moves.length}
                 move={move}
-                tilt={tilt}
                 lens={lens}
                 recordings={recordings}
                 onChange={(next) => editMoves((list) => list.map((m, j) => (j === i ? next(m) : m)))}
@@ -118,46 +97,31 @@ function Section({ title, aside, children }: { title: string; aside?: React.Reac
   )
 }
 
-const pathOf = (move: PlaybackMove, tilt: TiltSettings, lens: LensState) => planPath(playbackPlan({ ...tilt, holdSeconds: 0, moves: [move] }, lens))
-
-/** A move's path on a small tilt pad: centre is flat, up is tilting up */
-function PathThumb({ path, limit, className }: { path: Tilt2[]; limit: number; className?: string }) {
-  const reach = Math.max(limit, ...path.map((p) => Math.max(Math.abs(p.x), Math.abs(p.y))))
-  const d = path.map((p, i) => `${i ? 'L' : 'M'}${(20 + (p.x / reach) * 16).toFixed(1)},${(20 - (p.y / reach) * 16).toFixed(1)}`).join(' ')
-  return (
-    <svg viewBox="0 0 40 40" className={cn('shrink-0 rounded bg-background/70 text-primary', className)} aria-hidden>
-      <path d="M20 4V36M4 20H36" stroke="currentColor" strokeOpacity="0.12" />
-      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function RecordingRow({ recording, tilt, lens, disabled, onAdd, onDelete }: {
-  recording: Recording
-  tilt: TiltSettings
-  lens: LensState
+/** One move to add to the playlist: a preset, or a recording, which can also be deleted */
+function LibraryRow({ name, seconds, disabled, onAdd, onDelete }: {
+  name: string
+  seconds?: number
   disabled: boolean
   onAdd: () => void
-  onDelete: () => void
+  onDelete?: () => void
 }) {
   return (
-    <li className="flex items-center gap-1 rounded-md bg-muted/60 p-1 pr-0.5">
-      <PathThumb path={pathOf(moveFromRecording(recording), tilt, lens)} limit={lens.viewDeg} className="size-7" />
-      <div className="min-w-0 flex-1 leading-tight">
-        <div className="truncate text-xs">{recording.name}</div>
-        <div className="text-[10px] text-muted-foreground tabular-nums">{Math.round(gestureSeconds(recording) * 10) / 10} s</div>
-      </div>
+    <li className="group flex h-8 items-center gap-1 rounded-md pr-0.5 pl-2 hover:bg-muted/60">
+      <button type="button" disabled={disabled} onClick={onAdd} title="Add to the playlist"
+        className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs outline-none disabled:opacity-50">
+        <span className="truncate">{name}</span>
+        {seconds !== undefined && <span className="text-[10px] text-muted-foreground tabular-nums">{Math.round(seconds * 10) / 10} s</span>}
+      </button>
+      {onDelete && <IconButton label="Delete recording" size="icon-xs" className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100" onClick={onDelete}><Trash2 /></IconButton>}
       <IconButton label="Add to playlist" size="icon-xs" disabled={disabled} onClick={onAdd}><Plus /></IconButton>
-      <IconButton label="Delete recording" size="icon-xs" onClick={onDelete}><Trash2 /></IconButton>
     </li>
   )
 }
 
-function PlaylistRow({ index, count, move, tilt, lens, recordings, onChange, onMove, onRemove }: {
+function PlaylistRow({ index, count, move, lens, recordings, onChange, onMove, onRemove }: {
   index: number
   count: number
   move: PlaybackMove
-  tilt: TiltSettings
   lens: LensState
   recordings: Recording[]
   onChange: (change: (m: PlaybackMove) => PlaybackMove) => void
@@ -168,9 +132,8 @@ function PlaylistRow({ index, count, move, tilt, lens, recordings, onChange, onM
   const axes = movesAxes(move)
   const name = move.kind === 'gesture' ? (recordings.find((r) => r.id === move.recordingId)?.name ?? 'Recording') : presetName(move.kind)
   return (
-    <li className="flex items-center gap-1.5 rounded-md bg-muted/40 p-1">
+    <li className="flex h-9 items-center gap-1.5 rounded-md bg-muted/40 px-1">
       <span className="w-3 shrink-0 text-center text-[10px] text-muted-foreground tabular-nums">{index + 1}</span>
-      <PathThumb path={pathOf(move, tilt, lens)} limit={lens.viewDeg} className="size-8" />
       <div className="min-w-0 flex-1 truncate text-xs">
         {name}
         {move.kind === 'gesture' && <span className="ml-1 text-[10px] text-muted-foreground tabular-nums">{Math.round(gestureSeconds(move) * 10) / 10} s</span>}
