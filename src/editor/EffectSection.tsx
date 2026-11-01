@@ -76,7 +76,7 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
   )
 
   return (
-    <Section title="Effect">
+    <Section nested title="Lens effect">
       <Select value={lens.effect} items={LENS_EFFECTS} onValueChange={(v) => { if (v) chooseEffect(v) }}>
         <SelectTrigger aria-label="Effect" className="w-full"><SelectValue /></SelectTrigger>
         <SelectContent alignItemWithTrigger={false}>

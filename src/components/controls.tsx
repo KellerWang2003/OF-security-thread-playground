@@ -93,10 +93,20 @@ export function ScrubField({
 
 const clampValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-/** One titled group of controls in the side panel */
-export function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+/** A top-level part of the banknote in the side panel (the banknote itself, the thread, later others) */
+export function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-3 border-b border-border/60 px-4 py-3">
+    <div className="flex flex-col border-b border-border/60 pt-3 pb-1">
+      <h2 className="px-4 text-[13px] font-medium">{title}</h2>
+      {children}
+    </div>
+  )
+}
+
+/** One titled set of controls in the side panel; inside a Group it drops its divider */
+export function Section({ title, action, nested = false, children }: { title: string; action?: ReactNode; nested?: boolean; children: ReactNode }) {
+  return (
+    <section className={cn('flex flex-col gap-3 px-4', nested ? 'py-2.5' : 'border-b border-border/60 py-3')}>
       <div className="flex h-5 items-center justify-between">
         <h2 className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">{title}</h2>
         {action}

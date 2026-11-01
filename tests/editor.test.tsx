@@ -54,7 +54,7 @@ describe('username workspace editor', () => {
     expect(screen.getByText('Renamed UI project', { exact: true })).toBeDefined()
     expect(screen.getAllByText('1 banknote')).toHaveLength(2)
   })
-  it('edits and deletes canvas windows, undoes deletion, and preserves sections across continuous mode', async () => {
+  it('edits windows without an edit mode, undoes deletion, and preserves sections when windows are off', async () => {
     vi.stubGlobal('ResizeObserver', class {
       callback: ResizeObserverCallback
       constructor(callback: ResizeObserverCallback) { this.callback = callback }
@@ -69,9 +69,10 @@ describe('username workspace editor', () => {
     render(<TooltipProvider><App /></TooltipProvider>)
     await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
     await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
-    await user.click(screen.getByRole('button', { name: 'Edit windows', exact: true }))
+    const row = (n: number) => screen.getByRole('button', { name: new RegExp(`^Window ${n},`) })
+    expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
+    await user.click(row(2))
     expect(screen.getByRole('group', { name: 'Edit thread windows' })).toBeDefined()
-    await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
     const start = screen.getByTitle('Visible section starts here').querySelector('input')!
     fireEvent.change(start, { target: { value: '16' } })
     expect(start.value).toBe('16')
@@ -81,14 +82,19 @@ describe('username workspace editor', () => {
     await user.click(screen.getByRole('button', { name: 'Undo', exact: true }))
     await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
     expect(screen.getByTitle('Visible section starts here').querySelector('input')!.value).toBe('16')
-    await user.click(screen.getByRole('button', { name: 'Done editing', exact: true }))
+    // Clicking the banknote away from its windows ends editing, and the banknote stays selected
+    fireEvent.pointerDown(document.querySelector('[data-note-body]')!, { button: 0, pointerId: 1 })
+    fireEvent.pointerUp(document.querySelector('[data-note-body]')!, { button: 0, pointerId: 1 })
     expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'Continuous', exact: true }))
-    expect(screen.queryByRole('button', { name: 'Edit windows', exact: true })).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'Windowed', exact: true }))
-    await user.click(screen.getByRole('button', { name: 'Edit windows', exact: true }))
-    await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
+    expect(row(2)).toBeDefined()
+    await user.click(screen.getByRole('switch', { name: 'Windows' }))
+    expect(screen.queryByRole('button', { name: /^Window 2,/ })).toBeNull()
+    await user.click(screen.getByRole('switch', { name: 'Windows' }))
+    expect(screen.getByRole('group', { name: 'Edit thread windows' })).toBeDefined()
+    await user.click(row(2))
     expect(screen.getByTitle('Visible section starts here').querySelector('input')!.value).toBe('16')
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
     expect(saves).not.toHaveBeenCalled()
   })
   it('opens playback settings and applies saved fade, speed, curve and hold to every banknote', async () => {

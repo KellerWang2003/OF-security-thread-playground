@@ -37,6 +37,21 @@ export function fitSections(sections: ThreadWindow[], lengthMm: number): ThreadW
     })
 }
 
+/** A new window in the widest free stretch of the thread, a fifth of its length or the whole gap if smaller */
+export function newWindow(sections: ThreadWindow[], lengthMm: number): ThreadWindow | undefined {
+  let best = { start: 0, end: 0 }
+  let free = 0
+  for (const s of [...sections.toSorted((a, b) => a.startMm - b.startMm), { startMm: lengthMm, endMm: lengthMm }]) {
+    if (s.startMm - free > best.end - best.start) best = { start: free, end: s.startMm }
+    free = Math.max(free, s.endMm)
+  }
+  const gap = best.end - best.start
+  if (gap < WINDOW_STEP) return undefined
+  const size = clamp(Math.floor(Math.min(gap, lengthMm / 5) / WINDOW_STEP) * WINDOW_STEP, WINDOW_STEP, gap)
+  const startMm = clamp(snapWindow(best.start + (gap - size) / 2), best.start, best.end - size)
+  return { id: crypto.randomUUID(), startMm, endMm: startMm + size }
+}
+
 /** Keep an edited window inside the banknote and out of its neighbours. */
 export function sectionBounds(sections: ThreadWindow[], id: string, lengthMm: number) {
   const sorted = sections.toSorted((a, b) => a.startMm - b.startMm)

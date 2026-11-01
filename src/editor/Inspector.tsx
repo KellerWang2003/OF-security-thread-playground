@@ -1,12 +1,14 @@
 import { reportError } from '../cloud/notices'
-import { Download, ImageUp, RectangleHorizontal, RectangleVertical, Trash2, X } from 'lucide-react'
+import { Download, ImageUp, Plus, RectangleHorizontal, RectangleVertical, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ColorField, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
+import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
+import { ColorField, Group, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
 import { updateNote } from '../lib/store'
-import { fitSections, sectionBounds, WINDOW_STEP } from '../lib/thread'
+import { fitSections, newWindow, sectionBounds, WINDOW_STEP } from '../lib/thread'
 import type { Note } from '../lib/types'
 import { EffectSection } from './EffectSection'
 import { setFaceImage, type NoteRef } from './frameActions'
@@ -14,13 +16,12 @@ import { setFaceImage, type NoteRef } from './frameActions'
 type Change = (note: Note) => Note
 
 /** Right: the selected note's properties, Figma style */
-export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChange, selectedWindowId, onWindowSelect, onExport }: {
+export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onExport }: {
   note: Note
   onExport: () => void
   noteRef: NoteRef
-  editingWindows: boolean
-  onEditingWindowsChange: (editing: boolean) => void
   selectedWindowId?: string
+  /** Selecting a window edits it on the canvas; undefined leaves window editing */
   onWindowSelect: (id: string | undefined) => void
 }) {
   const update = (change: Change) => updateNote(noteRef.projectId, noteRef.noteId, change)
@@ -34,6 +35,24 @@ export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChang
   const bounds = sectionBounds(windows.sections, selectedWindowId ?? '', threadLength)
   const updateWindow = (patch: { startMm?: number; endMm?: number }) =>
     setWindows({ sections: windows.sections.map((s) => s.id === selectedWindowId ? { ...s, ...patch } : s) })
+  const format = (mm: number) => (Math.round(mm * 10) / 10).toString()
+  const addWindow = () => {
+    const section = newWindow(windows.sections, threadLength)
+    if (!section) return
+    setWindows({ sections: [...windows.sections, section].toSorted((a, b) => a.startMm - b.startMm) })
+    onWindowSelect(section.id)
+  }
+  // Turning windows on shows the first one ready to adjust, adding one when there are none
+  const setWindowed = (enabled: boolean) => {
+    if (!enabled) {
+      setWindows({ enabled })
+      onWindowSelect(undefined)
+      return
+    }
+    const first = windows.sections.at(0) ?? newWindow([], threadLength)
+    setWindows({ enabled, sections: windows.sections.length ? windows.sections : first ? [first] : [] })
+    if (first) onWindowSelect(first.id)
+  }
   const acrossOf = (n: Pick<Note, 'widthMm' | 'heightMm'>, direction: Note['thread']['direction']) =>
     direction === 'vertical' ? n.widthMm : n.heightMm
   const setSize = (widthMm: number, heightMm: number) =>
@@ -73,7 +92,8 @@ export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChang
         <Button variant="outline" size="sm" onClick={onExport}><Download />Export</Button>
       </div>
 
-      <Section title="Note">
+      <Group title="Banknote">
+      <Section nested title="Size">
         <Segmented
           value={portrait ? 'portrait' : 'landscape'}
           options={[
@@ -90,7 +110,7 @@ export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChang
         </div>
       </Section>
 
-      <Section title="Background">
+      <Section nested title="Background">
         <Segmented
           value={note.background}
           options={[
@@ -131,8 +151,10 @@ export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChang
           </div>
         )}
       </Section>
+      </Group>
 
-      <Section title="Thread">
+      <Group title="Security thread">
+      <Section nested title="Placement">
         <Segmented
           value={thread.direction}
           options={[
@@ -163,6 +185,9 @@ export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChang
             onChange={(positionMm) => setThread({ positionMm })}
           />
         </div>
+      </Section>
+
+      <Section nested title="Artwork">
         <SwitchField
           label="Background"
           checked={!!thread.backgroundColor}
@@ -183,38 +208,50 @@ export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChang
         />
       </Section>
 
-      <Section title="Windows">
-        <Segmented
-          value={windows.enabled ? 'windowed' : 'continuous'}
-          options={[{ value: 'continuous', label: 'Continuous' }, { value: 'windowed', label: 'Windowed' }]}
-          onChange={(mode) => {
-            setWindows({ enabled: mode === 'windowed' })
-            if (mode === 'continuous') onEditingWindowsChange(false)
-          }}
-        />
-        {windows.enabled && (
-          <>
-            <Button variant={editingWindows ? 'secondary' : 'outline'} size="sm" aria-pressed={editingWindows}
-              onClick={() => onEditingWindowsChange(!editingWindows)}>
-              {editingWindows ? 'Done editing' : 'Edit windows'}
-            </Button>
-            {editingWindows && selectedWindow && (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  <ScrubField label="Start" title="Visible section starts here" value={selectedWindow.startMm} min={bounds.min} max={selectedWindow.endMm - Math.min(WINDOW_STEP, selectedWindow.endMm - selectedWindow.startMm)} step={WINDOW_STEP} unit="mm" onChange={(startMm) => updateWindow({ startMm })} />
-                  <ScrubField label="End" title="Visible section ends here" value={selectedWindow.endMm} min={selectedWindow.startMm + Math.min(WINDOW_STEP, selectedWindow.endMm - selectedWindow.startMm)} max={bounds.max} step={WINDOW_STEP} unit="mm" onChange={(endMm) => updateWindow({ endMm })} />
+      <Section nested title="Windows" action={
+        <div className="flex items-center gap-1">
+          {windows.enabled && (
+            <IconButton label="Add window" size="icon-xs" disabled={!newWindow(windows.sections, threadLength)} onClick={addWindow}>
+              <Plus />
+            </IconButton>
+          )}
+          <Switch aria-label="Windows" checked={windows.enabled} onCheckedChange={setWindowed} />
+        </div>
+      }>
+        {windows.enabled && windows.sections.length > 0 && (
+          <div className="-mx-1.5 flex flex-col">
+            {windows.sections.map((section, i) => {
+              const selected = section.id === selectedWindowId
+              return (
+                <div key={section.id}>
+                  <div className={cn('flex items-center gap-0.5 rounded-md', selected && 'bg-muted')}>
+                    <Button variant="ghost" size="sm" aria-pressed={selected} aria-label={`Window ${i + 1}, ${format(section.startMm)}–${format(section.endMm)} mm`} className="flex-1 justify-between px-1.5 font-normal hover:bg-transparent aria-pressed:bg-transparent"
+                      onClick={() => onWindowSelect(selected ? undefined : section.id)}>
+                      <span>Window {i + 1}</span>
+                      <span className="text-muted-foreground tabular-nums">{format(section.startMm)}–{format(section.endMm)} mm</span>
+                    </Button>
+                    {selected && (
+                      <IconButton label="Delete window" size="icon-xs" onClick={() => {
+                        setWindows({ sections: windows.sections.filter((s) => s.id !== section.id) })
+                        onWindowSelect(undefined)
+                      }}><Trash2 /></IconButton>
+                    )}
+                  </div>
+                  {selected && selectedWindow && (
+                    <div className="grid grid-cols-2 gap-2 px-1.5 pt-1.5 pb-2">
+                      <ScrubField label="Start" title="Visible section starts here" value={selectedWindow.startMm} min={bounds.min} max={selectedWindow.endMm - Math.min(WINDOW_STEP, selectedWindow.endMm - selectedWindow.startMm)} step={WINDOW_STEP} unit="mm" onChange={(startMm) => updateWindow({ startMm })} />
+                      <ScrubField label="End" title="Visible section ends here" value={selectedWindow.endMm} min={selectedWindow.startMm + Math.min(WINDOW_STEP, selectedWindow.endMm - selectedWindow.startMm)} max={bounds.max} step={WINDOW_STEP} unit="mm" onChange={(endMm) => updateWindow({ endMm })} />
+                    </div>
+                  )}
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => {
-                  setWindows({ sections: windows.sections.filter((s) => s.id !== selectedWindowId) })
-                  onWindowSelect(undefined)
-                }}><Trash2 />Delete window</Button>
-              </>
-            )}
-          </>
+              )
+            })}
+          </div>
         )}
       </Section>
 
       <EffectSection projectId={noteRef.projectId} note={note} />
+      </Group>
     </Panel>
   )
 }

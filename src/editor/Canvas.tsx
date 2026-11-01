@@ -68,6 +68,7 @@ export function Canvas({
   editingWindows = false,
   selectedWindowId,
   onWindowSelect,
+  onExitWindows,
   onExport,
   onEditWindow,
 }: {
@@ -80,6 +81,7 @@ export function Canvas({
   editingWindows?: boolean
   selectedWindowId?: string
   onWindowSelect: (id: string | undefined) => void
+  onExitWindows?: () => void
   onExport: () => void
   /** A click on a thread window opens it for editing */
   onEditWindow?: (noteId: string, windowId: string) => void
@@ -185,10 +187,8 @@ export function Canvas({
       onPointerDown={(e) => {
         const v = viewRef.current
         if (!v) return
-        if (editingWindows && noteAt(e.target, 'data-note-body') === selectedId) {
-          onWindowSelect(undefined)
-          return
-        }
+        // A click on the banknote outside the thread's windows ends window editing and tilts as usual
+        if (editingWindows && noteAt(e.target, 'data-note-body') === selectedId) onExitWindows?.()
         // Freeze the fitted view, or moving a note would refit the canvas under the pointer
         if (!view) setView(v)
         e.currentTarget.setPointerCapture(e.pointerId)
