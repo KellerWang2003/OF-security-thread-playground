@@ -3,6 +3,9 @@ import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setTilt, useTilt, useTiltLoop } from '../src/tilt/tilt'
 import { cyclePhase, frameMix, frameSpans, sliceRange } from '../src/lib/frames'
+import { lensState } from '../src/lib/lens'
+
+const lensFor = (cycleDeg: number) => lensState({ cycleDeg, transition: 0 })
 
 let now = 0
 let nextId = 0
@@ -31,7 +34,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('flat-to-upward playback', () => {
   it.each([30, 75, 120])('reaches the full %s° cycle, returns flat, and never tilts below it', (cycle) => {
-    renderHook(() => useTiltLoop(cycle))
+    renderHook(() => useTiltLoop(lensFor(cycle), ['y']))
     setTilt({ source: 'wobble' })
     tick(20)
     expect(useTilt.getState().angle).toBe(0)
@@ -49,7 +52,7 @@ describe('flat-to-upward playback', () => {
     ['ease-in', 0.04],
     ['ease-out', 0.36],
   ] as const)('uses the %s curve while still reaching the full tilt', (curve, expected) => {
-    renderHook(() => useTiltLoop(30, { curve }))
+    renderHook(() => useTiltLoop(lensFor(30), ['y'], { curve }))
     setTilt({ source: 'wobble' })
     tick(20)
     advance(200)
@@ -59,7 +62,7 @@ describe('flat-to-upward playback', () => {
   })
 
   it('changes speed during playback without restarting the motion', () => {
-    const { rerender } = renderHook(({ speed }) => useTiltLoop(30, { speed, curve: 'linear' }), { initialProps: { speed: 1 } })
+    const { rerender } = renderHook(({ speed }) => useTiltLoop(lensFor(30), ['y'], { speed, curve: 'linear' }), { initialProps: { speed: 1 } })
     setTilt({ source: 'wobble' })
     tick(20)
     advance(200)
@@ -74,7 +77,7 @@ describe('flat-to-upward playback', () => {
   })
 
   it('holds at both ends for the requested time', () => {
-    renderHook(() => useTiltLoop(30, { curve: 'linear', holdSeconds: 0.4 }))
+    renderHook(() => useTiltLoop(lensFor(30), ['y'], { curve: 'linear', holdSeconds: 0.4 }))
     setTilt({ source: 'wobble' })
     tick(20)
     advance(1000)
@@ -90,7 +93,7 @@ describe('flat-to-upward playback', () => {
   })
 
   it('holds the current angle on pause and starts the next play run flat', () => {
-    renderHook(() => useTiltLoop(30))
+    renderHook(() => useTiltLoop(lensFor(30), ['y']))
     setTilt({ source: 'wobble' })
     tick(20)
     advance(500)
@@ -105,7 +108,7 @@ describe('flat-to-upward playback', () => {
   })
 
   it('can scrub to the full cycle while retaining negative manual tilt', () => {
-    renderHook(() => useTiltLoop(120))
+    renderHook(() => useTiltLoop(lensFor(120), ['y']))
     setTilt({ source: 'slider', target: 120 })
     advance(2000)
     expect(useTilt.getState().angle).toBeCloseTo(120, 1)

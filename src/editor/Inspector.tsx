@@ -8,6 +8,7 @@ import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
 import { updateNote } from '../lib/store'
 import { fitSections, sectionBounds, WINDOW_STEP } from '../lib/thread'
 import type { Note } from '../lib/types'
+import { EffectSection } from './EffectSection'
 import { setFaceImage, type NoteRef } from './frameActions'
 
 type Change = (note: Note) => Note
@@ -213,6 +214,7 @@ export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChang
         )}
       </Section>
 
+      <EffectSection projectId={noteRef.projectId} note={note} />
     </Panel>
   )
 }

@@ -1,5 +1,5 @@
 import { reportError } from '../cloud/notices'
-import { ArrowLeft, ArrowRight, ImagePlus, MoreHorizontal, Palette, Pause, Play, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, EyeOff, ImagePlus, MoreHorizontal, Palette, Pause, Play, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,7 +15,8 @@ import { cn } from '@/lib/utils'
 import { IconButton, Panel, ScrubField } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
 import { HOLD_LIMITS, PLAYBACK_CURVES, SPEED_LIMITS, advancePlayback, playbackEase, playbackSettings } from '../lib/playback'
-import { clamp, cyclePhase, frameMix, frameSpans } from '../lib/frames'
+import { clamp, cyclePhase } from '../lib/frames'
+import { framesReached, lensMix, lensState, reachShare, respondsTo, tiltForPosition, primaryAxis } from '../lib/lens'
 import { pickFiles } from '../lib/images'
 import { CYCLE_LIMITS, DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
 import { updateProject } from '../lib/store'
@@ -73,7 +74,7 @@ export function TimelineBar({
         {playing ? <Pause /> : <Play />}
       </IconButton>
 
-      <FrameSettings projectId={projectId} tilt={(note ?? notes.at(0))?.tilt ?? DEFAULT_TILT} />
+      <FrameSettings projectId={projectId} note={note ?? notes.at(0)} />
       {note && noteRef && <FrameTrack note={note} noteRef={noteRef} />}
     </Panel>
   )
@@ -91,8 +92,18 @@ function playbackMotionPath(speed: number, curve: NonNullable<Note['tilt']['curv
   return points.join(' ')
 }
 
+const PLAY_TILTS: { value: 'y' | 'x' | 'both'; label: string }[] = [
+  { value: 'y', label: 'Up/down' },
+  { value: 'x', label: 'Side to side' },
+  { value: 'both', label: 'One after the other' },
+]
+
 /** Project-wide playback controls, shared by every banknote. */
-function FrameSettings({ projectId, tilt }: { projectId: string; tilt: Note['tilt'] }) {
+function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) {
+  const tilt = note?.tilt ?? DEFAULT_TILT
+  const lens = lensState(tilt, note?.frames)
+  const axis = primaryAxis(tilt, lens)
+  const both = respondsTo(lens, 'x') && respondsTo(lens, 'y')
   const setTiltSettings = (patch: Partial<Note['tilt']>) =>
     updateProject(projectId, (p) => ({ ...p, notes: p.notes.map((n) => ({ ...n, tilt: { ...n.tilt, ...patch } })) }))
   const { speed, curve, holdSeconds } = playbackSettings(tilt)
@@ -102,13 +113,13 @@ function FrameSettings({ projectId, tilt }: { projectId: string; tilt: Note['til
   return (
     <div className="flex w-[148px] shrink-0 flex-col justify-center gap-1.5">
       <ScrubField
-        label="Cycle"
-        title="Degrees of tilt for one full cycle of the frames"
-        value={tilt.cycleDeg}
+        label={both ? (axis === 'y' ? '↕ Cycle' : '↔ Cycle') : 'Cycle'}
+        title={axis === 'y' ? 'Degrees of up/down tilt for one full cycle of the frames' : 'Degrees of side tilt for one full cycle of the frames'}
+        value={Math.round((axis === 'y' ? lens.cycleY : lens.cycleX) ?? tilt.cycleDeg)}
         min={CYCLE_LIMITS.min}
         max={CYCLE_LIMITS.max}
         unit="°"
-        onChange={(cycleDeg) => setTiltSettings({ cycleDeg })}
+        onChange={(cycle) => setTiltSettings(axis === 'y' ? { cycleDeg: cycle } : { cycleXDeg: cycle })}
       />
       <Popover>
         <PopoverTrigger render={<Button variant="outline" size="sm" className="h-8 w-full gap-1.5 text-xs" />}>
@@ -116,6 +127,17 @@ function FrameSettings({ projectId, tilt }: { projectId: string; tilt: Note['til
         </PopoverTrigger>
         <PopoverContent side="top" align="start" sideOffset={12} className="w-[272px] gap-3 p-3">
           <PopoverTitle className="text-xs">Playback settings</PopoverTitle>
+          {both && (
+            <div className="space-y-1.5">
+              <div className="text-xs text-muted-foreground">Tilt</div>
+              <Select value={tilt.playTilt ?? 'y'} items={PLAY_TILTS} onValueChange={(next) => { if (next) setTiltSettings({ playTilt: next }) }}>
+                <SelectTrigger aria-label="Playback tilt" className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  {PLAY_TILTS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <ScrubField label="Fade" title="How much neighbouring frames blend into each other" value={Math.round(tilt.transition * 100)} min={0} max={100} step={5} unit="%" onChange={(v) => setTiltSettings({ transition: v / 100 })} />
           <ScrubField label="Speed" title="Playback speed multiplier; 1× takes two seconds for the full motion, before holds" value={speed} {...SPEED_LIMITS} unit="×" onChange={(next) => setTiltSettings({ speed: next })} />
           <div className="space-y-1.5">
@@ -153,14 +175,23 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const gesture = useRef<{ mode: 'scrub' } | { mode: 'resize'; frameId: string; startX: number; startLength: number } | null>(null)
   const [pxPerUnit, setPxPerUnit] = useState(ZOOM.initial)
   const angle = useTilt((s) => s.angle)
+  const angleX = useTilt((s) => s.angleX)
   const { frames, tilt } = note
-  const { current } = frameMix(angle, frameSpans(note), tilt.transition)
+  const lens = lensState(tilt, frames)
+  const { current } = lensMix(note, { x: angleX, y: angle }, lens)
+  const reachedY = framesReached(note, 'y', lens)
+  const reachedX = framesReached(note, 'x', lens)
+  const missed = (i: number) => [
+    ...(respondsTo(lens, 'y') && !reachedY.has(i) ? ['y' as const] : []),
+    ...(respondsTo(lens, 'x') && !reachedX.has(i) ? ['x' as const] : []),
+  ]
   const lengths = frames.map((f) => f.length)
   const totalLength = lengths.reduce((sum, l) => sum + l, 0)
   const starts = lengths.map((_, i) => lengths.slice(0, i).reduce((sum, l) => sum + l, 0))
   const x = (units: number) => PAD + units * pxPerUnit
-  const cycle = tilt.cycleDeg
-  const phase = cyclePhase(angle, cycle)
+  const position = (lens.cycleY ? (lens.dirY * angle) / lens.cycleY : 0) + (lens.cycleX ? (lens.dirX * angleX) / lens.cycleX : 0)
+  const phase = cyclePhase(position, 1)
+  const bars = (['y', 'x'] as const).filter((a) => respondsTo(lens, a)).map((a) => ({ axis: a, share: reachShare(lens, a) }))
 
   // Wheel: ⌘/Ctrl zooms the timeline, a plain vertical wheel scrolls it sideways
   useEffect(() => {
@@ -183,7 +214,8 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
     const rect = track.current?.getBoundingClientRect()
     if (!rect) return
     const u = clamp((clientX - rect.left - PAD) / (totalLength * pxPerUnit), 0, 1)
-    setTilt({ source: 'slider', target: u * cycle })
+    const at = tiltForPosition(lens, u)
+    setTilt({ source: 'slider', target: at.y, targetX: at.x })
   }
 
   return (
@@ -248,6 +280,15 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
                     {i + 1}
                   </span>
                 )}
+                {missed(i).length > 0 && (
+                  <span
+                    className="absolute bottom-0.5 left-1 flex items-center gap-0.5 rounded bg-background/80 px-1 text-[10px] font-medium"
+                    title={missed(i).map((a) => (a === 'y' ? 'Never seen tilting up or down' : 'Never seen tilting side to side')).join('; ')}
+                  >
+                    <EyeOff className="size-3" />
+                    {missed(i).map((a) => (a === 'y' ? '↕' : '↔')).join('')}
+                  </span>
+                )}
                 {(
                   <>
                     <FrameMenu frame={frame} index={i} count={frames.length} noteRef={noteRef} />
@@ -261,6 +302,16 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
               </div>
             )
           })}
+
+          {bars.length > 1 && bars.map(({ axis, share }, row) => (
+            // How far each tilt alone reaches from flat (frame 1's start) within the viewing range: forward
+            // along the cycle, and backward from its end, where tilting the other way lands
+            <div key={axis} className="pointer-events-none absolute h-0.5" style={{ top: 1 + row * 3, left: x(0), width: totalLength * pxPerUnit }}
+              title={axis === 'y' ? 'Up/down reach' : 'Side reach'}>
+              <div className={cn('absolute inset-y-0 left-0 rounded-full', axis === 'y' ? 'bg-sky-500' : 'bg-amber-500')} style={{ width: `${share * 100}%` }} />
+              <div className={cn('absolute inset-y-0 right-0 rounded-full', axis === 'y' ? 'bg-sky-500' : 'bg-amber-500')} style={{ width: `${share * 100}%` }} />
+            </div>
+          ))}
 
           <div className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: x(phase * totalLength) }}>
             <div className="absolute -top-0.5 left-1/2 size-2 -translate-x-1/2 rotate-45 bg-primary" />

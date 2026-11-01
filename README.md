@@ -14,7 +14,8 @@ npm run dev
 - **Banknotes:** a project holds any number of banknotes, like artboards. Each has its own name, size in mm (portrait or landscape), background (solid colour or an uploaded design), thread and frames.
 - **Thread:** vertical or horizontal, thickness 3 to 6 mm, position across the note, optional background colour, and individually editable windows. Choose Continuous or Windowed, then Edit windows to draw visible sections on the canvas, move them, or drag their ends. Sections snap to 0.5 mm; Start/End fields set exact positions, and Delete removes the selected section. Complete frame images stay upright, fill the thread's thickness at their own aspect ratio, and repeat to the banknote edge. Image gap sets the space between copies, defaulting to 0 mm; gaps show the thread background or the banknote underneath.
 - **Frames:** up to 5 per banknote, images or colours. Each frame has a length on the timeline; its share of the total is its share of the cycle. Replace, recolour, reorder or delete from a frame's ⋯ menu, or drop images on a banknote.
-- **Tilt:** back and forth only (horizontal lenses). Drag a banknote to tilt it up to ±60°, or press Play (Space toggles play/pause) to sweep from flat (0°) upward through the full Cycle angle and back to flat. **Cycle** (degrees for one full pass through the frames) and **Playback settings** (fade between frames, speed, motion curve, and a hold at each end) are shared by every banknote in the project. Past one cycle the frames loop.
+- **Tilt:** drag a banknote to tilt it within the Viewing range (±60° by default), or press Play (Space toggles play/pause) to sweep from flat (0°) through the full Cycle angle and back to flat. Frame 1 is always flat; **1 → 5** sets whether the frames play tilting down (the default for new projects) or up. **Cycle** (degrees for one full pass through the frames) and **Playback settings** (fade between frames, speed, motion curve, and a hold at each end) are shared by every banknote in the project. Past one cycle the frames loop.
+- **Lens effect** (one per project, in the right panel): Up/down, Side to side, Both ways, Reveal on one tilt, or Custom. A lens plays one sequence of frames; each tilt runs through it at its own cycle, and the lens angle follows from the two (tan angle = ↕ cycle ÷ ↔ cycle, `src/lib/lens.ts`). Reveal computes the slow tilt's cycle so a middle frame stays out of reach within the Viewing range. Custom sets each tilt's cycle, or the lens angle and lens cycle. Frames a tilt never reaches get an eye-off badge with ↕ or ↔ on the timeline and in the panel, and a tilt map shows the frame at every tilt. When side tilt responds, a second thumbwheel appears, the canvas drags both ways, and Playback can sweep ↕, ↔ or both.
 - **Export:** the Export button (top right of the canvas, or beside the banknote's name when one is selected) saves one playback loop as MP4 or GIF: Banknotes are ticked in a list, side by side by default with an option for separate files; resolution (720p to 4K for MP4, 360p to 1080p for GIF), frame rate, loops (MP4) and background (transparent for GIF) are adjustable. It uses the current Cycle and Playback settings. The banknotes are redrawn on a canvas (`src/lib/exportRender.ts`) to match the live view, then encoded in the browser (`src/lib/exportMedia.ts`, loaded only when exporting).
 - **Canvas:** every banknote sits on one canvas. Scroll, drag the empty canvas, or middle-drag to pan, pinch or ⌘-scroll to zoom (100% is about true size), drag a banknote's label to move it.
 
@@ -32,10 +33,10 @@ See [backend and save behavior](docs/SUPABASE.md) for schema, deployment, recove
 
 A full-screen canvas with floating panels:
 
-- **Left edge:** the tilt bar. Drag its ridges up or down to tilt every banknote; it stays at that angle. Type an angle to hold it exactly, double-click the ridges or press ↺ for flat, and use the arrow keys (Shift for 5°) when it's focused.
+- **Left edge:** the tilt bar. Drag its ridges up or down to tilt every banknote; it stays at that angle. When the lens responds to side tilt, a horizontal wheel sits above the bottom-left corner. Type an angle to hold it exactly, double-click the ridges or press ↺ for flat, and use the arrow keys (Shift for 5°) when it's focused.
 - **Top left:** back to Projects, the project name, and the collapsible Banknotes list (double-click to rename, + to add, duplicate, delete).
 - **Bottom:** play/pause, Cycle and a Playback settings popover, always. With a banknote selected, its frames follow as clips on a track: drag a frame's right edge to change its length, drag to scrub, scroll to move along, ⌘-scroll to zoom. The playhead shows where in the cycle the tilt is.
-- **Right, while a banknote is selected:** name, size and orientation, background, thread (direction, width, position, repeat) and windows.
+- **Right, while a banknote is selected:** name, size and orientation, background, thread (direction, width, position, repeat), windows and lens effect.
 
 ## UI
 
@@ -52,7 +53,7 @@ src/
                 controls.tsx = playground compositions of them; NoteView = the banknote and thread
   cloud/        username selection, scoped workspace API client, local outbox and conflict recovery
   tilt/         preview tilt state and the spring-smoothed tilt loop
-  lib/          types, defaults and migrations, legacy IndexedDB import, editor actions, frame maths, demo
+  lib/          types, defaults and migrations, lens maths (lens.ts), legacy IndexedDB import, editor actions, frame maths, demo
 ```
 
 ## Undo and redo
@@ -67,4 +68,4 @@ npm run lint
 npm run build
 ```
 
-Later: diagonal lenses, phone gyroscope, PNG and video export, then the Anima foil, Arc-en-Ciel and SPARK Flow PRIME as new layers.
+Later: phone gyroscope, PNG and video export, then the Anima foil, Arc-en-Ciel and SPARK Flow PRIME as new layers.

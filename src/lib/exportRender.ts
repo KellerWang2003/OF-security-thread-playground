@@ -1,4 +1,5 @@
-import { TILT_LIMIT, frameMix, frameSpans } from './frames'
+import { TILT_LIMIT } from './frames'
+import { lensMix, lensState, sweepAxes, sweepTarget, type Tilt2 } from './lens'
 import { loadImageUrl } from './images'
 import { advancePlayback, playbackEase, playbackSettings } from './playback'
 import { fitSections, imageTiles, threadLength } from './thread'
@@ -11,19 +12,40 @@ export const perspectiveFor = (note: Pick<Note, 'widthMm' | 'heightMm'>, scale: 
 /** Space around and between banknotes in an export, in mm */
 export const EXPORT_MARGIN_MM = 6
 
-/**
- * The angle of every video frame for `loops` passes of playback: flat, up through the cycle, back to flat,
- * with the project's speed, curve and holds. Uses the same maths as live playback.
- */
-export function playbackAngles(tilt: Note['tilt'], fps: number, loops = 1) {
+/** One sweep's easing at each video frame: 0 at flat, 1 at the end of the cycle, as live playback */
+function sweepProgress(tilt: Note['tilt'], fps: number, sweeps: number) {
   const { speed, curve, holdSeconds } = playbackSettings(tilt)
   const loopSeconds = 2 / speed + 2 * holdSeconds
-  const count = Math.max(1, Math.round(loopSeconds * loops * fps))
+  const count = Math.max(1, Math.round(loopSeconds * sweeps * fps))
   return Array.from({ length: count }, (_, i) => {
-    const { phase } = advancePlayback({ phase: 0, holdRemaining: 0 }, (i / fps) % loopSeconds, speed, holdSeconds)
-    return Math.max(0, tilt.cycleDeg) * playbackEase(phase <= 1 ? phase : 2 - phase, curve)
+    const t = i / fps
+    const { phase } = advancePlayback({ phase: 0, holdRemaining: 0 }, t % loopSeconds, speed, holdSeconds)
+    return { sweep: Math.floor(t / loopSeconds + 1e-9), k: playbackEase(phase <= 1 ? phase : 2 - phase, curve) }
   })
 }
+
+/**
+ * The angle of every video frame for `loops` passes of up/down playback: flat, up through the cycle, back to
+ * flat, with the project's speed, curve and holds. Uses the same maths as live playback.
+ */
+export function playbackAngles(tilt: Note['tilt'], fps: number, loops = 1) {
+  return sweepProgress(tilt, fps, loops).map(({ k }) => Math.max(0, tilt.cycleDeg) * k)
+}
+
+/**
+ * The tilt of every video frame for `loops` passes of the project's playback: each axis it sweeps in turn,
+ * flat → full cycle → flat, exactly as live playback.
+ */
+export function playbackTilts(note: Pick<Note, 'tilt' | 'frames'>, fps: number, loops = 1): Tilt2[] {
+  const lens = lensState(note.tilt, note.frames)
+  const axes = sweepAxes(note.tilt, lens)
+  return sweepProgress(note.tilt, fps, loops * axes.length).map(({ sweep, k }) => {
+    const end = sweepTarget(lens, axes[sweep % axes.length])
+    return { x: end.x * k, y: end.y * k }
+  })
+}
+
+const asTilt = (t: Tilt2 | number): Tilt2 => (typeof t === 'number' ? { x: 0, y: t } : t)
 
 /**
  * CSS rotateX(angle) about the note's centre under `perspective`: where a point `y` px from the centre lands
@@ -42,11 +64,21 @@ export function sourceRow(screenY: number, angleDeg: number, perspective: number
   return (screenY * perspective) / (perspective * Math.cos(a) + screenY * Math.sin(a))
 }
 
-/** The screen box a tilted note covers, relative to its centre */
-export function tiltedBounds(width: number, height: number, angleDeg: number, perspective: number) {
-  const top = projectRow(-height / 2, angleDeg, perspective)
-  const bottom = projectRow(height / 2, angleDeg, perspective)
-  return { top: top.y, bottom: bottom.y, halfWidth: (width / 2) * Math.max(top.scale, bottom.scale) }
+/**
+ * The screen box a tilted note covers, relative to its centre. A side tilt is rotateY: columns behave like
+ * rows do under rotateX, with the angle reversed (CSS turns the right edge away for positive angles).
+ */
+export function tiltedBounds(width: number, height: number, tilt: Tilt2 | number, perspective: number) {
+  const { x, y } = asTilt(tilt)
+  const top = projectRow(-height / 2, y, perspective)
+  const bottom = projectRow(height / 2, y, perspective)
+  const rows = { top: top.y, bottom: bottom.y, halfWidth: (width / 2) * Math.max(top.scale, bottom.scale) }
+  if (!x) return rows
+  const w = rows.halfWidth * 2
+  const left = projectRow(-w / 2, -x, perspective)
+  const right = projectRow(w / 2, -x, perspective)
+  const grow = Math.max(left.scale, right.scale)
+  return { top: rows.top * grow, bottom: rows.bottom * grow, halfWidth: Math.max(-left.y, right.y), left: left.y, right: right.y }
 }
 
 export interface NoteAssets {
@@ -89,8 +121,9 @@ function roundedRect(ctx: Ctx, width: number, height: number, radius: number) {
 }
 
 /** The flat note at `scale` px per mm, as NoteView draws it before it is turned in 3D */
-export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number, angle: number, options: { sheen: boolean; perspective: boolean }) {
-  const { thread, frames, tilt } = note
+export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number, tiltAt: Tilt2 | number, options: { sheen: boolean; perspective: boolean }) {
+  const { thread, frames } = note
+  const { x: angleX, y: angle } = asTilt(tiltAt)
   const mm = (value: number) => value * scale
   const width = mm(note.widthMm), height = mm(note.heightMm)
   ctx.save()
@@ -152,7 +185,7 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     }
     ctx.globalAlpha = 1
   }
-  const mix = frameMix(angle, frameSpans(note), tilt.transition)
+  const mix = lensMix(note, { x: angleX, y: angle })
   drawFrame(mix.base, 1)
   if (mix.blend > 0 && mix.next !== mix.base) drawFrame(mix.next, mix.blend)
 
@@ -191,14 +224,54 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, width, height)
   }
+  const tx = angleX / TILT_LIMIT
+  if (options.perspective && tx !== 0) {
+    // Turning sideways, as NoteView: the edge turning away darkens, the near edge catches the light
+    const gradient = ctx.createLinearGradient(0, 0, width, 0)
+    if (tx > 0) {
+      gradient.addColorStop(0, `rgba(255,255,255,${tx * 0.12})`)
+      gradient.addColorStop(1, `rgba(0,0,0,${tx * 0.08})`)
+    } else {
+      gradient.addColorStop(0, `rgba(0,0,0,${-tx * 0.08})`)
+      gradient.addColorStop(1, `rgba(255,255,255,${-tx * 0.12})`)
+    }
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, width, height)
+  }
   ctx.restore()
 }
 
+type Face = CanvasImageSource & { width: number; height: number }
+
 /**
- * Draws a flat face centred on (cx, cy), turned by rotateX(angle) under `perspective`. Each screen row
- * samples its source row, so the near edge widens and the far edge narrows like the CSS transform.
+ * Draws a flat face centred on (cx, cy), turned by rotateX(y) and rotateY(x) under `perspective`. Each screen
+ * row (or column, for a side tilt) samples its source row, so the near edge widens and the far edge narrows
+ * like the CSS transform. Playback only ever turns one axis at a time.
  */
-export function drawTilted(ctx: Ctx, face: CanvasImageSource & { width: number; height: number }, cx: number, cy: number, angle: number, perspective: number) {
+export function drawTilted(ctx: Ctx, face: Face, cx: number, cy: number, tilt: Tilt2 | number, perspective: number) {
+  const { x, y } = asTilt(tilt)
+  if (!x) return drawRows(ctx, face, cx, cy, y, perspective)
+  let source: Face = face
+  if (y) {
+    // Both axes: turn the rows first on a scratch canvas big enough for the result, then the columns
+    const b = tiltedBounds(face.width, face.height, y, perspective)
+    const scratch = new OffscreenCanvas(Math.ceil(b.halfWidth * 2), Math.ceil(Math.max(-b.top, b.bottom) * 2))
+    drawRows(scratch.getContext('2d')!, face, scratch.width / 2, scratch.height / 2, y, perspective)
+    source = scratch
+  }
+  // Columns under rotateY(x) are rows under rotateX(−x) with the axes swapped
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.transform(0, 1, 1, 0, 0, 0)
+  const swapped = new OffscreenCanvas(source.height, source.width)
+  const sctx = swapped.getContext('2d')!
+  sctx.transform(0, 1, 1, 0, 0, 0)
+  sctx.drawImage(source, 0, 0)
+  drawRows(ctx, swapped, 0, 0, -x, perspective)
+  ctx.restore()
+}
+
+function drawRows(ctx: Ctx, face: Face, cx: number, cy: number, angle: number, perspective: number) {
   const { width, height } = face
   if (angle === 0) {
     ctx.drawImage(face, cx - width / 2, cy - height / 2)
@@ -227,7 +300,7 @@ export interface ExportCell {
  * Banknotes side by side in a row, each in a cell wide and tall enough for its tilted shape at every angle,
  * centred vertically. Sizes are even, which video encoders need.
  */
-export function exportLayout(notes: Note[], scale: number, angles: number[], perspective: boolean) {
+export function exportLayout(notes: Note[], scale: number, angles: (Tilt2 | number)[], perspective: boolean) {
   const margin = EXPORT_MARGIN_MM * scale
   const cells = notes.map((note) => {
     const width = note.widthMm * scale, height = note.heightMm * scale
@@ -256,14 +329,14 @@ export function exportLayout(notes: Note[], scale: number, angles: number[], per
   return { width: even(x), height: even(height), exactWidth: x, exactHeight: height, cells: placed }
 }
 
-/** Renders one export frame: the background, then every banknote at `angle` */
+/** Renders one export frame: the background, then every banknote at tilt `angle` */
 export function drawExportFrame(
   ctx: Ctx,
   layout: ReturnType<typeof exportLayout>,
   assets: Map<string, NoteAssets>,
   faces: Map<string, OffscreenCanvas>,
   scale: number,
-  angle: number,
+  angle: Tilt2 | number,
   options: { sheen: boolean; perspective: boolean; background?: string },
 ) {
   ctx.clearRect(0, 0, layout.width, layout.height)
@@ -300,7 +373,7 @@ export const RESOLUTIONS = [
  * Px per mm that makes a file `height` px tall. The layout grows in proportion to its scale, so it is
  * measured once at 1 px per mm. Very wide rows are scaled down to stay within MAX_EXPORT_PX.
  */
-export function scaleForHeight(notes: Note[], angles: number[], perspective: boolean, height: number) {
+export function scaleForHeight(notes: Note[], angles: (Tilt2 | number)[], perspective: boolean, height: number) {
   const unit = exportLayout(notes, 1, angles, perspective)
   return Math.min(height / unit.exactHeight, MAX_EXPORT_PX / unit.exactWidth, MAX_EXPORT_PX / unit.exactHeight)
 }
@@ -310,7 +383,7 @@ export const exportGroups = (notes: Note[], separate: boolean) => (separate && n
 
 export function exportSize(notes: Note[], options: { height: number; fps: number; loops: number; perspective: boolean; separate: boolean }) {
   if (notes.length === 0) return { width: 0, height: 0, seconds: 0 }
-  const angles = playbackAngles(notes[0].tilt, options.fps, options.loops)
+  const angles = playbackTilts(notes[0], options.fps, options.loops)
   const layouts = exportGroups(notes, options.separate).map((group) =>
     exportLayout(group, scaleForHeight(group, angles, options.perspective, options.height), angles, options.perspective))
   return { width: Math.max(...layouts.map((l) => l.width)), height: Math.max(...layouts.map((l) => l.height)), seconds: angles.length / options.fps }

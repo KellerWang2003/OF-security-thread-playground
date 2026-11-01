@@ -1,6 +1,7 @@
 import { undoProject, redoProject, updateNote } from '../lib/store'
 import { beginHistoryGroup, endHistoryGroup, breakHistoryGroup } from '../lib/history'
 import { togglePlayback } from '../tilt/tilt'
+import { lensState, respondsTo } from '../lib/lens'
 import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -107,6 +108,9 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   }, [project.id])
 
   const note = project.notes.find((n) => n.id === selectedId)
+  // The lens is project-wide; any banknote's settings describe it
+  const reference = note ?? project.notes.at(0)
+  const lens = reference ? lensState(reference.tilt, reference.frames) : undefined
   const noteRef = note ? { projectId: project.id, noteId: note.id } : undefined
 
   const selectAndFocus = (noteId: string) => {
@@ -138,7 +142,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
           }} />
       )}
 
-      {!isEmpty && !editingWindows && <TiltRail />}
+      {!isEmpty && !editingWindows && <TiltRail limit={lens?.viewDeg} side={!!lens && respondsTo(lens, 'x')} />}
       <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} />
       {!isEmpty && (
         <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />

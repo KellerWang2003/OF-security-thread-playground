@@ -1,14 +1,14 @@
 import { DEFAULT_PLAYBACK, playbackSettings } from './playback'
 import { migrateWindows, threadLength } from './thread'
-import type { Frame, Note, Project } from './types'
+import type { Frame, Note, Project, TiltSettings } from './types'
 
 export const MIN_FRAMES = 2
 export const MAX_FRAMES = 5
 /** Timeline length of a new frame, in the timeline's own units */
 export const DEFAULT_LENGTH = 10
 export const LENGTH_LIMITS = { min: 1, max: 100 }
-export const CYCLE_LIMITS = { min: 2, max: 120 }
-export const DEFAULT_TILT = { ...DEFAULT_PLAYBACK, cycleDeg: 30, transition: 0 }
+export const CYCLE_LIMITS = { min: 2, max: 600 }
+export const DEFAULT_TILT: TiltSettings = { ...DEFAULT_PLAYBACK, cycleDeg: 30, transition: 0, effect: 'updown', runY: 'down', runX: 'right' }
 export const THREAD_WIDTH = { min: 3, max: 6, step: 0.5 }
 export const NOTE_SIZE = { min: 20, max: 250 }
 export const FRAME_COLORS = ['#D9A441', '#2E9C8F', '#C2456B', '#4A6FD1', '#7C4DBA']
@@ -79,6 +79,12 @@ function oldLength(frames: Frame[], frame: Frame) {
   return Math.max(LENGTH_LIMITS.min, Math.round((span / mean) * DEFAULT_LENGTH))
 }
 
+/** The optional lens settings, kept as saved; a project from before lenses has none and stays Up/down */
+function lensFields(tilt: TiltSettings): Partial<TiltSettings> {
+  const keys = ['effect', 'cycleXDeg', 'yOn', 'runY', 'runX', 'viewDeg', 'revealAxis', 'playTilt'] as const
+  return Object.fromEntries(keys.filter((k) => tilt[k] !== undefined).map((k) => [k, tilt[k]]))
+}
+
 /** Projects saved before notes existed held a single note's settings at the top level */
 export function migrateProject(raw: unknown): Project {
   const p = raw as Project & {
@@ -104,6 +110,7 @@ export function migrateProject(raw: unknown): Project {
       frames: raw.frames.map((f) => ({ ...f, length: f.length ?? oldLength(raw.frames, f) })),
       tilt: {
         ...playbackSettings(raw.tilt),
+        ...lensFields(raw.tilt),
         transition: raw.tilt.transition,
         cycleDeg:
           raw.tilt.cycleDeg ??

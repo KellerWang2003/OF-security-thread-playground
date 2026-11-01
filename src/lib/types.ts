@@ -45,6 +45,22 @@ export interface TiltSettings {
   cycleDeg: number
   /** 0 = hard cut between frames, 1 = crossfade across the whole slice */
   transition: number
+  /** What tilting does; absent on projects from before lenses, which are Up/down */
+  effect?: 'updown' | 'side' | 'both' | 'reveal' | 'custom'
+  /** Degrees of side tilt for one pass; null when side tilt does nothing (Custom) */
+  cycleXDeg?: number | null
+  /** Custom only: false when up/down tilt does nothing */
+  yOn?: boolean
+  /** Which way 1 → 5 plays on the up/down tilt; absent means up, as before lenses */
+  runY?: 'up' | 'down'
+  /** Which way 1 → 5 plays on the side tilt */
+  runX?: 'right' | 'left'
+  /** How far viewers tilt, each way, in degrees; also the manual tilt limit */
+  viewDeg?: number
+  /** Reveal only: the tilt that plays every frame */
+  revealAxis?: 'x' | 'y'
+  /** Which tilt playback sweeps: up/down, side to side, or one after the other */
+  playTilt?: 'x' | 'y' | 'both'
 }
 
 /** One banknote in a project, with its own size, thread and frames */

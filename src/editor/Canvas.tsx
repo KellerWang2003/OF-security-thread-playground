@@ -1,11 +1,12 @@
 import { runAction } from '../cloud/notices'
 import { Download, Maximize, Minus, Plus } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { IconButton } from '../components/controls'
 import { NoteView } from '../components/NoteView'
-import { TILT_LIMIT, clamp } from '../lib/frames'
+import { clamp } from '../lib/frames'
+import { lensState, respondsTo, sweepAxes } from '../lib/lens'
 import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
 import { setTilt, useTilt, useTiltLoop } from '../tilt/tilt'
@@ -30,7 +31,7 @@ interface View {
 type Gesture =
   | { mode: 'pan'; startX: number; startY: number; view: View; onBackground: boolean }
   | { mode: 'move'; noteId: string; startX: number; startY: number; noteX: number; noteY: number }
-  | { mode: 'tilt'; startX: number; startY: number; start: number }
+  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number }
   | { mode: 'thread'; noteId: string; startX: number; startY: number; startPosition: number; alongMm: number }
 
 function fitView(notes: Note[], size: { width: number; height: number }): View {
@@ -89,11 +90,14 @@ export function Canvas({
   const gesture = useRef<Gesture | null>(null)
   const [activeMode, setActiveMode] = useState<Gesture['mode']>()
   const [dropping, setDropping] = useState(false)
-  const { angle, source, perspective, sheen } = useTilt()
+  const { angle, angleX, source, perspective, sheen } = useTilt()
 
   const selected = notes.find((n) => n.id === selectedId)
   const reference = selected ?? notes.at(0)
-  useTiltLoop(reference?.tilt.cycleDeg ?? 30, reference?.tilt)
+  const lens = useMemo(() => (reference ? lensState(reference.tilt, reference.frames) : undefined), [reference])
+  const loopLens = lens ?? lensState({ cycleDeg: 30, transition: 0 })
+  const axes = useMemo(() => (reference && lens ? sweepAxes(reference.tilt, lens) : ['y' as const]), [reference, lens])
+  useTiltLoop(loopLens, axes, reference?.tilt, loopLens.viewDeg)
 
   // Until the first pan or zoom, the view simply fits every note
   const current = view ?? (size && notes.length ? fitView(notes, size) : undefined)
@@ -152,7 +156,7 @@ export function Canvas({
   // Editing windows pauses playback but leaves the view where it is, so you edit at the zoom you chose
   useEffect(() => {
     if (!editingWindows || !selected) return
-    setTilt({ source: 'slider', target: useTilt.getState().angle })
+    setTilt({ source: 'slider', target: useTilt.getState().angle, targetX: useTilt.getState().angleX })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingWindows, selectedId])
 
@@ -212,13 +216,15 @@ export function Canvas({
           onSelect(note.id)
           const s = useTilt.getState()
           const start = s.source === 'drag' ? s.target : s.angle
+          const startSide = s.source === 'drag' ? s.targetX : s.angleX
           gesture.current = {
             mode: 'tilt',
             startX: e.clientX,
             startY: e.clientY,
             start,
+            startSide,
           }
-          setTilt({ source: 'drag', target: start })
+          setTilt({ source: 'drag', target: start, targetX: startSide })
         }
         setActiveMode(gesture.current.mode)
       }}
@@ -247,15 +253,18 @@ export function Canvas({
           const snap = (mm: number) => Math.round(mm * 2) / 2
           updateNote(projectId, g.noteId, (n) => ({ ...n, x: snap(g.noteX + dx / scale), y: snap(g.noteY + dy / scale) }))
         } else {
-          // About 160 px of drag sweeps half the range
-          // Lenticular lenses respond to tilting back and forth, so only vertical drags tilt
-          // About 160 px of drag tilts the note 30°; past one cycle the frames loop
-          setTilt({ target: clamp(g.start - (dy * 30) / 160, -TILT_LIMIT, TILT_LIMIT) })
+          // About 160 px of drag tilts the note 30°; past one cycle the frames loop. Each direction only tilts
+          // when the lens responds to it, so a horizontal lens keeps today's up/down drag.
+          const limit = loopLens.viewDeg
+          setTilt({
+            target: respondsTo(loopLens, 'y') ? clamp(g.start - (dy * 30) / 160, -limit, limit) : 0,
+            targetX: respondsTo(loopLens, 'x') ? clamp(g.startSide + (dx * 30) / 160, -limit, limit) : 0,
+          })
         }
       }}
       onPointerUp={(e) => {
         const g = gesture.current
-        if (g?.mode === 'tilt' && useTilt.getState().springBack) setTilt({ target: 0 })
+        if (g?.mode === 'tilt' && useTilt.getState().springBack) setTilt({ target: 0, targetX: 0 })
         // A click on a window, without dragging, opens it for resizing
         if (g?.mode === 'thread' && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) {
           const note = notes.find((n) => n.id === g.noteId)
@@ -270,7 +279,7 @@ export function Canvas({
         setActiveMode(undefined)
       }}
       onPointerCancel={() => {
-        if (gesture.current?.mode === 'tilt' && useTilt.getState().springBack) setTilt({ target: 0 })
+        if (gesture.current?.mode === 'tilt' && useTilt.getState().springBack) setTilt({ target: 0, targetX: 0 })
         gesture.current = null
         setActiveMode(undefined)
       }}
@@ -320,7 +329,7 @@ export function Canvas({
                   source === 'wobble' || activeMode === 'tilt' || activeMode === 'move' ? 'outline-primary/5' : 'outline-primary/25',
                 )}
               >
-                <NoteView note={note} scale={scale} angle={angle} perspective={perspective && !(isSelected && editingWindows)} sheen={sheen} showWindowCuts={isSelected && editingWindows} />
+                <NoteView note={note} scale={scale} angle={angle} angleX={angleX} perspective={perspective && !(isSelected && editingWindows)} sheen={sheen} showWindowCuts={isSelected && editingWindows} />
                 {isSelected && editingWindows && note.thread.windows.enabled && (
                   <WindowEditor note={note} scale={scale} selectedId={selectedWindowId} onSelect={onWindowSelect}
                     onChange={(sections) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, windows: { ...n.thread.windows, sections } } }))} />
