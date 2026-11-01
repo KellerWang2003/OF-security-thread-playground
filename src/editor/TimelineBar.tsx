@@ -1,5 +1,5 @@
 import { reportError } from '../cloud/notices'
-import { ArrowLeft, ArrowRight, EyeOff, ImagePlus, MoreHorizontal, Palette, Pause, Play, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { ArrowLeft, Circle, Square, ArrowRight, EyeOff, ImagePlus, MoreHorizontal, Palette, Pause, Play, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -16,13 +16,13 @@ import { IconButton, Panel, ScrubField } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
 import { HOLD_LIMITS, PLAYBACK_CURVES, SPEED_LIMITS, advancePlayback, playbackEase, playbackSettings } from '../lib/playback'
 import { clamp, cyclePhase } from '../lib/frames'
-import { framesReached, lensMix, lensState, reachShare, respondsTo, tiltForPosition, primaryAxis } from '../lib/lens'
+import { framesReached, lensMix, lensState, reachShare, respondsTo, tiltForPosition } from '../lib/lens'
 import { pickFiles } from '../lib/images'
-import { CYCLE_LIMITS, DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
-import { playbackPlan } from '../lib/moves'
+import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
+import { MOVES_MAX, movesOf, playbackPlan } from '../lib/moves'
 import { updateProject } from '../lib/store'
 import type { Frame, Note } from '../lib/types'
-import { setTilt, togglePlayback, useTilt } from '../tilt/tilt'
+import { setRecording, setTilt, togglePlayback, useTilt } from '../tilt/tilt'
 import { MovesList } from './MovesList'
 import { addColorFrame, addImageFrames, deleteFrame, moveFrame, replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
 
@@ -98,8 +98,8 @@ function playbackMotionPath(speed: number, curve: NonNullable<Note['tilt']['curv
 function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) {
   const tilt = note?.tilt ?? DEFAULT_TILT
   const lens = lensState(tilt, note?.frames)
-  const axis = primaryAxis(tilt, lens)
-  const both = respondsTo(lens, 'x') && respondsTo(lens, 'y')
+  const recording = useTilt((s) => s.recording)
+  const full = movesOf(tilt, lens).length >= MOVES_MAX
   const loopSeconds = playbackPlan(tilt, lens).seconds
   const setTiltSettings = (patch: Partial<Note['tilt']>) =>
     updateProject(projectId, (p) => ({ ...p, notes: p.notes.map((n) => ({ ...n, tilt: { ...n.tilt, ...patch } })) }))
@@ -108,15 +108,17 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
 
   return (
     <div className="flex w-[148px] shrink-0 flex-col justify-center gap-1.5">
-      <ScrubField
-        label={both ? (axis === 'y' ? '↕ Cycle' : '↔ Cycle') : 'Cycle'}
-        title={axis === 'y' ? 'Degrees of up/down tilt for one full cycle of the frames' : 'Degrees of side tilt for one full cycle of the frames'}
-        value={Math.round((axis === 'y' ? lens.cycleY : lens.cycleX) ?? tilt.cycleDeg)}
-        min={CYCLE_LIMITS.min}
-        max={CYCLE_LIMITS.max}
-        unit="°"
-        onChange={(cycle) => setTiltSettings(axis === 'y' ? { cycleDeg: cycle } : { cycleXDeg: cycle })}
-      />
+      <Button
+        variant={recording ? 'destructive' : 'outline'}
+        size="sm"
+        className="h-8 w-full gap-1.5 text-xs"
+        title={recording ? 'Cancel recording' : 'Drag on the tilt pad to record a playback move'}
+        disabled={!recording && full}
+        onClick={() => setRecording(!recording)}
+      >
+        {recording ? <Square className="size-3 fill-current" /> : <Circle className="size-3 fill-destructive text-destructive" />}
+        {recording ? 'Drag on the pad…' : 'Record movement'}
+      </Button>
       <Popover>
         <PopoverTrigger render={<Button variant="outline" size="sm" className="h-8 w-full gap-1.5 text-xs" />}>
           <SlidersHorizontal className="size-3.5" />Playback settings

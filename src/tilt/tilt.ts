@@ -19,6 +19,8 @@ interface TiltState {
   lockX: boolean
   lockY: boolean
   springBack: boolean
+  /** Armed by Record movement: the next drag on the tilt pad becomes a playback move */
+  recording: boolean
   perspective: boolean
   sheen: boolean
 }
@@ -35,6 +37,7 @@ export const useTilt = create<TiltState>()(() => ({
   springBack: true,
   perspective: true,
   sheen: true,
+  recording: false,
 }))
 
 export const setTilt = (patch: Partial<TiltState>) => useTilt.setState(patch)
@@ -43,6 +46,12 @@ export const setTilt = (patch: Partial<TiltState>) => useTilt.setState(patch)
 export function springToFlat() {
   const { lockX, lockY, target, targetX } = useTilt.getState()
   setTilt({ target: lockY ? target : 0, targetX: lockX ? targetX : 0 })
+}
+
+/** Arms or cancels recording; arming pauses playback where it is so the next drag starts from there */
+export function setRecording(on: boolean) {
+  const { angle, angleX } = useTilt.getState()
+  setTilt(on ? { recording: true, source: 'hold', target: angle, targetX: angleX } : { recording: false })
 }
 
 /** Shared by the keyboard shortcut and the playback button. Pause holds the rendered angle. */
