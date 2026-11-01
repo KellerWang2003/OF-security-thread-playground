@@ -116,7 +116,7 @@ function roundedRect(ctx: Ctx, width: number, height: number, radius: number) {
 }
 
 /** The flat note at `scale` px per mm, as NoteView draws it before it is turned in 3D */
-export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number, tiltAt: Tilt2 | number, options: { sheen: boolean; perspective: boolean }) {
+export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number, tiltAt: Tilt2 | number, options: { sheen: boolean; perspective: boolean; frameNumbers?: boolean }) {
   const { thread, frames } = note
   const { x: angleX, y: angle } = asTilt(tiltAt)
   const mm = (value: number) => value * scale
@@ -233,6 +233,31 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, width, height)
   }
+  if (options.frameNumbers && frames.length > 0) drawFrameNumber(ctx, String(mix.current + 1), strip, mm)
+  ctx.restore()
+}
+
+/** The frame-number pill NoteView shows in the middle of the thread when the # toggle is on */
+function drawFrameNumber(ctx: Ctx, label: string, strip: { x: number; y: number; w: number; h: number }, mm: (value: number) => number) {
+  const size = Math.max(mm(2), Math.min(strip.w, strip.h) * 0.6)
+  ctx.save()
+  ctx.font = `600 ${size}px 'Geist Variable', system-ui, sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const pad = size * 0.3
+  const w = Math.max(ctx.measureText(label).width + pad * 4, size + pad * 2)
+  const h = size + pad * 2
+  const cx = strip.x + strip.w / 2, cy = strip.y + strip.h / 2
+  ctx.shadowColor = 'rgba(0,0,0,0.15)'
+  ctx.shadowBlur = size * 0.2
+  ctx.shadowOffsetY = size * 0.05
+  ctx.fillStyle = 'rgba(24,24,27,0.85)'
+  ctx.beginPath()
+  ctx.roundRect(cx - w / 2, cy - h / 2, w, h, h / 2)
+  ctx.fill()
+  ctx.shadowColor = 'transparent'
+  ctx.fillStyle = '#fff'
+  ctx.fillText(label, cx, cy + size * 0.04)
   ctx.restore()
 }
 
@@ -332,7 +357,7 @@ export function drawExportFrame(
   faces: Map<string, OffscreenCanvas>,
   scale: number,
   angle: Tilt2 | number,
-  options: { sheen: boolean; perspective: boolean; background?: string },
+  options: { sheen: boolean; perspective: boolean; frameNumbers?: boolean; background?: string },
 ) {
   ctx.clearRect(0, 0, layout.width, layout.height)
   if (options.background) {

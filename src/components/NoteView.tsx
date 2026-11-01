@@ -106,7 +106,7 @@ export function NoteView({
   perspective?: boolean
   sheen?: boolean
   showWindowCuts?: boolean
-  /** Labels the thread with the number of the frame it shows (preview only, not exported) */
+  /** Labels the thread with the number of the frame it shows; exports draw it too when the toggle is on */
   showFrameNumber?: boolean
 }) {
   const { thread, frames } = note

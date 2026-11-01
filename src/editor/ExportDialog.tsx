@@ -61,12 +61,12 @@ export function ExportDialog({ project, selectedId, open, onOpenChange }: {
   const [transparent, setTransparent] = useState(false)
   const [progress, setProgress] = useState<number>()
   const abort = useRef<AbortController>(null)
-  const { sheen, perspective } = useTilt()
+  const { sheen, perspective, frameNumbers } = useTilt()
 
   const notes = project.notes.filter((n) => chosen.has(n.id))
   const several = notes.length > 1
   const allChosen = notes.length === project.notes.length
-  const options = { format, notes, separate: several && separate, height, fps, loops: format === 'gif' ? 1 : loops, sheen, perspective,
+  const options = { format, notes, separate: several && separate, height, fps, loops: format === 'gif' ? 1 : loops, sheen, perspective, frameNumbers,
     background: format === 'gif' && transparent ? undefined : background }
   const size = exportSize(notes, options)
   const busy = progress !== undefined

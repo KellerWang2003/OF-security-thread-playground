@@ -21,6 +21,8 @@ export interface ExportOptions {
   background?: string
   sheen: boolean
   perspective: boolean
+  /** Draws the visible frame's number on each thread, as the # toggle does on the canvas */
+  frameNumbers?: boolean
 }
 
 const safeName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Banknote'
