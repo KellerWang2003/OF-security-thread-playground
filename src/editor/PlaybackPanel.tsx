@@ -11,6 +11,7 @@ import {
   gestureSeconds,
   moveFromRecording,
   moveReach,
+  swingEnds,
   movesAxes,
   movesOf,
   newMove,
@@ -151,6 +152,7 @@ function PlaylistRow({ index, count, move, lens, recordings, shift, dragging, on
 }) {
   const start = useRef<number | null>(null)
   const reach = moveReach(move, lens)
+  const ends = swingEnds(move, lens)
   const axes = movesAxes(move)
   const name = move.kind === 'gesture' ? (recordings.find((r) => r.id === move.recordingId)?.name ?? 'Recording') : presetName(move.kind)
   return (
@@ -188,15 +190,18 @@ function PlaylistRow({ index, count, move, lens, recordings, shift, dragging, on
       {(move.kind === 'y' || move.kind === 'x') && (
         <ScrubField className="w-[70px] shrink-0" label={move.kind === 'y' ? '↕' : '↔'}
           title={move.kind === 'y' ? 'Up/down tilt the move starts from; negative tilts down' : 'Side tilt the move starts from; negative tilts left'}
-          value={Math.round(move.from ?? 0)} min={-SWEEP_MAX} max={SWEEP_MAX} unit="°" onChange={(from) => onChange((m) => ({ ...m, from }))} />
+          value={Math.round(move.kind === 'y' ? ends.start.y : ends.start.x)} min={-SWEEP_MAX} max={SWEEP_MAX} unit="°"
+          onChange={(from) => onChange((m) => ({ ...m, from, [m.kind]: m.kind === 'y' ? ends.end.y : ends.end.x }))} />
       )}
       {axes.includes('y') && (
         <ScrubField className="w-[70px] shrink-0" label={move.kind === 'y' ? '→' : '↕'} title="Up/down tilt this move reaches; negative tilts down"
-          value={Math.round(reach.y)} min={-SWEEP_MAX} max={SWEEP_MAX} unit="°" onChange={(y) => onChange((m) => ({ ...m, y }))} />
+          value={Math.round(move.kind === 'y' ? ends.end.y : reach.y)} min={-SWEEP_MAX} max={SWEEP_MAX} unit="°"
+          onChange={(y) => onChange((m) => (m.kind === 'y' ? { ...m, y, from: ends.start.y } : { ...m, y }))} />
       )}
       {axes.includes('x') && (
         <ScrubField className="w-[70px] shrink-0" label={move.kind === 'x' ? '→' : '↔'} title="Side tilt this move reaches; negative tilts left"
-          value={Math.round(reach.x)} min={-SWEEP_MAX} max={SWEEP_MAX} unit="°" onChange={(x) => onChange((m) => ({ ...m, x }))} />
+          value={Math.round(move.kind === 'x' ? ends.end.x : reach.x)} min={-SWEEP_MAX} max={SWEEP_MAX} unit="°"
+          onChange={(x) => onChange((m) => (m.kind === 'x' ? { ...m, x, from: ends.start.x } : { ...m, x }))} />
       )}
       <IconButton label="Remove" size="icon-xs" disabled={count <= 1} onClick={onRemove}><X /></IconButton>
     </li>

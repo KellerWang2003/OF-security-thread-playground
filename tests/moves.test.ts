@@ -50,25 +50,32 @@ describe('playback moves', () => {
 })
 
 describe('swing moves', () => {
-  it('goes from flat to −12°, swings to +12° and back, then returns to flat', () => {
+  it('glides from flat to −12°, makes one pass to +12°, then glides back to flat', () => {
     const tilt = { ...base, moves: [{ id: 's', kind: 'y', from: -12, y: 12 }] } as TiltSettings
     const plan = playbackPlan(tilt, lensState(tilt, frames))
     const join = 12 / 60
-    expect(plan.seconds).toBeCloseTo(2 + 2 * join)
+    expect(plan.seconds).toBeCloseTo(1 + 2 * join)
     expect(tiltAt(plan, 0).y).toBeCloseTo(0)
     expect(tiltAt(plan, join).y).toBeCloseTo(-12)
     expect(tiltAt(plan, join + 1).y).toBeCloseTo(12)
-    expect(tiltAt(plan, join + 2).y).toBeCloseTo(-12)
     expect(tiltAt(plan, plan.seconds - 1e-6).y).toBeCloseTo(0, 1)
   })
 
-  it('returns to flat between moves', () => {
-    const tilt = { ...base, moves: [{ id: 'a', kind: 'y', from: -10, y: 10 }, { id: 'b', kind: 'x', x: 20 }] } as TiltSettings
+  it('swings an unset up/down move once across a full cycle centred on flat', () => {
+    const tilt = { ...base, moves: [{ id: 'u', kind: 'y' }] } as TiltSettings
     const plan = playbackPlan(tilt, lensState(tilt, frames))
-    const join = 10 / 60
-    // The second move starts at flat right after the first one's return
-    expect(tiltAt(plan, 2 + 2 * join).x).toBeCloseTo(0)
-    expect(tiltAt(plan, 2 + 2 * join).y).toBeCloseTo(0)
-    expect(tiltAt(plan, 2 + 2 * join + 1).x).toBeCloseTo(20)
+    const join = 20 / 60
+    // Cycle 40°, frames run up: −20° → +20°
+    expect(tiltAt(plan, join).y).toBeCloseTo(-20)
+    expect(tiltAt(plan, join + 1).y).toBeCloseTo(20)
+  })
+
+  it('returns to flat between moves', () => {
+    const tilt = { ...base, moves: [{ id: 'a', kind: 'y', from: -10, y: 10 }, { id: 'b', kind: 'x', from: 0, x: 20 }] } as TiltSettings
+    const plan = playbackPlan(tilt, lensState(tilt, frames))
+    const first = 1 + 2 * (10 / 60)
+    expect(tiltAt(plan, first).x).toBeCloseTo(0)
+    expect(tiltAt(plan, first).y).toBeCloseTo(0)
+    expect(tiltAt(plan, first + 1).x).toBeCloseTo(20)
   })
 })
