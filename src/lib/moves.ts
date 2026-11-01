@@ -100,15 +100,7 @@ function moveSegments(move: PlaybackMove, lens: LensState, speed: number, holdSe
     const t0 = recorded[0].t
     const span = Math.max(recorded.at(-1)!.t - t0, 1e-3)
     const points = recorded.map(({ x, y }) => ({ x, y }))
-    const first = points[0]
-    const last = points.at(-1)!
-    const join = (a: Tilt2, b: Tilt2) => (distance(a, b) < 0.5 ? [] : [line(a, b, Math.max(0.15, distance(a, b) / JOIN_DEG_PER_SECOND) / speed)])
-    return [
-      ...join(FLAT, first),
-      { seconds: span / speed, eased: false, points, at: recorded.map((p) => (p.t - t0) / span) },
-      ...join(last, FLAT),
-      ...holds(FLAT),
-    ]
+    return [{ seconds: span / speed, eased: false, points, at: recorded.map((p) => (p.t - t0) / span) }, ...holds(points.at(-1)!)]
   }
   const end = moveReach(move, lens)
   if (move.kind === 'circle') {
@@ -120,12 +112,33 @@ function moveSegments(move: PlaybackMove, lens: LensState, speed: number, holdSe
     })
     return [line(FLAT, top, leg), ...holds(top), { seconds: 2 * leg, eased: false, points: ring, at: byDistance(ring) }, line(top, FLAT, leg), ...holds(FLAT)]
   }
-  return [line(FLAT, end, leg), ...holds(end), line(end, FLAT, leg), ...holds(FLAT)]
+  // Up/down and side swing between a start (flat unless set) and their end, through flat when the signs differ
+  const start = moveStart(move)
+  return [line(start, end, leg), ...holds(end), line(end, start, leg), ...holds(start)]
 }
+
+/** Where a move begins: flat, or for up/down and side moves the angle set as From */
+export function moveStart(move: PlaybackMove): Tilt2 {
+  if (move.kind === 'y') return { x: 0, y: move.from ?? 0 }
+  if (move.kind === 'x') return { x: move.from ?? 0, y: 0 }
+  return FLAT
+}
+
+const firstPoint = (s: Segment) => s.points[0]
+const lastPoint = (s: Segment) => s.points.at(-1)!
+/** Travels straight from one move's end to the next one's start, at a steady speed */
+const join = (a: Tilt2, b: Tilt2, speed: number) => line(a, b, Math.max(0.15, distance(a, b) / JOIN_DEG_PER_SECOND) / speed)
 
 export function playbackPlan(tilt: TiltSettings, lens: LensState): PlaybackPlan {
   const { speed, curve, holdSeconds } = playbackSettings(tilt)
-  const segments = movesOf(tilt, lens).flatMap((m) => moveSegments(m, lens, speed, holdSeconds)).filter((s) => s.seconds > 0)
+  const runs = movesOf(tilt, lens).map((m) => moveSegments(m, lens, speed, holdSeconds).filter((s) => s.seconds > 0)).filter((r) => r.length)
+  // Each move picks up where the last left off, and the end leads back to the start for the loop
+  const segments = runs.flatMap((run, i) => {
+    const next = runs[(i + 1) % runs.length]
+    const from = lastPoint(run.at(-1)!)
+    const to = firstPoint(next[0])
+    return distance(from, to) < 0.5 ? run : [...run, join(from, to, speed)]
+  })
   const seconds = segments.reduce((total, s) => total + s.seconds, 0)
   return { segments, seconds, curve }
 }

@@ -137,12 +137,17 @@ function PlaylistRow({ index, count, move, lens, recordings, onChange, onMove, o
         {name}
         {move.kind === 'gesture' && <span className="ml-1 text-[10px] text-muted-foreground tabular-nums">{Math.round(gestureSeconds(move) * 10) / 10} s</span>}
       </div>
+      {(move.kind === 'y' || move.kind === 'x') && (
+        <ScrubField className="w-[70px] shrink-0" label={move.kind === 'y' ? '↕' : '↔'}
+          title={move.kind === 'y' ? 'Up/down tilt the move starts from; negative tilts down' : 'Side tilt the move starts from; negative tilts left'}
+          value={Math.round(move.from ?? 0)} min={-SWEEP_MAX} max={SWEEP_MAX} unit="°" onChange={(from) => onChange((m) => ({ ...m, from }))} />
+      )}
       {axes.includes('y') && (
-        <ScrubField className="w-[64px] shrink-0" label="↕" title="Up/down tilt this move reaches; negative tilts down"
+        <ScrubField className="w-[70px] shrink-0" label={move.kind === 'y' ? '→' : '↕'} title="Up/down tilt this move reaches; negative tilts down"
           value={Math.round(reach.y)} min={-SWEEP_MAX} max={SWEEP_MAX} unit="°" onChange={(y) => onChange((m) => ({ ...m, y }))} />
       )}
       {axes.includes('x') && (
-        <ScrubField className="w-[64px] shrink-0" label="↔" title="Side tilt this move reaches; negative tilts left"
+        <ScrubField className="w-[70px] shrink-0" label={move.kind === 'x' ? '→' : '↔'} title="Side tilt this move reaches; negative tilts left"
           value={Math.round(reach.x)} min={-SWEEP_MAX} max={SWEEP_MAX} unit="°" onChange={(x) => onChange((m) => ({ ...m, x }))} />
       )}
       <DropdownMenu>
