@@ -1,4 +1,4 @@
-import { TILT_LIMIT } from './frames'
+import { SHADE_DEG } from './frames'
 import { lensMix, lensState, type Tilt2 } from './lens'
 import { playbackPlan, tiltAt } from './moves'
 import { loadImageUrl } from './images'
@@ -184,7 +184,7 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
   drawFrame(mix.base, 1)
   if (mix.blend > 0 && mix.next !== mix.base) drawFrame(mix.next, mix.blend)
 
-  const t = angle / TILT_LIMIT
+  const t = angle / SHADE_DEG
   if (options.sheen) {
     // A highlight that travels down the thread's box as the note tilts, soft-light blended
     const at = (50 + t * 120) / 100
@@ -219,7 +219,7 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, width, height)
   }
-  const tx = angleX / TILT_LIMIT
+  const tx = angleX / SHADE_DEG
   if (options.perspective && tx !== 0) {
     // Turning sideways, as NoteView: the edge turning away darkens, the near edge catches the light
     const gradient = ctx.createLinearGradient(0, 0, width, 0)

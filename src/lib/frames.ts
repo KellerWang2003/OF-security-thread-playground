@@ -31,8 +31,10 @@ export function sliceRange(index: number, spans: number[]): [number, number] {
   return [start, start + (spans.at(index) ?? 0)]
 }
 
-/** Manual dragging can tilt the note this far either way; playback spans the full cycle. */
-export const TILT_LIMIT = 60
+/** Dragging, the tilt pad and playback can tilt a banknote this far either way: edge-on, as far as a real one goes */
+export const TILT_LIMIT = 90
+/** The tilt at which light and shade on a banknote reach full strength (they keep growing past it) */
+export const SHADE_DEG = 60
 
 /**
  * Which frames show at a tilt angle, with frames of any length. The cycle starts flat and loops:

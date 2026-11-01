@@ -30,8 +30,8 @@ export const LENS_EFFECTS: { value: LensEffect; label: string; description: stri
 ]
 /** Playback never turns a banknote further than a viewer would, however long a cycle is */
 export const SWEEP_MAX = TILT_LIMIT
-/** Partial reveal keeps its hidden frames hidden at every angle a real banknote can be tilted to, not just ±60° */
-export const HIDE_LIMIT = 90
+/** Partial reveal keeps its hidden frames hidden at every angle a real banknote can be tilted to */
+export const HIDE_LIMIT = TILT_LIMIT
 /** Partial reveal's default allowance for a hand that drifts onto the fast tilt while sweeping the slow one */
 export const DEFAULT_WOBBLE = 5
 
@@ -46,7 +46,7 @@ export interface LensState {
   dirY: 1 | -1
   /** +1 when tilting right plays 1 → 5, −1 when tilting left does */
   dirX: 1 | -1
-  /** How far viewers tilt, each way: fixed at TILT_LIMIT, a realistic hand tilt */
+  /** How far viewers tilt, each way: fixed at TILT_LIMIT, edge-on */
   viewDeg: number
   /** For Reveal: the tilt that plays every frame */
   revealAxis: Axis

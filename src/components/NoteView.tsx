@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
-import { TILT_LIMIT } from '../lib/frames'
+import { SHADE_DEG } from '../lib/frames'
 import { lensMix } from '../lib/lens'
 import { useImageUrl } from '../lib/images'
 import { imageTiles, threadWindowMask, windowEdges } from '../lib/thread'
@@ -112,8 +112,8 @@ export function NoteView({
   const mix = lensMix(note, { x: angleX, y: angle })
   const baseFrame = frames.at(mix.base)
   const nextFrame = frames.at(mix.next)
-  const t = angle / TILT_LIMIT
-  const tx = angleX / TILT_LIMIT
+  const t = angle / SHADE_DEG
+  const tx = angleX / SHADE_DEG
   const rotate = perspective ? (angleX ? `rotateX(${angle}deg) rotateY(${angleX}deg)` : `rotateX(${angle}deg)`) : undefined
   const sheenAt = 50 + t * 120
   const direction = '180deg'

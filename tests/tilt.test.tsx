@@ -36,8 +36,8 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('flat-to-upward playback', () => {
-  it.each([30, 75, 120])('reaches the %s° cycle (at most the ±60° viewing range), returns flat, and never tilts below it', (cycle) => {
-    const top = Math.min(cycle, 60)
+  it.each([30, 75, 120])('reaches the %s° cycle (at most the ±90° tilt range), returns flat, and never tilts below it', (cycle) => {
+    const top = Math.min(cycle, 90)
     renderHook(() => useTiltLoop(planFor(cycle)))
     setTilt({ source: 'wobble' })
     tick(20)

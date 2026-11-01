@@ -5,9 +5,9 @@ import { TooltipProvider } from '../src/components/ui/tooltip'
 import { TiltRail } from '../src/editor/TiltRail'
 import { setTilt, springToFlat, useTilt } from '../src/tilt/tilt'
 
-// jsdom lays the pad out at 0,0: its 136 px square is centred on 68,68 and ±60° spans 62 px each way
+// jsdom lays the pad out at 0,0: its 136 px square is centred on 68,68 and ±90° spans 62 px each way
 const C = 68
-const PX_PER_DEG = 62 / 60
+const PX_PER_DEG = 62 / 90
 
 beforeEach(() => {
   setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0, lockX: false, lockY: false })
