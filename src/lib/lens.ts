@@ -148,14 +148,51 @@ export function revealMinFast(frames: Pick<Frame, 'length'>[], offset: number, w
   return limit ? Math.floor(wobble / limit + EPS) + 1 : 0
 }
 
+/** The default flat step: the middle of the middle frame (frame 3 of 5, frame 2 of 4) */
+export const defaultFlatStep = (count: number) => 2 * (Math.ceil(count / 2) - 1) + 1
+
+/** Where flat sits, in half-frame steps from the start of frame 1 (0 to 2 × frames − 1) */
+export function flatStep(tilt: Pick<TiltSettings, 'flatAt'>, count: number) {
+  if (count <= 0) return 0
+  if (tilt.flatAt === 'start') return 0
+  if (typeof tilt.flatAt === 'number' && Number.isFinite(tilt.flatAt)) return clampStep(Math.round(tilt.flatAt), count)
+  return defaultFlatStep(count)
+}
+/** Steps wrap round the loop: the end of the last frame is the start of frame 1 */
+const clampStep = (step: number, count: number) => ((step % (2 * count)) + 2 * count) % (2 * count)
+
+/** A flat step in words: "Middle of 3", "Between 2 and 3", "Start of 1" */
+export function flatLabel(step: number) {
+  if (step % 2 === 1) return `Middle of ${(step + 1) / 2}`
+  if (step === 0) return `Start of 1`
+  return `Between ${step / 2} and ${step / 2 + 1}`
+}
+
+/** A flat step's place along the cycle (0 to 1) */
+export function stepOffset(step: number, frames: Pick<Frame, 'length'>[]) {
+  const edges = frameEdges(frames)
+  if (step % 2 === 0) return edges.at(step / 2) ?? 0
+  const i = (step - 1) / 2
+  return ((edges.at(i) ?? 0) + (edges.at(i + 1) ?? 1)) / 2
+}
+
 /** Where flat sits along the cycle for these settings */
 export function flatOffset(tilt: Pick<TiltSettings, 'flatAt'>, frames: Pick<Frame, 'length'>[]) {
-  if (tilt.flatAt === 'start' || !frames.length) return 0
-  // The middle of the middle frame (frame 3 of 5): tilting one way plays towards the last frame, the other
-  // towards the first, and the frames a slow tilt never reaches are the outer ones
-  const edges = frameEdges(frames)
-  const m = Math.ceil(frames.length / 2) - 1
-  return ((edges.at(m) ?? 0) + (edges.at(m + 1) ?? 1)) / 2
+  if (!frames.length) return 0
+  return stepOffset(flatStep(tilt, frames.length), frames)
+}
+
+/**
+ * Partial reveal's possible reaches for the slow tilt, widest first: for each number of frames it can hide, the
+ * slow cycle that hides them (to 90°, with the wobble) and how much of the cycle the slow tilt then reaches
+ * either way from flat. Empty when nothing can be hidden.
+ */
+export function revealReaches(frames: Pick<Frame, 'length'>[], offset: number, fast: number, wobble: number) {
+  const drift = fast > 0 ? wobble / fast : 0
+  return revealOptions(frames, offset).flatMap((hide) => {
+    const slow = revealCycle(frames, HIDE_LIMIT, hide, offset, drift)
+    return slow == null ? [] : [{ hide, slow, reach: HIDE_LIMIT / slow + drift }]
+  })
 }
 
 /** The lens settings a note carries, with the defaults a project from before lenses gets */
@@ -179,7 +216,10 @@ export function lensState(tilt: TiltSettings, frames: Pick<Frame, 'length'>[] = 
     case 'reveal': {
       // Hidden at any tilt up to 90°, even with the hand drifting `wobble` degrees onto the fast tilt
       const fast = revealAxis === 'y' ? y : x
-      const slow = revealCycle(frames, HIDE_LIMIT, undefined, offset, wobble / fast)
+      const reaches = revealReaches(frames, offset, fast, wobble)
+      // The reach chosen on the strip, as a step inwards from the widest; it clamps if flat or the frames change
+      const level = Math.min(Math.max(0, Math.round(tilt.revealLevel ?? 0)), Math.max(0, reaches.length - 1))
+      const slow = reaches.at(level)?.slow ?? null
       const revealSafe = slow != null
       return revealAxis === 'y'
         ? { ...base, revealSafe, cycleY: y, cycleX: slow ?? x }
@@ -270,4 +310,24 @@ export function primaryAxis(tilt: TiltSettings, lens: LensState): Axis {
   if (lens.effect === 'reveal') return lens.revealAxis
   const first = tilt.moves?.[0]?.kind ?? tilt.playTilt
   return first === 'x' ? 'x' : 'y'
+}
+
+/** The stretch of the cycle (0 to 1) a reach either way from `center` covers, split where it wraps round the loop */
+export function reachSpans(center: number, reach: number): [number, number][] {
+  if (reach >= 0.5) return [[0, 1]]
+  const lo = center - reach, hi = center + reach
+  if (lo < 0) return [[0, hi], [lo + 1, 1]]
+  if (hi > 1) return [[lo, 1], [0, hi - 1]]
+  return [[lo, hi]]
+}
+
+/** The current reach either way from flat of one tilt, as a share of the cycle (to TILT_LIMIT; Partial reveal's slow tilt adds the wobble) */
+export function tiltReach(lens: LensState, axis: Axis) {
+  const cycle = axis === 'x' ? lens.cycleX : lens.cycleY
+  if (!cycle) return 0
+  if (lens.effect === 'reveal' && axis !== lens.revealAxis) {
+    const fast = (axis === 'x' ? lens.cycleY : lens.cycleX) ?? Infinity
+    return HIDE_LIMIT / cycle + lens.wobble / fast
+  }
+  return lens.viewDeg / cycle
 }

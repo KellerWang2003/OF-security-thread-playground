@@ -63,8 +63,13 @@ export interface TiltSettings {
   revealHide?: number
   /** Partial reveal: degrees of fast tilt a viewer may drift by while sweeping the slow tilt (default 5) */
   revealWobble?: number
-  /** Where flat sits: the middle of the middle frame (the default, for every project) or the start of frame 1 */
-  flatAt?: 'start' | 'center'
+  /**
+   * Where flat sits, in half-frame steps from the start of frame 1 (1 = middle of frame 1, 2 = between frames 1
+   * and 2, …). Absent or 'center' = the middle of the middle frame; 'start' (older saves) = 0
+   */
+  flatAt?: 'start' | 'center' | number
+  /** Partial reveal: how far the slow tilt reaches, as a step from the widest (0, fewest frames hidden) inwards */
+  revealLevel?: number
   /** Which tilt playback sweeps: up/down, side to side, or one after the other. Superseded by `moves` */
   playTilt?: 'x' | 'y' | 'both'
   /** What playback does, in order; absent means what `playTilt` chose */

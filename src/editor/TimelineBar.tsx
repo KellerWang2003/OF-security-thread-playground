@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
 import { clamp, cyclePhase } from '../lib/frames'
-import { cyclePosition, framesReached, lensMix, lensState, reachShare, respondsTo, tiltForPosition } from '../lib/lens'
+import { cyclePosition, flatLabel, flatStep, framesReached, lensMix, lensState, reachSpans, respondsTo, tiltForPosition, tiltReach } from '../lib/lens'
 import { pickFiles } from '../lib/images'
 import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
 import type { Frame, Note } from '../lib/types'
@@ -137,7 +137,7 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const x = (units: number) => PAD + units * pxPerUnit
   const position = cyclePosition(lens, { x: angleX, y: angle })
   const phase = cyclePhase(position, 1)
-  const bars = (['y', 'x'] as const).filter((a) => respondsTo(lens, a)).map((a) => ({ axis: a, share: reachShare(lens, a) }))
+  const bars = (['y', 'x'] as const).filter((a) => respondsTo(lens, a)).map((a) => ({ axis: a, spans: reachSpans(lens.offset, tiltReach(lens, a)) }))
 
   // Wheel: ⌘/Ctrl zooms the timeline, a plain vertical wheel scrolls it sideways
   useEffect(() => {
@@ -249,15 +249,21 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
             )
           })}
 
-          {bars.length > 1 && bars.map(({ axis, share }, row) => (
-            // How far each tilt alone reaches from flat (frame 1's start) within the viewing range: forward
-            // along the cycle, and backward from its end, where tilting the other way lands
+          {bars.length > 1 && bars.map(({ axis, spans }, row) => (
+            // How far each tilt alone reaches either way from flat, wrapping round the loop
             <div key={axis} className="pointer-events-none absolute h-0.5" style={{ top: 1 + row * 3, left: x(0), width: totalLength * pxPerUnit }}
               title={axis === 'y' ? 'Up/down reach' : 'Side reach'}>
-              <div className={cn('absolute inset-y-0 left-0 rounded-full', axis === 'y' ? 'bg-sky-500' : 'bg-amber-500')} style={{ width: `${share * 100}%` }} />
-              <div className={cn('absolute inset-y-0 right-0 rounded-full', axis === 'y' ? 'bg-sky-500' : 'bg-amber-500')} style={{ width: `${share * 100}%` }} />
+              {spans.map(([lo, hi], k) => (
+                <div key={k} className={cn('absolute inset-y-0 rounded-full', axis === 'y' ? 'bg-sky-500' : 'bg-amber-500')} style={{ left: `${lo * 100}%`, width: `${(hi - lo) * 100}%` }} />
+              ))}
             </div>
           ))}
+
+          {/* Flat: what a straight-on view shows; set on the Lens effect strip */}
+          <div className="pointer-events-none absolute bottom-0 -translate-x-1/2" style={{ left: x(lens.offset * totalLength) }}
+            title={`Flat: ${flatLabel(flatStep(tilt, frames.length))}`}>
+            <div className="size-0 border-x-4 border-b-[5px] border-x-transparent border-b-foreground/70" />
+          </div>
 
           <div className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: x(phase * totalLength) }}>
             <div className="absolute -top-0.5 left-1/2 size-2 -translate-x-1/2 rotate-45 bg-primary" />

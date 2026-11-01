@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { playbackAngles, playbackTilts } from '../src/lib/exportRender'
 import { frameMix, frameSpans } from '../src/lib/frames'
-import { cyclesFromLens, framesReached, lensAngle, lensCycle, lensMix, lensState, revealCycle, revealMinFast, revealOptions, tiltForPosition } from '../src/lib/lens'
+import { cyclesFromLens, flatLabel, flatOffset, flatStep, framesReached, lensAngle, lensCycle, lensMix, lensState, reachSpans, revealCycle, revealMinFast, revealOptions, revealReaches, tiltForPosition } from '../src/lib/lens'
 import { migrateProject } from '../src/lib/notes'
 import type { TiltSettings } from '../src/lib/types'
 
@@ -144,5 +144,47 @@ describe('flat at the middle of the middle frame', () => {
   it('can still sit at the start of frame 1, where one frame can hide', () => {
     expect(revealOptions(f)).toEqual([1, 3])
     expect(revealCycle(f, 60)).toBe(151)
+  })
+})
+
+describe('flat position and Partial reveal reach', () => {
+  const five = frames([10, 10, 10, 10, 10])
+  const four = frames([10, 10, 10, 10])
+
+  it('defaults to the middle of the middle frame, keeps old saves, and wraps steps', () => {
+    expect(flatStep({}, 5)).toBe(5)
+    expect(flatStep({}, 4)).toBe(3)
+    expect(flatStep({ flatAt: 'start' }, 5)).toBe(0)
+    expect(flatStep({ flatAt: 'center' }, 5)).toBe(5)
+    expect(flatStep({ flatAt: 4 }, 4)).toBe(4)
+    expect(flatStep({ flatAt: 8 }, 4)).toBe(0)
+    expect(flatLabel(5)).toBe('Middle of 3')
+    expect(flatLabel(4)).toBe('Between 2 and 3')
+    expect(flatLabel(0)).toBe('Start of 1')
+    expect(flatOffset({ flatAt: 4 }, four)).toBeCloseTo(0.5)
+  })
+
+  it('hides 1 and 4 of four frames with flat between 2 and 3, at any slow tilt with the wobble', () => {
+    const tilt = { cycleDeg: 40, transition: 0, effect: 'reveal', flatAt: 4 } as TiltSettings
+    const lens = lensState(tilt, four)
+    expect([...framesReached({ frames: four, tilt }, 'x', lens)].sort()).toEqual([1, 2])
+    for (let x = -90; x <= 90; x += 0.5)
+      for (const y of [-5, 0, 5]) expect([0, 3]).not.toContain(lensMix({ frames: four, tilt }, { x, y }, lens).current)
+  })
+
+  it('narrows the slow reach one step at a time, hiding more frames, and clamps a step past the narrowest', () => {
+    const base = { cycleDeg: 60, transition: 0, effect: 'reveal', revealWobble: 2 } as TiltSettings
+    const reaches = revealReaches(five, 0.5, 60, 2)
+    expect(reaches.map((r) => r.hide)).toEqual([2, 4])
+    expect(reaches[0].reach).toBeGreaterThan(reaches[1].reach)
+    const narrow = lensState({ ...base, revealLevel: 1 }, five)
+    expect([...framesReached({ frames: five, tilt: { ...base, revealLevel: 1 } }, 'x', narrow)]).toEqual([2])
+    expect(lensState({ ...base, revealLevel: 9 }, five).cycleX).toBe(narrow.cycleX)
+  })
+
+  it('splits a reach where it wraps round the loop', () => {
+    expect(reachSpans(0.5, 0.2)).toEqual([[0.3, 0.7]])
+    expect(reachSpans(0.1, 0.2).map(([a, b]) => [+a.toFixed(2), +b.toFixed(2)])).toEqual([[0, 0.3], [0.9, 1]])
+    expect(reachSpans(0.5, 0.6)).toEqual([[0, 1]])
   })
 })

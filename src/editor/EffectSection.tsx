@@ -25,7 +25,14 @@ import {
   lensMix,
   lensState,
   respondsTo,
+  flatLabel,
+  flatStep,
+  frameEdges,
+  reachSpans,
   revealMinFast,
+  revealReaches,
+  stepOffset,
+  tiltReach,
   type Axis,
   type LensEffect,
   type LensState,
@@ -190,6 +197,8 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
         </div>
       </div>
 
+      <FlatStrip note={note} lens={lens} set={set} />
+
       <div className="flex flex-col gap-1.5">
         {(['y', 'x'] as const).filter((a) => respondsTo(lens, a)).map((axis) => (
           <FramesRow key={axis} axis={axis} note={note} lens={lens} />
@@ -274,6 +283,118 @@ function AxisCycle({ axis, lens, tilt, set }: { axis: Axis; lens: LensState; til
 }
 
 /** The frames one tilt alone shows within the viewing range; frames it never reaches are struck out */
+/**
+ * The frames as one strip, each as wide as its share of the cycle, with a pin where flat sits: drag it to move
+ * flat, snapping to the start and middle of each frame. Each tilt's reach either way from flat shows under it;
+ * for Partial reveal on one tilt the slow tilt's reach is a band whose ends you drag to hide more or fewer frames.
+ */
+function FlatStrip({ note, lens, set }: { note: Note; lens: LensState; set: (patch: Partial<TiltSettings>) => void }) {
+  const strip = useRef<HTMLDivElement>(null)
+  const [drag, setDrag] = useState<'flat' | 'reach' | null>(null)
+  const count = note.frames.length
+  const edges = frameEdges(note.frames)
+  const step = flatStep(note.tilt, count)
+  const reveal = lens.effect === 'reveal'
+  const slowAxis: Axis = lens.revealAxis === 'y' ? 'x' : 'y'
+  const fast = (lens.revealAxis === 'y' ? lens.cycleY : lens.cycleX) ?? 0
+  const reaches = reveal ? revealReaches(note.frames, lens.offset, fast, lens.wobble) : []
+  const rows = (['y', 'x'] as const).filter((a) => respondsTo(lens, a) && !(reveal && a === slowAxis))
+  const band = reveal && reaches.length ? reachSpans(lens.offset, tiltReach(lens, slowAxis)) : []
+
+  const at = (clientX: number) => {
+    const box = strip.current?.getBoundingClientRect()
+    return box ? clamp((clientX - box.left) / box.width, 0, 1) : 0
+  }
+  const follow = (clientX: number, mode: 'flat' | 'reach') => {
+    const u = at(clientX)
+    if (mode === 'flat') {
+      // The nearest start or middle of a frame
+      let best = 0
+      for (let k = 1; k < 2 * count; k++) if (Math.abs(stepOffset(k, note.frames) - u) < Math.abs(stepOffset(best, note.frames) - u)) best = k
+      if (best !== step) set({ flatAt: best })
+    } else if (reaches.length) {
+      // The reach nearest to how far the pointer is from flat, either way round the loop
+      const d = Math.min(Math.abs(u - lens.offset), 1 - Math.abs(u - lens.offset))
+      let level = 0
+      reaches.forEach((r, k) => { if (Math.abs(r.reach - d) < Math.abs((reaches.at(level)?.reach ?? 0) - d)) level = k })
+      set({ revealLevel: level })
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div
+        ref={strip}
+        role="slider"
+        aria-label="Flat"
+        aria-valuetext={flatLabel(step)}
+        aria-valuemin={0}
+        aria-valuemax={2 * count - 1}
+        aria-valuenow={step}
+        tabIndex={0}
+        title={`Flat: ${flatLabel(step)}`}
+        className={cn('relative mt-2 h-6 touch-none rounded outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50', drag ? 'cursor-grabbing' : 'cursor-pointer')}
+        onPointerDown={(e) => {
+          if (e.button !== 0) return
+          e.currentTarget.setPointerCapture(e.pointerId)
+          const mode = (e.target as HTMLElement).closest('[data-reach]') ? 'reach' : 'flat'
+          setDrag(mode)
+          // Show the banknote straight on while flat or the reach changes
+          setTilt({ source: 'hold', target: 0, targetX: 0 })
+          follow(e.clientX, mode)
+        }}
+        onPointerMove={(e) => {
+          if (!drag) return
+          if (e.buttons === 0) return setDrag(null)
+          follow(e.clientX, drag)
+        }}
+        onPointerUp={() => setDrag(null)}
+        onPointerCancel={() => setDrag(null)}
+        onLostPointerCapture={() => setDrag(null)}
+        onDoubleClick={() => set({ flatAt: undefined })}
+        onKeyDown={(e) => {
+          const next = e.key === 'ArrowRight' ? step + 1 : e.key === 'ArrowLeft' ? step - 1 : null
+          if (next === null) return
+          e.preventDefault()
+          set({ flatAt: clamp(next, 0, 2 * count - 1) })
+        }}
+      >
+        <div className="absolute inset-0 flex overflow-hidden rounded">
+          {note.frames.map((frame, i) => (
+            <div key={frame.id} className="flex items-center justify-center border-r border-background text-[10px] font-medium tabular-nums last:border-r-0"
+              style={{ width: `${((edges.at(i + 1) ?? 1) - (edges.at(i) ?? 0)) * 100}%`, backgroundColor: `color-mix(in oklch, ${swatch(note, i)} 35%, transparent)` }}>
+              {i + 1}
+            </div>
+          ))}
+        </div>
+        {band.map(([lo, hi], k) => (
+          <div key={k} className="pointer-events-none absolute inset-y-0 rounded-sm border-2 border-primary/70 bg-primary/10"
+            style={{ left: `${lo * 100}%`, width: `${(hi - lo) * 100}%` }} />
+        ))}
+        {/* The band's two ends, where it meets frames that stay hidden; drag either to hide more or fewer */}
+        {band.length > 0 && [lens.offset - tiltReach(lens, slowAxis), lens.offset + tiltReach(lens, slowAxis)].map((end, k) => (
+          <div key={k} data-reach title={`${slowAxis === 'y' ? '↕' : '↔'} reach: drag to hide more or fewer frames`}
+            className="absolute inset-y-0 w-2.5 -translate-x-1/2 cursor-ew-resize"
+            style={{ left: `${(((end % 1) + 1) % 1) * 100}%` }}>
+            <div className="absolute inset-y-1 left-1/2 w-1 -translate-x-1/2 rounded-full bg-primary" />
+          </div>
+        ))}
+        <div className="pointer-events-none absolute -top-2 bottom-0 -translate-x-1/2" style={{ left: `${lens.offset * 100}%` }}>
+          <div className="size-0 border-x-[5px] border-t-[6px] border-x-transparent border-t-foreground" />
+          <div className="absolute top-1.5 bottom-0 left-1/2 w-px -translate-x-1/2 bg-foreground" />
+        </div>
+      </div>
+      {rows.map((axis) => (
+        <div key={axis} className="relative h-0.5" title={axis === 'y' ? 'Up/down reach from flat' : 'Side reach from flat'}>
+          {reachSpans(lens.offset, tiltReach(lens, axis)).map(([lo, hi], k) => (
+            <div key={k} className={cn('absolute inset-y-0 rounded-full', axis === 'y' ? 'bg-sky-500' : 'bg-amber-500')} style={{ left: `${lo * 100}%`, width: `${(hi - lo) * 100}%` }} />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function FramesRow({ axis, note, lens }: { axis: Axis; note: Note; lens: LensState }) {
   const reached = framesReached(note, axis, lens)
   return (
