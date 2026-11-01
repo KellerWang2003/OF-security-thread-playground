@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { IconButton } from '../components/controls'
 import { NoteView } from '../components/NoteView'
 import { TILT_LIMIT, clamp } from '../lib/frames'
+import { type Guide, snapBox } from '../lib/snap'
 import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
 import { setTilt, useTilt, useTiltLoop } from '../tilt/tilt'
@@ -19,6 +20,8 @@ const MIN_ZOOM = 0.1
 const MAX_ZOOM = 8
 /** Room kept clear of the floating panels when fitting notes into view */
 const FIT_INSETS = { left: 284, right: 284, top: 48, bottom: 128 }
+/** How close, in screen px, a moving banknote's edge or centre must come to another's to snap to it */
+const SNAP_PX = 6
 
 /** Zoom level and where the canvas origin (0, 0 mm) sits on screen, in px */
 interface View {
@@ -89,6 +92,7 @@ export function Canvas({
   const gesture = useRef<Gesture | null>(null)
   const [activeMode, setActiveMode] = useState<Gesture['mode']>()
   const [dropping, setDropping] = useState(false)
+  const [guides, setGuides] = useState<Guide[]>([])
   const { angle, source, perspective, sheen } = useTilt()
 
   const selected = notes.find((n) => n.id === selectedId)
@@ -229,6 +233,7 @@ export function Canvas({
         if (e.buttons === 0) {
           gesture.current = null
           setActiveMode(undefined)
+          setGuides([])
           return
         }
         const dx = e.clientX - g.startX
@@ -244,8 +249,23 @@ export function Canvas({
             return positionMm === n.thread.positionMm ? n : { ...n, thread: { ...n.thread, positionMm } }
           })
         } else if (g.mode === 'move') {
-          const snap = (mm: number) => Math.round(mm * 2) / 2
-          updateNote(projectId, g.noteId, (n) => ({ ...n, x: snap(g.noteX + dx / scale), y: snap(g.noteY + dy / scale) }))
+          const round = (mm: number) => Math.round(mm * 2) / 2
+          const rawX = g.noteX + dx / scale
+          const rawY = g.noteY + dy / scale
+          const moving = notes.find((n) => n.id === g.noteId)
+          // Edges and centres snap to the other banknotes; hold ⌘/Ctrl to place freely on the 0.5 mm grid
+          const snapped =
+            moving && !(e.metaKey || e.ctrlKey)
+              ? snapBox(
+                  { x: rawX, y: rawY, width: moving.widthMm, height: moving.heightMm },
+                  notes.filter((n) => n.id !== g.noteId).map((n) => ({ x: n.x, y: n.y, width: n.widthMm, height: n.heightMm })),
+                  SNAP_PX / scale,
+                )
+              : undefined
+          const x = snapped && snapped.guides.some((d) => d.axis === 'x') ? snapped.x : round(rawX)
+          const y = snapped && snapped.guides.some((d) => d.axis === 'y') ? snapped.y : round(rawY)
+          setGuides(snapped?.guides ?? [])
+          updateNote(projectId, g.noteId, (n) => (n.x === x && n.y === y ? n : { ...n, x, y }))
         } else {
           // About 160 px of drag sweeps half the range
           // Lenticular lenses respond to tilting back and forth, so only vertical drags tilt
@@ -268,11 +288,13 @@ export function Canvas({
         if (g?.mode === 'pan' && g.onBackground && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) onSelect(undefined)
         gesture.current = null
         setActiveMode(undefined)
+        setGuides([])
       }}
       onPointerCancel={() => {
         if (gesture.current?.mode === 'tilt' && useTilt.getState().springBack) setTilt({ target: 0 })
         gesture.current = null
         setActiveMode(undefined)
+        setGuides([])
       }}
       onDragOver={(e) => {
         e.preventDefault()
@@ -330,6 +352,19 @@ export function Canvas({
           )
         })}
 
+      {current &&
+        guides.map((d) => (
+          <div
+            key={`${d.axis}${d.at}`}
+            data-snap-guide={d.axis}
+            className="pointer-events-none absolute bg-rose-500"
+            style={
+              d.axis === 'x'
+                ? { left: current.x + d.at * scale - 0.5, top: current.y + d.from * scale, width: 1, height: (d.to - d.from) * scale }
+                : { top: current.y + d.at * scale - 0.5, left: current.x + d.from * scale, height: 1, width: (d.to - d.from) * scale }
+            }
+          />
+        ))}
 
       {current && size && (
         // Top right, clear of the properties panel when one is open; Export floats here only without a selection
