@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, EyeOff } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { InlineField, ScrubField, Section, Segmented } from '../components/controls'
@@ -175,30 +175,31 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
 }
 
 /**
- * The effects as cards, each a tiny banknote rocking up/down and then side to side with this project's frames,
- * so you can see what an effect does before picking it.
+ * The effect dropdown. Each option has a tiny banknote rocking up/down and then side to side with this
+ * project's frames, so you can see what an effect does before picking it.
  */
 function EffectPicker({ note, lens, onChoose }: { note: Note; lens: LensState; onChoose: (effect: LensEffect) => void }) {
+  return (
+    <Select value={lens.effect} items={LENS_EFFECTS} onValueChange={(v) => { if (v) onChoose(v) }}>
+      <SelectTrigger aria-label="Effect" className="w-full"><SelectValue /></SelectTrigger>
+      <SelectContent alignItemWithTrigger={false}>
+        {LENS_EFFECTS.map(({ value, label }) => (
+          <SelectItem key={value} value={value}>
+            <EffectPreview note={note} lens={lens} effect={value} />
+            {label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+function EffectPreview({ note, lens, effect }: { note: Note; lens: LensState; effect: LensEffect }) {
   const t = useClock()
   const tilt = previewTilt(t, lens.viewDeg)
-  return (
-    <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Effect">
-      {LENS_EFFECTS.map(({ value, label }) => {
-        const selected = value === lens.effect
-        // Custom previews the lens as it stands; the others as they would be if picked now
-        const preview = value === 'custom' ? lens : lensState({ ...note.tilt, effect: value, cycleXDeg: note.tilt.cycleXDeg ?? note.tilt.cycleDeg }, note.frames)
-        return (
-          <Button key={value} variant="outline" role="radio" aria-checked={selected} aria-label={label}
-            className={cn('relative h-auto flex-col gap-0.5 p-1 pb-1.5 font-normal', value === 'custom' && 'col-span-2', selected && 'border-primary ring-1 ring-primary')}
-            onClick={() => onChoose(value)}>
-            <MiniNote note={note} lens={preview} tilt={tilt} className="h-11 w-full" />
-            <TiltArrow tilt={tilt} />
-            <span className="text-xs">{label}</span>
-          </Button>
-        )
-      })}
-    </div>
-  )
+  // Custom previews the lens as it stands; the others as they would be if picked now
+  const preview = effect === 'custom' ? lens : lensState({ ...note.tilt, effect, cycleXDeg: note.tilt.cycleXDeg ?? note.tilt.cycleDeg }, note.frames)
+  return <MiniNote note={note} lens={preview} tilt={tilt} className="h-7 w-10 shrink-0 rounded-sm bg-muted/60" />
 }
 
 /** A banknote rocking in the 1 → 5 direction and back, its thread numbered with the frame that shows */
