@@ -7,7 +7,7 @@ export const MAX_FRAMES = 5
 /** Timeline length of a new frame, in the timeline's own units */
 export const DEFAULT_LENGTH = 10
 export const LENGTH_LIMITS = { min: 1, max: 100 }
-export const CYCLE_LIMITS = { min: 2, max: 600 }
+export const CYCLE_LIMITS = { min: 2, max: 1200 }
 export const DEFAULT_TILT: TiltSettings = { ...DEFAULT_PLAYBACK, cycleDeg: 30, transition: 0, effect: 'updown', runY: 'down', runX: 'right' }
 export const THREAD_WIDTH = { min: 3, max: 6, step: 0.5 }
 export const NOTE_SIZE = { min: 20, max: 250 }
@@ -81,7 +81,7 @@ function oldLength(frames: Frame[], frame: Frame) {
 
 /** The optional lens settings, kept as saved; a project from before lenses has none and stays Up/down */
 function lensFields(tilt: TiltSettings): Partial<TiltSettings> {
-  const keys = ['effect', 'cycleXDeg', 'yOn', 'runY', 'runX', 'viewDeg', 'revealAxis', 'playTilt', 'moves', 'recordings'] as const
+  const keys = ['effect', 'cycleXDeg', 'yOn', 'runY', 'runX', 'viewDeg', 'revealAxis', 'revealHide', 'flatAt', 'playTilt', 'moves', 'recordings'] as const
   return Object.fromEntries(keys.filter((k) => tilt[k] !== undefined).map((k) => [k, tilt[k]]))
 }
 

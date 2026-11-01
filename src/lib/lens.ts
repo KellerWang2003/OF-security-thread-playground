@@ -45,6 +45,8 @@ export interface LensState {
   viewDeg: number
   /** For Reveal: the tilt that plays every frame */
   revealAxis: Axis
+  /** Where flat sits along the cycle (0 to 1): 0 at the start of frame 1, or half of frame 1 for its centre */
+  offset: number
 }
 
 const lengthsOf = (frames: Pick<Frame, 'length'>[]) => frames.map((f) => Math.max(0, f.length))
@@ -59,18 +61,75 @@ export function frameEdges(frames: Pick<Frame, 'length'>[]) {
   return edges
 }
 
-/**
- * The slowest cycle a tilt can have while still never finishing the sequence within ±viewDeg: some frame in
- * the middle stays out of reach both ways. Null with fewer than 3 frames, where every frame touches flat.
- * Frame 1 starts at flat and the last frame ends there (the loop), so only frames between can be missed.
- */
-export function revealCycle(frames: Pick<Frame, 'length'>[], viewDeg: number) {
+/** Rounding slack for frame edges, which are sums of floating-point shares */
+const EPS = 1e-9
+
+/** Which frames (by index) a tilt reaching `reach` of the cycle either way from flat (at `offset`) shows */
+function reachedAt(edges: number[], offset: number, reach: number) {
+  const reached = new Set<number>()
+  if (reach >= 1) {
+    for (let i = 0; i < edges.length - 1; i++) reached.add(i)
+    return reached
+  }
+  // Forward covers [offset, offset + reach], backward [offset − reach, offset], each wrapping round the loop
+  const spans: [number, number][] = []
+  const add = (lo: number, hi: number) => {
+    // The loop's start and end are the same place, so touching one touches the other
+    if (lo < EPS) spans.push([lo + 1, 1], [Math.max(0, lo), hi])
+    else if (hi > 1 - EPS) spans.push([lo, 1], [0, hi - 1])
+    else spans.push([lo, hi])
+  }
+  add(offset, offset + reach)
+  add(offset - reach, offset)
+  for (let i = 0; i < edges.length - 1; i++) {
+    const a = edges.at(i) ?? 0, b = edges.at(i + 1) ?? 1
+    if (spans.some(([lo, hi]) => a <= hi + EPS && b >= lo - EPS)) reached.add(i)
+  }
+  return reached
+}
+
+/** Distances from flat to every frame edge, either way: the reaches at which another frame comes into view */
+function breakpoints(edges: number[], offset: number) {
+  const out = new Set<number>()
+  for (const e of edges) {
+    const d = Math.round(((((e - offset) % 1) + 1) % 1) / EPS) * EPS
+    if (d > EPS) out.add(d)
+    if (1 - d > EPS) out.add(Math.round((1 - d) / EPS) * EPS)
+  }
+  return [...out].toSorted((a, b) => a - b)
+}
+
+/** How many frames a slow tilt can keep out of view, from fewest to most (empty when it can hide none) */
+export function revealOptions(frames: Pick<Frame, 'length'>[], offset = 0) {
   const edges = frameEdges(frames)
-  let best = 0
-  for (let i = 1; i < frames.length - 1; i++) best = Math.max(best, Math.min(edges.at(i) ?? 0, 1 - (edges.at(i + 1) ?? 1)))
-  if (best <= 0) return null
+  const counts = new Set<number>()
+  // Just above zero reach, then just past each edge
+  for (const r of [1e-6, ...breakpoints(edges, offset)]) {
+    const hidden = frames.length - reachedAt(edges, offset, r).size
+    if (hidden > 0) counts.add(hidden)
+  }
+  return [...counts].toSorted((a, b) => a - b)
+}
+
+/**
+ * The slowest cycle a tilt can have while keeping at least `hide` frames out of view within ±viewDeg (the
+ * fewest possible when not given). Null when no tilt can hide that many.
+ */
+export function revealCycle(frames: Pick<Frame, 'length'>[], viewDeg: number, hide?: number, offset = 0) {
+  const options = revealOptions(frames, offset)
+  const target = hide && options.includes(hide) ? hide : options.at(0)
+  if (!target) return null
+  const edges = frameEdges(frames)
+  // The first reach at which fewer than `target` frames stay hidden: the cycle must keep viewDeg short of it
+  const limit = breakpoints(edges, offset).find((r) => frames.length - reachedAt(edges, offset, r).size < target)
+  if (!limit) return null
   // A whole degree past the limit, so the hidden frames stay hidden at exactly ±viewDeg
-  return Math.floor(viewDeg / best) + 1
+  return Math.floor(viewDeg / limit + EPS) + 1
+}
+
+/** Where flat sits along the cycle for these settings */
+export function flatOffset(tilt: Pick<TiltSettings, 'flatAt'>, frames: Pick<Frame, 'length'>[]) {
+  return tilt.flatAt !== 'start' && frames.length ? (frameEdges(frames).at(1) ?? 0) / 2 : 0
 }
 
 /** The lens settings a note carries, with the defaults a project from before lenses gets */
@@ -82,14 +141,15 @@ export function lensState(tilt: TiltSettings, frames: Pick<Frame, 'length'>[] = 
   const revealAxis = tilt.revealAxis ?? 'y'
   const y = tilt.cycleDeg
   const x = tilt.cycleXDeg ?? tilt.cycleDeg
-  const base = { effect, dirY, dirX, viewDeg, revealAxis } as const
+  const offset = flatOffset(tilt, frames)
+  const base = { effect, dirY, dirX, viewDeg, revealAxis, offset } as const
   switch (effect) {
     case 'side':
       return { ...base, cycleY: null, cycleX: x }
     case 'both':
       return { ...base, cycleY: y, cycleX: x }
     case 'reveal': {
-      const slow = revealCycle(frames, viewDeg)
+      const slow = revealCycle(frames, viewDeg, tilt.revealHide, offset)
       return revealAxis === 'y'
         ? { ...base, cycleY: y, cycleX: slow ?? x }
         : { ...base, cycleY: slow ?? y, cycleX: x }
@@ -105,7 +165,7 @@ export function lensState(tilt: TiltSettings, frames: Pick<Frame, 'length'>[] = 
 export function cyclePosition(lens: LensState, tilt: Tilt2) {
   const y = lens.cycleY ? (lens.dirY * tilt.y) / lens.cycleY : 0
   const x = lens.cycleX ? (lens.dirX * tilt.x) / lens.cycleX : 0
-  return y + x
+  return lens.offset + y + x
 }
 
 /** Which frames show at a tilt: the same crossfade maths as before, on a one-cycle timeline */
@@ -145,22 +205,9 @@ export const respondsTo = (lens: LensState, axis: Axis) => (axis === 'x' ? lens.
  * of it; at exactly ±viewDeg it counts as reached.
  */
 export function framesReached(note: Pick<Note, 'frames' | 'tilt'>, axis: Axis, lens = lensState(note.tilt, note.frames)) {
-  const reached = new Set<number>()
   const cycle = axis === 'x' ? lens.cycleX : lens.cycleY
-  if (!cycle) return reached
-  const reach = lens.viewDeg / cycle
-  const edges = frameEdges(note.frames)
-  if (reach >= 1) {
-    note.frames.forEach((_, i) => reached.add(i))
-    return reached
-  }
-  note.frames.forEach((_, i) => {
-    const a = edges.at(i) ?? 0
-    const b = edges.at(i + 1) ?? 1
-    // Forward from flat covers [0, reach], backward covers [1 − reach, 1]
-    if (a <= reach || b >= 1 - reach) reached.add(i)
-  })
-  return reached
+  if (!cycle) return new Set<number>()
+  return reachedAt(frameEdges(note.frames), lens.offset, lens.viewDeg / cycle)
 }
 
 /** Each axis's reach from flat, as a share of the cycle (0 when that tilt does nothing) */
@@ -174,8 +221,9 @@ export const reachShare = (lens: LensState, axis: Axis) => {
  * otherwise along the side tilt. Used by the timeline to scrub.
  */
 export function tiltForPosition(lens: LensState, position: number): Tilt2 {
-  if (lens.cycleY) return { x: 0, y: position * lens.cycleY * lens.dirY }
-  if (lens.cycleX) return { x: position * lens.cycleX * lens.dirX, y: 0 }
+  const from = position - lens.offset
+  if (lens.cycleY) return { x: 0, y: from * lens.cycleY * lens.dirY }
+  if (lens.cycleX) return { x: from * lens.cycleX * lens.dirX, y: 0 }
   return FLAT
 }
 

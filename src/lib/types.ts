@@ -59,6 +59,10 @@ export interface TiltSettings {
   viewDeg?: number
   /** Reveal only: the tilt that plays every frame */
   revealAxis?: 'x' | 'y'
+  /** For Reveal: how many frames the slow tilt never shows (the default is the fewest possible) */
+  revealHide?: number
+  /** Where flat sits in frame 1: its centre (the default, for every project) or its start edge */
+  flatAt?: 'start' | 'center'
   /** Which tilt playback sweeps: up/down, side to side, or one after the other. Superseded by `moves` */
   playTilt?: 'x' | 'y' | 'both'
   /** What playback does, in order; absent means what `playTilt` chose */

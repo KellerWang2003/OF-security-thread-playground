@@ -129,7 +129,7 @@ export function Field({ label, hint, children }: { label: string; hint?: ReactNo
 }
 
 /** A label on the left and its control on the right, as in a video editor's export settings */
-export function InlineField({ label, title, children }: { label: string; title?: string; children: ReactNode }) {
+export function InlineField({ label, title, children }: { label: ReactNode; title?: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[88px_1fr] items-center gap-3" title={title}>
       <Label className="text-xs font-normal text-muted-foreground">{label}</Label>

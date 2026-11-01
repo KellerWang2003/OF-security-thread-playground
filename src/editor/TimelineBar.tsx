@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
 import { clamp, cyclePhase } from '../lib/frames'
-import { framesReached, lensMix, lensState, reachShare, respondsTo, tiltForPosition } from '../lib/lens'
+import { cyclePosition, framesReached, lensMix, lensState, reachShare, respondsTo, tiltForPosition } from '../lib/lens'
 import { pickFiles } from '../lib/images'
 import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
 import type { Frame, Note } from '../lib/types'
@@ -135,7 +135,7 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const totalLength = lengths.reduce((sum, l) => sum + l, 0)
   const starts = lengths.map((_, i) => lengths.slice(0, i).reduce((sum, l) => sum + l, 0))
   const x = (units: number) => PAD + units * pxPerUnit
-  const position = (lens.cycleY ? (lens.dirY * angle) / lens.cycleY : 0) + (lens.cycleX ? (lens.dirX * angleX) / lens.cycleX : 0)
+  const position = cyclePosition(lens, { x: angleX, y: angle })
   const phase = cyclePhase(position, 1)
   const bars = (['y', 'x'] as const).filter((a) => respondsTo(lens, a)).map((a) => ({ axis: a, share: reachShare(lens, a) }))
 
