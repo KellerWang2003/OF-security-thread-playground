@@ -1,6 +1,5 @@
-import { ArrowDown, ArrowUp, MoreHorizontal, Plus, Trash2, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Plus, Trash2, X } from 'lucide-react'
+import { useRef, useState } from 'react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { IconButton, ScrubField } from '../components/controls'
 import { cn } from '@/lib/utils'
@@ -39,6 +38,16 @@ export function PlaybackPanel({ projectId, tilt, lens }: { projectId: string; ti
     set({ recordings: recordings.filter((r) => r.id !== id), moves: left.length ? left : [newMove('y')] })
   }
   const loopSeconds = playbackPlan(tilt, lens).seconds
+  // Dragging a row's number reorders the playlist: the dragged row follows the pointer, the others make room
+  const [drag, setDrag] = useState<{ from: number; dy: number } | null>(null)
+  const shiftFor = (i: number) => {
+    if (!drag) return 0
+    if (i === drag.from) return drag.dy
+    const to = Math.max(0, Math.min(moves.length - 1, drag.from + Math.round(drag.dy / ROW_PITCH)))
+    if (drag.from < i && i <= to) return -ROW_PITCH
+    if (to <= i && i < drag.from) return ROW_PITCH
+    return 0
+  }
 
   return (
     <div className="flex h-[400px]">
@@ -66,13 +75,20 @@ export function PlaybackPanel({ projectId, tilt, lens }: { projectId: string; ti
                 move={move}
                 lens={lens}
                 recordings={recordings}
+                shift={shiftFor(i)}
+                dragging={drag?.from === i}
                 onChange={(next) => editMoves((list) => list.map((m, j) => (j === i ? next(m) : m)))}
-                onMove={(by) => editMoves((list) => {
-                  const copy = [...list]
-                  const [m] = copy.splice(i, 1)
-                  copy.splice(i + by, 0, m)
-                  return copy
-                })}
+                onDrag={(dy) => setDrag(dy === null ? null : { from: i, dy })}
+                onDrop={(dy) => {
+                  setDrag(null)
+                  const to = Math.max(0, Math.min(moves.length - 1, i + Math.round(dy / ROW_PITCH)))
+                  if (to !== i) editMoves((list) => {
+                    const copy = [...list]
+                    const [m] = copy.splice(i, 1)
+                    copy.splice(to, 0, m)
+                    return copy
+                  })
+                }}
                 onRemove={() => editMoves((list) => list.filter((_, j) => j !== i))}
               />
             ))}
@@ -117,22 +133,54 @@ function LibraryRow({ name, seconds, disabled, onAdd, onDelete }: {
   )
 }
 
-function PlaylistRow({ index, count, move, lens, recordings, onChange, onMove, onRemove }: {
+/** Row height plus the gap between rows, in px */
+const ROW_PITCH = 44
+
+function PlaylistRow({ index, count, move, lens, recordings, shift, dragging, onChange, onDrag, onDrop, onRemove }: {
   index: number
   count: number
   move: PlaybackMove
   lens: LensState
   recordings: Recording[]
+  shift: number
+  dragging: boolean
   onChange: (change: (m: PlaybackMove) => PlaybackMove) => void
-  onMove: (by: -1 | 1) => void
+  onDrag: (dy: number | null) => void
+  onDrop: (dy: number) => void
   onRemove: () => void
 }) {
+  const start = useRef<number | null>(null)
   const reach = moveReach(move, lens)
   const axes = movesAxes(move)
   const name = move.kind === 'gesture' ? (recordings.find((r) => r.id === move.recordingId)?.name ?? 'Recording') : presetName(move.kind)
   return (
-    <li className="flex h-10 shrink-0 items-center gap-1.5 rounded-md bg-background px-1.5 shadow-xs">
-      <span className="w-3 shrink-0 text-center text-[10px] text-muted-foreground tabular-nums">{index + 1}</span>
+    <li
+      className={cn('relative flex h-10 shrink-0 items-center gap-1.5 rounded-md bg-background px-1.5 shadow-xs', dragging ? 'z-10 shadow-md' : 'transition-transform')}
+      style={shift ? { transform: `translateY(${shift}px)` } : undefined}
+    >
+      <span
+        role="button"
+        tabIndex={-1}
+        aria-label={`Drag to reorder ${name}`}
+        title="Drag to reorder"
+        className={cn('flex h-full w-4 shrink-0 touch-none items-center justify-center text-[10px] text-muted-foreground tabular-nums select-none hover:text-foreground', count > 1 && (dragging ? 'cursor-grabbing' : 'cursor-grab'))}
+        onPointerDown={(e) => {
+          if (e.button !== 0 || count < 2) return
+          e.currentTarget.setPointerCapture(e.pointerId)
+          start.current = e.clientY
+          onDrag(0)
+        }}
+        onPointerMove={(e) => { if (start.current !== null) onDrag(e.clientY - start.current) }}
+        onPointerUp={(e) => {
+          if (start.current === null) return
+          const dy = e.clientY - start.current
+          start.current = null
+          onDrop(dy)
+        }}
+        onPointerCancel={() => { start.current = null; onDrag(null) }}
+      >
+        {index + 1}
+      </span>
       <div className="min-w-0 flex-1 truncate text-xs">
         {name}
         {move.kind === 'gesture' && <span className="ml-1 text-[10px] text-muted-foreground tabular-nums">{Math.round(gestureSeconds(move) * 10) / 10} s</span>}
@@ -150,17 +198,7 @@ function PlaylistRow({ index, count, move, lens, recordings, onChange, onMove, o
         <ScrubField className="w-[70px] shrink-0" label={move.kind === 'x' ? '→' : '↔'} title="Side tilt this move reaches; negative tilts left"
           value={Math.round(reach.x)} min={-SWEEP_MAX} max={SWEEP_MAX} unit="°" onChange={(x) => onChange((m) => ({ ...m, x }))} />
       )}
-      <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" aria-label={`${name} options`} />}>
-          <MoreHorizontal />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp />Move up</DropdownMenuItem>
-          <DropdownMenuItem disabled={index === count - 1} onClick={() => onMove(1)}><ArrowDown />Move down</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" disabled={count <= 1} onClick={onRemove}><X />Remove</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <IconButton label="Remove" size="icon-xs" disabled={count <= 1} onClick={onRemove}><X /></IconButton>
     </li>
   )
 }
