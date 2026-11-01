@@ -6,10 +6,10 @@ import { cn } from '@/lib/utils'
 import { IconButton } from '../components/controls'
 import { NoteView } from '../components/NoteView'
 import { clamp } from '../lib/frames'
-import { lensState, respondsTo, sweepAxes } from '../lib/lens'
+import { lensState, sweepAxes } from '../lib/lens'
 import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
-import { setTilt, useTilt, useTiltLoop } from '../tilt/tilt'
+import { setTilt, springToFlat, useTilt, useTiltLoop } from '../tilt/tilt'
 import { addImageFrames } from './frameActions'
 import { WindowEditor } from './WindowEditor'
 import { useElementSize } from './useElementSize'
@@ -253,18 +253,19 @@ export function Canvas({
           const snap = (mm: number) => Math.round(mm * 2) / 2
           updateNote(projectId, g.noteId, (n) => ({ ...n, x: snap(g.noteX + dx / scale), y: snap(g.noteY + dy / scale) }))
         } else {
-          // About 160 px of drag tilts the note 30°; past one cycle the frames loop. Each direction only tilts
-          // when the lens responds to it, so a horizontal lens keeps today's up/down drag.
+          // About 160 px of drag tilts the note 30°; past one cycle the frames loop. Both directions always
+          // tilt, unless locked on the tilt pad.
           const limit = loopLens.viewDeg
+          const { lockX, lockY } = useTilt.getState()
           setTilt({
-            target: respondsTo(loopLens, 'y') ? clamp(g.start - (dy * 30) / 160, -limit, limit) : 0,
-            targetX: respondsTo(loopLens, 'x') ? clamp(g.startSide + (dx * 30) / 160, -limit, limit) : 0,
+            target: lockY ? g.start : clamp(g.start - (dy * 30) / 160, -limit, limit),
+            targetX: lockX ? g.startSide : clamp(g.startSide + (dx * 30) / 160, -limit, limit),
           })
         }
       }}
       onPointerUp={(e) => {
         const g = gesture.current
-        if (g?.mode === 'tilt' && useTilt.getState().springBack) setTilt({ target: 0, targetX: 0 })
+        if (g?.mode === 'tilt' && useTilt.getState().springBack) springToFlat()
         // A click on a window, without dragging, opens it for resizing
         if (g?.mode === 'thread' && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) {
           const note = notes.find((n) => n.id === g.noteId)
@@ -279,7 +280,7 @@ export function Canvas({
         setActiveMode(undefined)
       }}
       onPointerCancel={() => {
-        if (gesture.current?.mode === 'tilt' && useTilt.getState().springBack) setTilt({ target: 0, targetX: 0 })
+        if (gesture.current?.mode === 'tilt' && useTilt.getState().springBack) springToFlat()
         gesture.current = null
         setActiveMode(undefined)
       }}

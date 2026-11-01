@@ -1,49 +1,52 @@
-import { RotateCcw } from 'lucide-react'
+import { Lock, LockOpen, RotateCcw } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
+import { Toggle } from '@/components/ui/toggle'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { TILT_LIMIT, clamp } from '../lib/frames'
 import { setTilt, useTilt } from '../tilt/tilt'
 
-/** Degrees of tilt per pixel dragged; the full ±60° takes about 400 px */
-const DEG_PER_PX = 0.3
-/** Spacing of the ridges, so they roll past like a thumbwheel as the angle changes */
-const RIDGE_PX = 6
+/** Width and height of the pad, in px */
+const PAD_PX = 136
 
 type Axis = 'x' | 'y'
 
-/** Holds the tilt at an angle on one axis, keeping the other where it is */
-function holdAt(axis: Axis, deg: number, limit: number) {
+/** The tilt each axis shows: where it is held, or where playback has it */
+function shownTilt() {
   const s = useTilt.getState()
-  const shownY = s.source === 'hold' ? s.target : s.angle
-  const shownX = s.source === 'hold' ? s.targetX : s.angleX
-  const value = clamp(deg, -limit, limit)
-  setTilt(axis === 'y' ? { source: 'hold', target: value, targetX: shownX } : { source: 'hold', target: shownY, targetX: value })
+  return s.source === 'hold' ? { x: s.targetX, y: s.target } : { x: s.angleX, y: s.angle }
+}
+
+/** Holds the tilt, leaving any axis that isn't given (or is locked, when `respectLocks`) where it is */
+function holdAt(next: { x?: number; y?: number }, limit: number, respectLocks = false) {
+  const s = useTilt.getState()
+  const shown = shownTilt()
+  const x = next.x === undefined || (respectLocks && s.lockX) ? shown.x : clamp(next.x, -limit, limit)
+  const y = next.y === undefined || (respectLocks && s.lockY) ? shown.y : clamp(next.y, -limit, limit)
+  setTilt({ source: 'hold', target: y, targetX: x })
 }
 
 /**
- * Left edge of the canvas: a ridged bar you press and drag up or down to tilt every banknote, the current
- * angle, and a field to type an exact angle. The tilt stays where you leave it. When the lens responds to
- * side tilt, a matching horizontal wheel sits near the bottom-left corner.
+ * Left edge of the canvas: a pad you press and drag in any direction to tilt every banknote (up/down
+ * vertically, side to side horizontally), held where you let go. Each axis has a field for an exact angle
+ * and a lock that keeps the pad and canvas drag off it.
  */
-export function TiltRail({ limit = TILT_LIMIT, side = false }: { limit?: number; side?: boolean }) {
+export function TiltRail({ limit = TILT_LIMIT }: { limit?: number }) {
   return (
-    <>
-      <Panel className="absolute top-1/2 left-3 flex w-12 -translate-y-1/2 flex-col items-center gap-1.5 rounded-[calc(var(--radius)+0.375rem+1px)] p-1.5">
-        <AngleField axis="y" limit={limit} />
-        <Wheel axis="y" limit={limit} />
+    <Panel className="absolute top-1/2 left-3 flex -translate-y-1/2 flex-col gap-1.5 rounded-[calc(var(--radius)+0.375rem+1px)] p-1.5">
+      <Pad limit={limit} />
+      <div className="flex items-end gap-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <AxisRow axis="y" limit={limit} />
+          <AxisRow axis="x" limit={limit} />
+        </div>
         <IconButton label="Back to flat" size="icon-sm" onClick={() => setTilt({ source: 'hold', target: 0, targetX: 0 })}>
           <RotateCcw />
         </IconButton>
-      </Panel>
-      {side && (
-        <Panel className="absolute bottom-[108px] left-3 flex h-12 w-64 items-center gap-1.5 rounded-[calc(var(--radius)+0.375rem+1px)] p-1.5">
-          <div className="w-12 shrink-0"><AngleField axis="x" limit={limit} /></div>
-          <Wheel axis="x" limit={limit} />
-        </Panel>
-      )}
-    </>
+      </div>
+    </Panel>
   )
 }
 
@@ -51,12 +54,40 @@ function useShown(axis: Axis) {
   return useTilt((s) => (axis === 'y' ? (s.source === 'hold' ? s.target : s.angle) : (s.source === 'hold' ? s.targetX : s.angleX)))
 }
 
+function AxisRow({ axis, limit }: { axis: Axis; limit: number }) {
+  const locked = useTilt((s) => (axis === 'x' ? s.lockX : s.lockY))
+  const name = axis === 'y' ? 'up/down' : 'side'
+  return (
+    <div className="flex items-center gap-1">
+      <span className="w-3 shrink-0 text-center text-xs text-muted-foreground" title={axis === 'y' ? 'Up/down tilt' : 'Side tilt'}>
+        {axis === 'y' ? '↕' : '↔'}
+      </span>
+      <AngleField axis={axis} limit={limit} />
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Toggle
+              size="sm"
+              aria-label={`Lock ${name} tilt`}
+              pressed={locked}
+              onPressedChange={(on) => setTilt(axis === 'x' ? { lockX: on } : { lockY: on })}
+            />
+          }
+        >
+          {locked ? <Lock /> : <LockOpen className="text-muted-foreground" />}
+        </TooltipTrigger>
+        <TooltipContent>{locked ? `Unlock ${name} tilt` : `Lock ${name} tilt`}</TooltipContent>
+      </Tooltip>
+    </div>
+  )
+}
+
 function AngleField({ axis, limit }: { axis: Axis; limit: number }) {
   const shown = useShown(axis)
   const [draft, setDraft] = useState<string | null>(null)
-  const label = axis === 'y' ? 'Tilt angle' : 'Side tilt angle'
+  const label = axis === 'y' ? 'Up/down tilt angle' : 'Side tilt angle'
   return (
-    <div className="relative w-full" title={label}>
+    <div className="relative min-w-0 flex-1" title={label}>
       <Input
         aria-label={label}
         type="number"
@@ -72,7 +103,7 @@ function AngleField({ axis, limit }: { axis: Axis; limit: number }) {
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => {
           const value = Number(draft)
-          if (draft !== null && draft !== '' && Number.isFinite(value)) holdAt(axis, value, limit)
+          if (draft !== null && draft !== '' && Number.isFinite(value)) holdAt({ [axis]: value }, limit)
           setDraft(null)
         }}
         onKeyDown={(e) => {
@@ -88,68 +119,77 @@ function AngleField({ axis, limit }: { axis: Axis; limit: number }) {
   )
 }
 
-function Wheel({ axis, limit }: { axis: Axis; limit: number }) {
-  const shown = useShown(axis)
-  const drag = useRef<{ at: number; start: number } | null>(null)
+/** The square maps ±limit on each axis: the centre is flat, the top edge full up tilt, the right edge full right */
+function Pad({ limit }: { limit: number }) {
+  const x = useShown('x')
+  const y = useShown('y')
+  const lockX = useTilt((s) => s.lockX)
+  const lockY = useTilt((s) => s.lockY)
+  const pad = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
-  const vertical = axis === 'y'
-  const endDrag = () => {
-    drag.current = null
-    setDragging(false)
+  const half = PAD_PX / 2
+  const toPx = (deg: number) => half + (clamp(deg, -limit, limit) / limit) * (half - 6)
+
+  const follow = (clientX: number, clientY: number) => {
+    const box = pad.current?.getBoundingClientRect()
+    if (!box) return
+    const scale = limit / (half - 6)
+    holdAt({ x: (clientX - box.left - half) * scale, y: (box.top + half - clientY) * scale }, limit, true)
   }
+
   return (
     <div
-      role="slider"
-      aria-label={vertical ? 'Tilt' : 'Side tilt'}
-      aria-orientation={vertical ? 'vertical' : 'horizontal'}
-      aria-valuemin={-limit}
-      aria-valuemax={limit}
-      aria-valuenow={Math.round(shown)}
+      ref={pad}
+      role="group"
+      aria-label="Tilt"
       tabIndex={0}
       className={cn(
         'relative touch-none overflow-hidden rounded-md bg-muted outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50',
-        vertical ? 'h-56 w-full' : 'h-full min-w-0 flex-1',
-        dragging ? 'cursor-grabbing' : 'cursor-grab',
+        dragging ? 'cursor-grabbing' : 'cursor-crosshair',
       )}
       style={{
-        backgroundImage: `repeating-linear-gradient(${vertical ? 180 : 90}deg, color-mix(in oklch, var(--foreground) 22%, transparent) 0 1px, transparent 1px ${RIDGE_PX}px)`,
-        backgroundPosition: vertical ? `0 ${-shown / DEG_PER_PX}px` : `${shown / DEG_PER_PX}px 0`,
+        width: PAD_PX,
+        height: PAD_PX,
+        backgroundImage: 'radial-gradient(circle, color-mix(in oklch, var(--foreground) 22%, transparent) 1px, transparent 1.2px)',
+        backgroundSize: `${PAD_PX / 8}px ${PAD_PX / 8}px`,
+        backgroundPosition: `${PAD_PX / 16}px ${PAD_PX / 16}px`,
       }}
       onPointerDown={(e) => {
         // Only the primary button drags; a right-click opens a context menu and never sends pointerup
         if (e.button !== 0) return
         e.currentTarget.setPointerCapture(e.pointerId)
-        const s = useTilt.getState()
-        const start = vertical ? (s.source === 'hold' ? s.target : s.angle) : (s.source === 'hold' ? s.targetX : s.angleX)
-        drag.current = { at: vertical ? e.clientY : e.clientX, start }
         setDragging(true)
-        holdAt(axis, start, limit)
+        follow(e.clientX, e.clientY)
       }}
       onPointerMove={(e) => {
-        if (!drag.current) return
+        if (!dragging) return
         // A release that never reached us (outside the window, a lost capture): stop following the pointer
-        if (e.buttons === 0) return endDrag()
-        // Dragging up tilts up; dragging right tilts right
-        const moved = vertical ? drag.current.at - e.clientY : e.clientX - drag.current.at
-        holdAt(axis, drag.current.start + moved * DEG_PER_PX, limit)
+        if (e.buttons === 0) return setDragging(false)
+        follow(e.clientX, e.clientY)
       }}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      onLostPointerCapture={endDrag}
-      onDoubleClick={() => holdAt(axis, 0, limit)}
+      onPointerUp={() => setDragging(false)}
+      onPointerCancel={() => setDragging(false)}
+      onLostPointerCapture={() => setDragging(false)}
+      onDoubleClick={() => holdAt({ x: 0, y: 0 }, limit, true)}
       onKeyDown={(e) => {
         const step = e.shiftKey ? 5 : 1
-        const up = vertical ? 'ArrowUp' : 'ArrowRight'
-        const down = vertical ? 'ArrowDown' : 'ArrowLeft'
-        if (e.key === up) holdAt(axis, Math.round(shown) + step, limit)
-        else if (e.key === down) holdAt(axis, Math.round(shown) - step, limit)
+        const s = shownTilt()
+        if (e.key === 'ArrowUp') holdAt({ y: Math.round(s.y) + step }, limit, true)
+        else if (e.key === 'ArrowDown') holdAt({ y: Math.round(s.y) - step }, limit, true)
+        else if (e.key === 'ArrowRight') holdAt({ x: Math.round(s.x) + step }, limit, true)
+        else if (e.key === 'ArrowLeft') holdAt({ x: Math.round(s.x) - step }, limit, true)
         else return
         e.preventDefault()
       }}
     >
-      {/* Soft fade at both ends, so the ridges read as a wheel turning */}
-      <div className={cn('pointer-events-none absolute inset-0 via-transparent from-background/90 to-background/90', vertical ? 'bg-gradient-to-b' : 'bg-gradient-to-r')} />
-      <div className={cn('pointer-events-none absolute rounded-full bg-primary', vertical ? 'inset-x-1 top-1/2 h-0.5 -translate-y-1/2' : 'inset-y-1 left-1/2 w-0.5 -translate-x-1/2')} />
+      {/* Flat crosshair; a locked axis's line turns solid to show the dot stays on it */}
+      <div className={cn('pointer-events-none absolute inset-x-0 h-px', lockY ? 'bg-primary/60' : 'bg-foreground/15')} style={{ top: toPx(-y) - 0.5 }} />
+      <div className={cn('pointer-events-none absolute inset-y-0 w-px', lockX ? 'bg-primary/60' : 'bg-foreground/15')} style={{ left: toPx(x) - 0.5 }} />
+      <div className="pointer-events-none absolute top-1/2 left-1/2 size-1 -translate-1/2 rounded-full bg-foreground/40" />
+      <div
+        className="pointer-events-none absolute size-3 -translate-1/2 rounded-full border-2 border-background bg-primary shadow"
+        style={{ left: toPx(x), top: toPx(-y) }}
+      />
     </div>
   )
 }

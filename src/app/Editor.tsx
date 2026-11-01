@@ -1,7 +1,7 @@
 import { undoProject, redoProject, updateNote } from '../lib/store'
 import { beginHistoryGroup, endHistoryGroup, breakHistoryGroup } from '../lib/history'
 import { togglePlayback } from '../tilt/tilt'
-import { lensState, respondsTo } from '../lib/lens'
+import { lensState } from '../lib/lens'
 import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -142,7 +142,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
           }} />
       )}
 
-      {!isEmpty && !editingWindows && <TiltRail limit={lens?.viewDeg} side={!!lens && respondsTo(lens, 'x')} />}
+      {!isEmpty && !editingWindows && <TiltRail limit={lens?.viewDeg} />}
       <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} />
       {!isEmpty && (
         <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />

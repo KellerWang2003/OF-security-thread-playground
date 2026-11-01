@@ -16,6 +16,9 @@ interface TiltState {
   /** The smoothed side angle; positive tilts right */
   angleX: number
   targetX: number
+  /** Keeps manual tilt off one axis: the pad and canvas drag leave it where it is */
+  lockX: boolean
+  lockY: boolean
   springBack: boolean
   perspective: boolean
   sheen: boolean
@@ -28,12 +31,20 @@ export const useTilt = create<TiltState>()(() => ({
   target: 0,
   angleX: 0,
   targetX: 0,
+  lockX: false,
+  lockY: false,
   springBack: true,
   perspective: true,
   sheen: true,
 }))
 
 export const setTilt = (patch: Partial<TiltState>) => useTilt.setState(patch)
+
+/** Returns to flat, except on a locked axis, which stays where it was set */
+export function springToFlat() {
+  const { lockX, lockY, target, targetX } = useTilt.getState()
+  setTilt({ target: lockY ? target : 0, targetX: lockX ? targetX : 0 })
+}
 
 /** Shared by the keyboard shortcut and the playback button. Pause holds the rendered angle. */
 export function togglePlayback() {
