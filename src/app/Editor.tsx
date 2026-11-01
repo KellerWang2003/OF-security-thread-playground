@@ -51,8 +51,9 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return
       if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement) && !document.querySelector('[role=dialog]')) {
-        if (editingWindows) exitWindows()
-        else selectNote(undefined)
+        // Clearing the selection always leaves window editing; avoids reading a stale selectedId here
+        exitWindows()
+        if (!editingWindows) setSelectedId(undefined)
       }
     }
     window.addEventListener('keydown', onKey)
