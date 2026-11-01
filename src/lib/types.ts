@@ -63,6 +63,15 @@ export interface TiltSettings {
   playTilt?: 'x' | 'y' | 'both'
   /** What playback does, in order; absent means what `playTilt` chose */
   moves?: PlaybackMove[]
+  /** Movements recorded on the tilt pad, kept to add to playback again */
+  recordings?: Recording[]
+}
+
+export interface Recording {
+  id: string
+  name: string
+  /** Seconds from the start, and the tilt then */
+  points: { t: number; x: number; y: number }[]
 }
 
 /**
@@ -75,8 +84,10 @@ export interface PlaybackMove {
   kind: 'y' | 'x' | 'diagonal' | 'circle' | 'gesture'
   x?: number
   y?: number
-  /** Gesture only: seconds from the start, and the tilt then */
+  /** Gesture only: seconds from the start, and the tilt then (a copy of the recording's) */
   points?: { t: number; x: number; y: number }[]
+  /** Gesture only: the recording it came from; deleting that recording removes the move */
+  recordingId?: string
 }
 
 /** One banknote in a project, with its own size, thread and frames */

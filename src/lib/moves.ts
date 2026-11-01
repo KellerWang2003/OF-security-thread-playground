@@ -1,7 +1,7 @@
 import { clamp } from './frames'
 import { FLAT, SWEEP_MAX, respondsTo, type Axis, type LensState, type Tilt2 } from './lens'
 import { playbackEase, playbackSettings } from './playback'
-import type { PlaybackCurve, PlaybackMove, TiltSettings } from './types'
+import type { PlaybackCurve, PlaybackMove, Recording, TiltSettings } from './types'
 
 /**
  * Playback as a list of moves played in order, each a path on the tilt pad. Preset moves start and end flat;
@@ -163,7 +163,7 @@ export const planPath = (plan: PlaybackPlan): Tilt2[] => plan.segments.flatMap((
  * Turns a recording of the pad (time in seconds, tilt in degrees) into a gesture move: trimmed to the longest
  * allowed, and thinned so points closer than a quarter degree to the last kept one are dropped.
  */
-export function gestureFromRecording(samples: { t: number; x: number; y: number }[], limit: number): PlaybackMove | null {
+export function recordingFromSamples(samples: { t: number; x: number; y: number }[], limit: number, name: string): Recording | null {
   if (samples.length < 2) return null
   const t0 = samples[0].t
   const kept: { t: number; x: number; y: number }[] = []
@@ -176,13 +176,23 @@ export function gestureFromRecording(samples: { t: number; x: number; y: number 
     else last.t = point.t
   }
   if (kept.length < 2 || kept.at(-1)!.t - kept[0].t < 0.1) return null
-  return { id: newId(), kind: 'gesture', points: kept }
+  return { id: newId(), name, points: kept }
 }
 
 const round = (v: number) => Math.round(v * 10) / 10
 
-/** Length of a gesture in seconds at 1× */
-export const gestureSeconds = (move: PlaybackMove) => {
+/** A playlist move that plays a recording */
+export const moveFromRecording = (r: Recording): PlaybackMove => ({ id: newId(), kind: 'gesture', points: r.points, recordingId: r.id })
+
+/** The next free "Recording N" name */
+export function nextRecordingName(recordings: Recording[] = []) {
+  let n = recordings.length + 1
+  while (recordings.some((r) => r.name === `Recording ${n}`)) n++
+  return `Recording ${n}`
+}
+
+/** Length of a gesture or recording in seconds at 1× */
+export const gestureSeconds = (move: { points?: { t: number }[] }) => {
   const p = move.points ?? []
   return p.length > 1 ? p.at(-1)!.t - p[0].t : 0
 }

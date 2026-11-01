@@ -7,10 +7,10 @@ import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { TILT_LIMIT, clamp } from '../lib/frames'
 import type { LensState } from '../lib/lens'
-import { MOVES_MAX, editableMoves, gestureFromRecording, movesOf, planPath, playbackPlan } from '../lib/moves'
+import { moveFromRecording, nextRecordingName, planPath, playbackPlan, recordingFromSamples } from '../lib/moves'
 import type { TiltSettings } from '../lib/types'
 import { setRecording, setTilt, useTilt } from '../tilt/tilt'
-import { saveMoves } from './playbackActions'
+import { saveTilt } from './playbackActions'
 
 /** Width and height of the pad, in px */
 const PAD_PX = 136
@@ -51,10 +51,12 @@ export function TiltRail({ limit = TILT_LIMIT, playback }: {
         recording={recording}
         onRecorded={(samples) => {
           setRecording(false)
-          if (!playback || movesOf(playback.tilt, playback.lens).length >= MOVES_MAX) return
-          const move = gestureFromRecording(samples, limit)
-          if (!move) return
-          saveMoves(playback.projectId, [...editableMoves(playback.tilt, playback.lens), move])
+          if (!playback) return
+          const recordings = playback.tilt.recordings ?? []
+          const made = recordingFromSamples(samples, limit, nextRecordingName(recordings))
+          if (!made) return
+          // A new recording is what plays now, on its own; it also joins the saved recordings
+          saveTilt(playback.projectId, { recordings: [...recordings, made], moves: [moveFromRecording(made)] })
           setTilt({ source: 'wobble' })
         }}
       />

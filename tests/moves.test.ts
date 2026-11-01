@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { playbackTilts } from '../src/lib/exportRender'
 import { lensState } from '../src/lib/lens'
-import { gestureFromRecording, movesOf, playbackPlan, tiltAt } from '../src/lib/moves'
+import { moveFromRecording, recordingFromSamples, movesOf, playbackPlan, tiltAt } from '../src/lib/moves'
 import { migrateProject } from '../src/lib/notes'
 import type { TiltSettings } from '../src/lib/types'
 
@@ -34,9 +34,9 @@ describe('playback moves', () => {
   })
 
   it('plays a recorded gesture in its own time, joined to flat', () => {
-    const move = gestureFromRecording([{ t: 5, x: 0, y: 0 }, { t: 5.5, x: 10, y: 0 }, { t: 6, x: 10, y: 10 }], 60)!
+    const move = recordingFromSamples([{ t: 5, x: 0, y: 0 }, { t: 5.5, x: 10, y: 0 }, { t: 6, x: 10, y: 10 }], 60, 'R')!
     expect(move.points).toHaveLength(3)
-    const tilt = { ...base, moves: [move] } as TiltSettings
+    const tilt = { ...base, moves: [moveFromRecording(move)] } as TiltSettings
     const plan = playbackPlan(tilt, lensState(tilt, frames))
     expect(tiltAt(plan, 0.75)).toEqual({ x: 10, y: 5 })
   })

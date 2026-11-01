@@ -10,20 +10,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { IconButton, Panel, ScrubField } from '../components/controls'
+import { IconButton, Panel } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
-import { HOLD_LIMITS, PLAYBACK_CURVES, SPEED_LIMITS, advancePlayback, playbackEase, playbackSettings } from '../lib/playback'
 import { clamp, cyclePhase } from '../lib/frames'
 import { framesReached, lensMix, lensState, reachShare, respondsTo, tiltForPosition } from '../lib/lens'
 import { pickFiles } from '../lib/images'
 import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
-import { MOVES_MAX, movesOf, playbackPlan } from '../lib/moves'
-import { updateProject } from '../lib/store'
 import type { Frame, Note } from '../lib/types'
 import { setRecording, setTilt, togglePlayback, useTilt } from '../tilt/tilt'
-import { MovesList } from './MovesList'
+import { PlaybackPanel } from './PlaybackPanel'
 import { addColorFrame, addImageFrames, deleteFrame, moveFrame, replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
 
 /** Opens the system colour picker without a visible input */
@@ -82,29 +78,11 @@ export function TimelineBar({
   )
 }
 
-function playbackMotionPath(speed: number, curve: NonNullable<Note['tilt']['curve']>, holdSeconds: number) {
-  const duration = 2 / speed + 2 * holdSeconds
-  let position = { phase: 0, holdRemaining: 0 }
-  const points: string[] = []
-  for (let i = 0; i <= 80; i++) {
-    if (i) position = advancePlayback(position, duration / 80, speed, holdSeconds)
-    const progress = position.phase <= 1 ? position.phase : 2 - position.phase
-    points.push(`${i === 0 ? 'M' : 'L'}${4 + i * 3},${44 - 36 * playbackEase(progress, curve)}`)
-  }
-  return points.join(' ')
-}
-
 /** Project-wide playback controls, shared by every banknote. */
 function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) {
   const tilt = note?.tilt ?? DEFAULT_TILT
   const lens = lensState(tilt, note?.frames)
   const recording = useTilt((s) => s.recording)
-  const full = movesOf(tilt, lens).length >= MOVES_MAX
-  const loopSeconds = playbackPlan(tilt, lens).seconds
-  const setTiltSettings = (patch: Partial<Note['tilt']>) =>
-    updateProject(projectId, (p) => ({ ...p, notes: p.notes.map((n) => ({ ...n, tilt: { ...n.tilt, ...patch } })) }))
-  const { speed, curve, holdSeconds } = playbackSettings(tilt)
-  const motion = playbackMotionPath(speed, curve, holdSeconds)
 
   return (
     <div className="flex w-[148px] shrink-0 flex-col justify-center gap-1.5">
@@ -113,7 +91,6 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
         size="sm"
         className="h-8 w-full gap-1.5 text-xs"
         title={recording ? 'Cancel recording' : 'Drag on the tilt pad to record a playback move'}
-        disabled={!recording && full}
         onClick={() => setRecording(!recording)}
       >
         {recording ? <Square className="size-3 fill-current" /> : <Circle className="size-3 fill-destructive text-destructive" />}
@@ -123,28 +100,9 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
         <PopoverTrigger render={<Button variant="outline" size="sm" className="h-8 w-full gap-1.5 text-xs" />}>
           <SlidersHorizontal className="size-3.5" />Playback settings
         </PopoverTrigger>
-        <PopoverContent side="top" align="start" sideOffset={12} className="w-[332px] gap-3 p-3">
-          <PopoverTitle className="text-xs">Playback settings</PopoverTitle>
-          <MovesList projectId={projectId} tilt={tilt} lens={lens} />
-          <ScrubField label="Fade" title="How much neighbouring frames blend into each other" value={Math.round(tilt.transition * 100)} min={0} max={100} step={5} unit="%" onChange={(v) => setTiltSettings({ transition: v / 100 })} />
-          <ScrubField label="Speed" title="Playback speed multiplier; 1× takes two seconds for the full motion, before holds" value={speed} {...SPEED_LIMITS} unit="×" onChange={(next) => setTiltSettings({ speed: next })} />
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Curve</span>
-              <span className="tabular-nums" title="Time for every move, including holds">{Math.round(loopSeconds * 100) / 100} s / loop</span>
-            </div>
-            <Select value={curve} items={PLAYBACK_CURVES} onValueChange={(next) => { if (next) setTiltSettings({ curve: next }) }}>
-              <SelectTrigger aria-label="Playback curve" className="w-full"><SelectValue /></SelectTrigger>
-              <SelectContent alignItemWithTrigger={false}>
-                {PLAYBACK_CURVES.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <svg viewBox="0 0 248 52" role="img" aria-label="Playback motion from flat to tilted and back" className="h-14 w-full rounded-md bg-muted/40 text-foreground">
-              <path d="M4 44H244" fill="none" stroke="currentColor" strokeOpacity="0.12" />
-              <path d={motion} fill="none" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-          </div>
-          <ScrubField label="Hold at ends" title="Pause at flat and at full tilt, in seconds at each end" value={holdSeconds} {...HOLD_LIMITS} unit="s" onChange={(next) => setTiltSettings({ holdSeconds: next })} />
+        <PopoverContent side="top" align="start" sideOffset={12} className="w-[540px] gap-3 p-3">
+          <PopoverTitle className="text-sm">Playback settings</PopoverTitle>
+          <PlaybackPanel projectId={projectId} tilt={tilt} lens={lens} />
         </PopoverContent>
       </Popover>
     </div>

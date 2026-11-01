@@ -108,7 +108,7 @@ describe('username workspace editor', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Playback settings' })
     expect(dialog).toBeDefined()
     fireEvent.change(screen.getByTitle('How much neighbouring frames blend into each other').querySelector('input')!, { target: { value: '60' } })
-    fireEvent.change(screen.getByTitle('Playback speed multiplier; 1× takes two seconds for the full motion, before holds').querySelector('input')!, { target: { value: '2' } })
+    fireEvent.change(screen.getByTitle('Playback speed multiplier; 1× takes one second each way').querySelector('input')!, { target: { value: '2' } })
     fireEvent.change(screen.getByTitle('Pause at flat and at full tilt, in seconds at each end').querySelector('input')!, { target: { value: '0.5' } })
     await user.click(screen.getByRole('combobox', { name: 'Playback curve' }))
     await user.click(await screen.findByRole('option', { name: 'Linear', exact: true }))
@@ -117,7 +117,7 @@ describe('username workspace editor', () => {
     for (const note of migrateProject(JSON.parse(JSON.stringify(project))).notes) {
       expect(note.tilt).toMatchObject({ transition: 0.6, speed: 2, curve: 'linear', holdSeconds: 0.5 })
     }
-    expect(screen.getByText('2 s / loop')).toBeDefined()
+    expect(screen.getByText('2 s loop')).toBeDefined()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Playback settings' })).toBeNull())
     expect(screen.getByRole('button', { name: 'Playback settings', exact: true })).toBeDefined()
