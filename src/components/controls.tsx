@@ -94,10 +94,13 @@ export function ScrubField({
 const clampValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
 /** A top-level part of the banknote in the side panel (the banknote itself, the thread, later others) */
-export function Group({ title, children }: { title: string; children: ReactNode }) {
+export function Group({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex flex-col border-b border-border/60 pt-3">
-      <h2 className="px-4 text-[13px] font-semibold">{title}</h2>
+      <div className="flex h-5 items-center justify-between pr-2.5 pl-4">
+        <h2 className="text-[13px] font-semibold">{title}</h2>
+        {action}
+      </div>
       <div className="flex flex-col divide-y divide-border/40">{children}</div>
     </div>
   )

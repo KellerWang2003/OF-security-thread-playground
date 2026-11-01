@@ -1,5 +1,16 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, EyeOff } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, EyeOff, MoreHorizontal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
@@ -20,7 +31,7 @@ import {
   type LensState,
 } from '../lib/lens'
 import { CYCLE_LIMITS } from '../lib/notes'
-import { CycleBar, Explain, MiniNote, RidgeIcon, TiltArrow, previewTilt, swatch, useClock } from './LensVisuals'
+import { CycleBar, Explain, MiniNote, RidgeIcon, swatch, useClock } from './LensVisuals'
 import { updateProject } from '../lib/store'
 import type { Note, TiltSettings } from '../lib/types'
 import { setTilt, useTilt } from '../tilt/tilt'
@@ -31,6 +42,40 @@ const round = (v: number, digits = 0) => Math.round(v * 10 ** digits) / 10 ** di
  * The project's lens, as an effect: what tilting does. Each effect asks only what it needs and works out the
  * rest; Custom exposes the raw values. Like Cycle, it applies to every banknote in the project.
  */
+/**
+ * Which way frames run on each tilt. Flat always shows the middle frame, so the default (1 → 5 top to bottom
+ * and left to right) rarely needs changing; it lives in the Lens effect title's ⋯ menu.
+ */
+export function LensMenu({ projectId, note }: { projectId: string; note: Note }) {
+  const lens = lensState(note.tilt, note.frames)
+  const set = (patch: Partial<TiltSettings>) =>
+    updateProject(projectId, (p) => ({ ...p, notes: p.notes.map((n) => ({ ...n, tilt: { ...n.tilt, ...patch } })) }))
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Lens options" className="text-muted-foreground" />}>
+        <MoreHorizontal />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>1 → 5 ↕</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={lens.dirY < 0 ? 'down' : 'up'} onValueChange={(v) => set({ runY: v as 'up' | 'down' })}>
+            <DropdownMenuRadioItem value="down"><ArrowDown />Top to bottom</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="up"><ArrowUp />Bottom to top</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>1 → 5 ↔</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={lens.dirX < 0 ? 'left' : 'right'} onValueChange={(v) => set({ runX: v as 'left' | 'right' })}>
+            <DropdownMenuRadioItem value="right"><ArrowRight />Left to right</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="left"><ArrowLeft />Right to left</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export function EffectSection({ projectId, note }: { projectId: string; note: Note }) {
   const { tilt } = note
   const lens = lensState(tilt, note.frames)
@@ -66,45 +111,15 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
       </Explain>
     )
   }
-  // Flat shows the middle frame; one way plays on towards the last frame, the other back towards frame 1
-  const runCaption = ([toLast, toFirst]: [string, string]) => {
-    const n = note.frames.length
-    const mid = lens.offset > 0 ? Math.ceil(n / 2) : 1
-    return lens.offset > 0
-      ? `Flat shows frame ${mid}. Tilting ${toLast} plays on to ${n}; tilting ${toFirst} goes back to 1`
-      : `Frames play 1 → ${n} as the banknote tilts ${toLast}, and backwards the other way`
-  }
-  const runY = (
-    <InlineField label={<Explain label={respondsTo(lens, 'x') ? '1 → 5 ↕' : '1 → 5'} picture={<RunPreview note={note} lens={lens} axis="y" />}
-      caption={runCaption(lens.dirY > 0 ? ['up', 'down'] : ['down', 'up'])} />}>
-      <Segmented value={tilt.runY ?? 'up'} options={[
-        { value: 'down', label: <><ArrowDown className="size-3" />Down</> },
-        { value: 'up', label: <><ArrowUp className="size-3" />Up</> },
-      ]} onChange={(v) => set({ runY: v })} />
-    </InlineField>
-  )
-  const runX = (
-    <InlineField label={<Explain label={respondsTo(lens, 'y') ? '1 → 5 ↔' : '1 → 5'} picture={<RunPreview note={note} lens={lens} axis="x" />}
-      caption={runCaption(lens.dirX > 0 ? ['right', 'left'] : ['left', 'right'])} />}>
-      <Segmented value={tilt.runX ?? 'right'} options={[
-        { value: 'left', label: <><ArrowLeft className="size-3" />Left</> },
-        { value: 'right', label: <><ArrowRight className="size-3" />Right</> },
-      ]} onChange={(v) => set({ runX: v })} />
-    </InlineField>
-  )
-
   return (
     <>
     <Section nested>
       <EffectPicker note={note} lens={lens} onChoose={chooseEffect} />
 
-      {lens.effect === 'updown' && (<>{cycleField('y', 'Cycle')}{runY}</>)}
-      {lens.effect === 'side' && (<>{cycleField('x', 'Cycle')}{runX}</>)}
+      {lens.effect === 'updown' && (cycleField('y', 'Cycle'))}
+      {lens.effect === 'side' && (cycleField('x', 'Cycle'))}
       {lens.effect === 'both' && (
-        <>
-          {cycleField('y', 'Cycle')}
-          {runY}{runX}
-        </>
+        cycleField('y', 'Cycle')
       )}
       {lens.effect === 'reveal' && (
         <>
@@ -131,7 +146,6 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
             <ScrubField label="Wobble" title="Allowance for a hand that isn't perfectly straight" value={round(lens.wobble, 1)} min={0} max={20} step={0.5} unit="°"
               onChange={(v) => set({ revealWobble: v })} />
           </Explain>
-          {runY}{runX}
         </>
       )}
       {lens.effect === 'custom' && (
@@ -156,8 +170,6 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
                 }} />
             </div>
           )}
-          {respondsTo(lens, 'y') && runY}
-          {respondsTo(lens, 'x') && runX}
         </>
       )}
 
@@ -214,20 +226,6 @@ function EffectPicker({ note, lens, onChoose }: { note: Note; lens: LensState; o
 }
 
 /** A banknote rocking in the 1 → 5 direction and back, its thread numbered with the frame that shows */
-function RunPreview({ note, lens, axis }: { note: Note; lens: LensState; axis: Axis }) {
-  const t = useClock()
-  const cycle = (axis === 'y' ? lens.cycleY : lens.cycleX) ?? 30
-  // One way, then the other, as far as a viewer would tilt
-  const sign = Math.floor(t / 2.4) % 2 === 0 ? 1 : -1
-  const tilt = previewTilt(t, Math.min(cycle, 60), { axis, sign })
-  return (
-    <div className="relative">
-      <MiniNote note={note} lens={lens} tilt={tilt} label className="h-16 w-24" />
-      <TiltArrow tilt={tilt} className="text-background/70" />
-    </div>
-  )
-}
-
 /** The slow tilt swept all the way to 90° each way while the hand drifts on the fast tilt: the outer frames never show */
 function WobblePreview({ note, lens }: { note: Note; lens: LensState }) {
   const t = useClock()

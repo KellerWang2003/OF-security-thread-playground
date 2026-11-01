@@ -8,7 +8,7 @@ import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
 import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
-import { EffectSection } from './EffectSection'
+import { EffectSection, LensMenu } from './EffectSection'
 import { WindowsCard } from './WindowsCard'
 import { setFaceImage, type NoteRef } from './frameActions'
 
@@ -185,7 +185,7 @@ export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onE
 
       </Group>
 
-      <Group title="Lens effect">
+      <Group title="Lens effect" action={<LensMenu projectId={noteRef.projectId} note={note} />}>
         <EffectSection projectId={noteRef.projectId} note={note} />
       </Group>
     </Panel>
