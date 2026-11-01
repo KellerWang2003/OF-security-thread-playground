@@ -96,21 +96,23 @@ const clampValue = (value: number, min: number, max: number) => Math.min(max, Ma
 /** A top-level part of the banknote in the side panel (the banknote itself, the thread, later others) */
 export function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col border-b border-border/60 pt-3 pb-1">
-      <h2 className="px-4 text-[13px] font-medium">{title}</h2>
-      {children}
+    <div className="flex flex-col border-b border-border/60 pt-3">
+      <h2 className="px-4 text-[13px] font-semibold">{title}</h2>
+      <div className="flex flex-col divide-y divide-border/40">{children}</div>
     </div>
   )
 }
 
 /** One titled set of controls in the side panel; inside a Group it drops its divider */
-export function Section({ title, action, nested = false, children }: { title: string; action?: ReactNode; nested?: boolean; children: ReactNode }) {
+export function Section({ title, action, nested = false, children }: { title?: string; action?: ReactNode; nested?: boolean; children: ReactNode }) {
   return (
-    <section className={cn('flex flex-col gap-3 px-4', nested ? 'py-2.5' : 'border-b border-border/60 py-3')}>
-      <div className="flex h-5 items-center justify-between">
-        <h2 className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">{title}</h2>
-        {action}
-      </div>
+    <section className={cn('flex flex-col gap-3', nested ? 'mx-4 py-3' : 'border-b border-border/60 px-4 py-3')}>
+      {(title || action) && (
+        <div className="flex h-5 items-center justify-between">
+          {title && <h3 className="text-[11px] font-medium text-muted-foreground">{title}</h3>}
+          {action}
+        </div>
+      )}
       {children}
     </section>
   )

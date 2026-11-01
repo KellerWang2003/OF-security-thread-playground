@@ -36,7 +36,7 @@ A full-screen canvas with floating panels:
 - **Left edge:** the tilt pad. Drag anywhere on it to tilt every banknote: up/down vertically, side to side horizontally, with the centre flat; it stays where you let go. The ↕ and ↔ fields take exact angles, each lock keeps the pad and canvas drag off that axis, and ↺ or a double-click returns to flat. Arrow keys nudge it when focused (Shift for 5°).
 - **Top left:** back to Projects, the project name, and the collapsible Banknotes list (double-click to rename, + to add, duplicate, delete).
 - **Bottom:** play/pause, Cycle and a Playback settings popover, always. With a banknote selected, its frames follow as clips on a track: drag a frame's right edge to change its length, drag to scrub, scroll to move along, ⌘-scroll to zoom. The playhead shows where in the cycle the tilt is.
-- **Right, while a banknote is selected:** name and Export, then one group per part of the banknote: **Banknote** (size, background) and **Security thread** (placement, artwork, windows, lens effect). Later features such as intaglio or a watermark get their own group.
+- **Right, while a banknote is selected:** name and Export, then one group per part of the banknote: **Banknote** (size, background), **Security thread** (placement with a compact Windows card, then artwork) and **Lens effect**. Later features such as intaglio or a watermark get their own group.
 
 ## UI
 

@@ -76,7 +76,8 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
   )
 
   return (
-    <Section nested title="Lens effect">
+    <>
+    <Section nested>
       <Select value={lens.effect} items={LENS_EFFECTS} onValueChange={(v) => { if (v) chooseEffect(v) }}>
         <SelectTrigger aria-label="Effect" className="w-full"><SelectValue /></SelectTrigger>
         <SelectContent alignItemWithTrigger={false}>
@@ -137,7 +138,9 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
       <InlineField label="Viewing" title="How far viewers tilt, each way; also how far the banknotes tilt by hand">
         <ScrubField label="±" value={lens.viewDeg} min={VIEW_LIMITS.min} max={VIEW_LIMITS.max} unit="°" onChange={(viewDeg) => set({ viewDeg })} />
       </InlineField>
+    </Section>
 
+    <Section nested>
       <div className="grid grid-cols-2 gap-2 rounded-md bg-muted/40 p-2 text-xs">
         <div title="Ridge angle from the banknote's horizontal">
           <div className="text-muted-foreground">Lens angle</div>
@@ -157,6 +160,7 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
 
       <TiltMap note={note} lens={lens} />
     </Section>
+    </>
   )
 }
 

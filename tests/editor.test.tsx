@@ -73,7 +73,7 @@ describe('username workspace editor', () => {
     expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
     await user.click(row(2))
     expect(screen.getByRole('group', { name: 'Edit thread windows' })).toBeDefined()
-    const start = screen.getByTitle('Visible section starts here').querySelector('input')!
+    const start = screen.getByTitle('Window 2: visible section starts here').querySelector('input')!
     fireEvent.change(start, { target: { value: '16' } })
     expect(start.value).toBe('16')
     await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
@@ -81,7 +81,7 @@ describe('username workspace editor', () => {
     expect(screen.queryByRole('button', { name: 'Delete window', exact: true })).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Undo', exact: true }))
     await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
-    expect(screen.getByTitle('Visible section starts here').querySelector('input')!.value).toBe('16')
+    expect(screen.getByTitle('Window 2: visible section starts here').querySelector('input')!.value).toBe('16')
     // Clicking the banknote away from its windows ends editing, and the banknote stays selected
     fireEvent.pointerDown(document.querySelector('[data-note-body]')!, { button: 0, pointerId: 1 })
     fireEvent.pointerUp(document.querySelector('[data-note-body]')!, { button: 0, pointerId: 1 })
@@ -92,7 +92,7 @@ describe('username workspace editor', () => {
     await user.click(screen.getByRole('switch', { name: 'Windows' }))
     expect(screen.getByRole('group', { name: 'Edit thread windows' })).toBeDefined()
     await user.click(row(2))
-    expect(screen.getByTitle('Visible section starts here').querySelector('input')!.value).toBe('16')
+    expect(screen.getByTitle('Window 2: visible section starts here').querySelector('input')!.value).toBe('16')
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
     expect(saves).not.toHaveBeenCalled()

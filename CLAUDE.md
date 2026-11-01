@@ -26,7 +26,7 @@ Design tool for previewing lenticular security threads on banknotes (Oberthur Fi
   - **Top left:** back to Projects, the project name, and the collapsible Banknotes list.
   - **Bottom:** play/pause plus Cycle and Playback settings, always. A selected banknote's frames appear as clips on a track.
   - **Left edge:** the tilt pad, a square you drag in any direction to tilt every banknote (vertical = up/down, horizontal = side; it holds where you let go), with ↕ and ↔ angle fields, a lock per axis (locks also apply to canvas drag and spring-back), and a back-to-flat button. Both directions are always available, whatever the lens.
-  - **Right:** properties, only while a banknote is selected, in top-level `Group`s per part of the banknote (Banknote, Security thread; later Intaglio, Watermark…), each holding nested `Section`s. Not collapsible for now.
+  - **Right:** properties, only while a banknote is selected, in top-level `Group`s: Banknote (size, background), Security thread (placement with the Windows card, then Artwork), Lens effect; later Intaglio, Watermark… Groups hold nested `Section`s split by thin inset dividers, with few titles. Windows is a compact card (switch, strip showing where windows sit, selected window's Start/End, full list on expand). Not collapsible for now.
   - **Export:** top right. On the banknote-name row of the right panel when a banknote is selected, otherwise a floating button beside the zoom controls. Never in the playback bar.
 - `exportRender.ts` redraws NoteView on a canvas for MP4/GIF export. When you change how NoteView draws a banknote, change the export renderer to match.
 
