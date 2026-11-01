@@ -1,4 +1,4 @@
-import { TILT_LIMIT, clamp, frameMix } from './frames'
+import { TILT_LIMIT, frameMix } from './frames'
 import type { Frame, Note, TiltSettings } from './types'
 
 /**
@@ -27,7 +27,6 @@ export const LENS_EFFECTS: { value: LensEffect; label: string }[] = [
   { value: 'reveal', label: 'Reveal on one tilt' },
   { value: 'custom', label: 'Custom' },
 ]
-export const VIEW_LIMITS = { min: 10, max: 90 }
 /** Playback never turns a banknote further than this, however long a cycle is */
 export const SWEEP_MAX = 120
 
@@ -42,7 +41,7 @@ export interface LensState {
   dirY: 1 | -1
   /** +1 when tilting right plays 1 → 5, −1 when tilting left does */
   dirX: 1 | -1
-  /** How far viewers tilt, each way */
+  /** How far viewers tilt, each way: fixed at TILT_LIMIT, a realistic hand tilt */
   viewDeg: number
   /** For Reveal: the tilt that plays every frame */
   revealAxis: Axis
@@ -77,7 +76,7 @@ export function revealCycle(frames: Pick<Frame, 'length'>[], viewDeg: number) {
 /** The lens settings a note carries, with the defaults a project from before lenses gets */
 export function lensState(tilt: TiltSettings, frames: Pick<Frame, 'length'>[] = []): LensState {
   const effect = tilt.effect ?? 'updown'
-  const viewDeg = clamp(tilt.viewDeg ?? TILT_LIMIT, VIEW_LIMITS.min, VIEW_LIMITS.max)
+  const viewDeg = TILT_LIMIT
   const dirY = tilt.runY === 'down' ? -1 : 1
   const dirX = tilt.runX === 'left' ? -1 : 1
   const revealAxis = tilt.revealAxis ?? 'y'

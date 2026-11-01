@@ -7,7 +7,6 @@ import { InlineField, ScrubField, Section, Segmented } from '../components/contr
 import { clamp } from '../lib/frames'
 import {
   LENS_EFFECTS,
-  VIEW_LIMITS,
   cyclesFromLens,
   framesReached,
   lensAngle,
@@ -135,9 +134,6 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
         </>
       )}
 
-      <InlineField label="Viewing" title="How far viewers tilt, each way; also how far the banknotes tilt by hand">
-        <ScrubField label="±" value={lens.viewDeg} min={VIEW_LIMITS.min} max={VIEW_LIMITS.max} unit="°" onChange={(viewDeg) => set({ viewDeg })} />
-      </InlineField>
     </Section>
 
     <Section nested>

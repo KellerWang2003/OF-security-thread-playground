@@ -55,7 +55,7 @@ export interface TiltSettings {
   runY?: 'up' | 'down'
   /** Which way 1 → 5 plays on the side tilt */
   runX?: 'right' | 'left'
-  /** How far viewers tilt, each way, in degrees; also the manual tilt limit */
+  /** No longer edited or read (the viewing range is fixed at TILT_LIMIT); kept so older saves still type-check */
   viewDeg?: number
   /** Reveal only: the tilt that plays every frame */
   revealAxis?: 'x' | 'y'
