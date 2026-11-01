@@ -31,7 +31,8 @@ interface View {
 type Gesture =
   | { mode: 'pan'; startX: number; startY: number; view: View; onBackground: boolean }
   | { mode: 'move'; noteId: string; startX: number; startY: number; noteX: number; noteY: number }
-  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number }
+  /** `moved` once the drag passes a few px: a plain click leaves the tilt where it is */
+  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; moved: boolean }
   | { mode: 'thread'; noteId: string; startX: number; startY: number; startPosition: number; alongMm: number }
 
 function fitView(notes: Note[], size: { width: number; height: number }): View {
@@ -162,6 +163,23 @@ export function Canvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingWindows, selectedId])
 
+  // Every way a gesture can end comes through here, so a tilt drag always springs back the same way
+  const endGesture = () => {
+    const g = gesture.current
+    if (g?.mode === 'tilt' && g.moved && useTilt.getState().springBack) springToFlat()
+    gesture.current = null
+    setActiveMode(undefined)
+  }
+  const endGestureRef = useRef(endGesture)
+  endGestureRef.current = endGesture
+
+  // Switching apps or windows mid-drag can swallow the release
+  useEffect(() => {
+    const onBlur = () => endGestureRef.current()
+    window.addEventListener('blur', onBlur)
+    return () => window.removeEventListener('blur', onBlur)
+  }, [])
+
   const noteAt = (target: EventTarget, attribute: 'data-note-label' | 'data-note-body') =>
     (target as HTMLElement).closest(`[${attribute}]`)?.getAttribute(attribute) ?? undefined
 
@@ -186,7 +204,8 @@ export function Canvas({
       }
       onPointerDown={(e) => {
         const v = viewRef.current
-        if (!v) return
+        // Only the left and middle buttons drag; a right-click's menu would swallow the release
+        if (!v || e.button > 1) return
         // A click on the banknote outside the thread's windows ends window editing and tilts as usual
         if (editingWindows && noteAt(e.target, 'data-note-body') === selectedId) onExitWindows?.()
         // Freeze the fitted view, or moving a note would refit the canvas under the pointer
@@ -223,6 +242,7 @@ export function Canvas({
             startY: e.clientY,
             start,
             startSide,
+            moved: false,
           }
           setTilt({ source: 'drag', target: start, targetX: startSide })
         }
@@ -233,8 +253,7 @@ export function Canvas({
         if (!g) return
         // A release that never reached us: stop following the pointer
         if (e.buttons === 0) {
-          gesture.current = null
-          setActiveMode(undefined)
+          endGesture()
           return
         }
         const dx = e.clientX - g.startX
@@ -253,6 +272,8 @@ export function Canvas({
           const snap = (mm: number) => Math.round(mm * 2) / 2
           updateNote(projectId, g.noteId, (n) => ({ ...n, x: snap(g.noteX + dx / scale), y: snap(g.noteY + dy / scale) }))
         } else {
+          if (!g.moved && Math.hypot(dx, dy) < 3) return
+          g.moved = true
           // About 160 px of drag tilts the note 30°; past one cycle the frames loop. Both directions always
           // tilt, unless locked on the tilt pad.
           const limit = loopLens.viewDeg
@@ -265,7 +286,6 @@ export function Canvas({
       }}
       onPointerUp={(e) => {
         const g = gesture.current
-        if (g?.mode === 'tilt' && useTilt.getState().springBack) springToFlat()
         // A click on a window, without dragging, opens it for resizing
         if (g?.mode === 'thread' && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) {
           const note = notes.find((n) => n.id === g.noteId)
@@ -276,14 +296,10 @@ export function Canvas({
         }
         // A click on empty canvas, without dragging, clears the selection
         if (g?.mode === 'pan' && g.onBackground && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) onSelect(undefined)
-        gesture.current = null
-        setActiveMode(undefined)
+        endGesture()
       }}
-      onPointerCancel={() => {
-        if (gesture.current?.mode === 'tilt' && useTilt.getState().springBack) springToFlat()
-        gesture.current = null
-        setActiveMode(undefined)
-      }}
+      onPointerCancel={endGesture}
+      onLostPointerCapture={endGesture}
       onDragOver={(e) => {
         e.preventDefault()
         setDropping(true)

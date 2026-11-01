@@ -205,4 +205,67 @@ describe('username workspace editor', () => {
     expect(saves).not.toHaveBeenCalled()
   })
 
+  it('springs a tilt drag back to flat however the drag ends, and leaves a held tilt alone on a click', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      callback: ResizeObserverCallback
+      constructor(callback: ResizeObserverCallback) { this.callback = callback }
+      observe() { this.callback([{ contentRect: { width: 1280, height: 720 } } as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      unobserve() {} disconnect() {}
+    })
+    for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
+    }
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'tilt-spring-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const body = () => document.querySelector('[data-note-body]')!
+    const target = () => ({ y: useTilt.getState().target, x: useTilt.getState().targetX })
+    const drag = (button = 0) => {
+      fireEvent.pointerDown(body(), { button, buttons: button === 0 ? 1 : 2, pointerId: 1, clientX: 100, clientY: 100 })
+      fireEvent.pointerMove(body(), { buttons: 1, pointerId: 1, clientX: 140, clientY: 60 })
+    }
+    const unlock = () => setTilt({ source: 'drag', angle: 0, angleX: 0, target: 0, targetX: 0, lockX: false, lockY: false })
+
+    // A clean release
+    unlock()
+    drag()
+    expect(target().y).not.toBe(0)
+    fireEvent.pointerUp(body(), { button: 0, pointerId: 1, clientX: 140, clientY: 60 })
+    expect(target()).toEqual({ y: 0, x: 0 })
+
+    // A release that never arrived, noticed on the next move
+    drag()
+    fireEvent.pointerMove(body(), { buttons: 0, pointerId: 1, clientX: 150, clientY: 50 })
+    expect(target()).toEqual({ y: 0, x: 0 })
+
+    // Losing pointer capture, or the window losing focus, mid-drag
+    drag()
+    fireEvent(body(), new Event('lostpointercapture', { bubbles: true }))
+    expect(target()).toEqual({ y: 0, x: 0 })
+    drag()
+    act(() => { window.dispatchEvent(new Event('blur')) })
+    expect(target()).toEqual({ y: 0, x: 0 })
+
+    // A locked axis keeps where it was dragged
+    setTilt({ lockX: true })
+    drag()
+    const side = target().x
+    fireEvent.pointerUp(body(), { button: 0, pointerId: 1 })
+    expect(target()).toEqual({ y: 0, x: side })
+    unlock()
+
+    // A right-click doesn't tilt
+    drag(2)
+    expect(target()).toEqual({ y: 0, x: 0 })
+    fireEvent.pointerUp(body(), { button: 2, pointerId: 1 })
+
+    // A click with no drag leaves a held tilt where it is
+    setTilt({ source: 'hold', angle: 12, target: 12, angleX: -5, targetX: -5 })
+    fireEvent.pointerDown(body(), { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(body(), { buttons: 1, pointerId: 1, clientX: 101, clientY: 101 })
+    fireEvent.pointerUp(body(), { button: 0, pointerId: 1, clientX: 101, clientY: 101 })
+    expect(target()).toEqual({ y: 12, x: -5 })
+  })
 })
