@@ -61,6 +61,8 @@ export interface TiltSettings {
   revealAxis?: 'x' | 'y'
   /** No longer read: Reveal always hides the fewest frames it can, the outer ones */
   revealHide?: number
+  /** Partial reveal: degrees of fast tilt a viewer may drift by while sweeping the slow tilt (default 5) */
+  revealWobble?: number
   /** Where flat sits: the middle of the middle frame (the default, for every project) or the start of frame 1 */
   flatAt?: 'start' | 'center'
   /** Which tilt playback sweeps: up/down, side to side, or one after the other. Superseded by `moves` */

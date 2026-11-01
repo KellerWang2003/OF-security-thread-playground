@@ -30,6 +30,10 @@ export const LENS_EFFECTS: { value: LensEffect; label: string; description: stri
 ]
 /** Playback never turns a banknote further than a viewer would, however long a cycle is */
 export const SWEEP_MAX = TILT_LIMIT
+/** Partial reveal keeps its hidden frames hidden at every angle a real banknote can be tilted to, not just ±60° */
+export const HIDE_LIMIT = 90
+/** Partial reveal's default allowance for a hand that drifts onto the fast tilt while sweeping the slow one */
+export const DEFAULT_WOBBLE = 5
 
 /** The lens as the frames see it: each tilt's cycle (null when that tilt does nothing) and direction */
 export interface LensState {
@@ -46,6 +50,10 @@ export interface LensState {
   viewDeg: number
   /** For Reveal: the tilt that plays every frame */
   revealAxis: Axis
+  /** For Reveal: degrees of fast tilt a viewer may drift by while sweeping the slow tilt, with frames still hidden */
+  wobble: number
+  /** For Reveal: false when the fast cycle is too short for the wobble, so no slow cycle can keep frames hidden */
+  revealSafe: boolean
   /** Where flat sits along the cycle (0 to 1): 0 at the start of frame 1, or half of frame 1 for its centre */
   offset: number
 }
@@ -114,18 +122,30 @@ export function revealOptions(frames: Pick<Frame, 'length'>[], offset = 0) {
 
 /**
  * The slowest cycle a tilt can have while keeping at least `hide` frames out of view within ±viewDeg (the
- * fewest possible when not given). Null when no tilt can hide that many.
+ * fewest possible when not given). `drift` is a share of the cycle already used up by wobble on the other
+ * tilt, so the hidden frames stay hidden even when the viewer's hand isn't straight. Null when no tilt can
+ * hide that many.
  */
-export function revealCycle(frames: Pick<Frame, 'length'>[], viewDeg: number, hide?: number, offset = 0) {
+export function revealCycle(frames: Pick<Frame, 'length'>[], viewDeg: number, hide?: number, offset = 0, drift = 0) {
   const options = revealOptions(frames, offset)
   const target = hide && options.includes(hide) ? hide : options.at(0)
   if (!target) return null
   const edges = frameEdges(frames)
   // The first reach at which fewer than `target` frames stay hidden: the cycle must keep viewDeg short of it
   const limit = breakpoints(edges, offset).find((r) => frames.length - reachedAt(edges, offset, r).size < target)
-  if (!limit) return null
+  if (!limit || limit - drift <= EPS) return null
   // A whole degree past the limit, so the hidden frames stay hidden at exactly ±viewDeg
-  return Math.floor(viewDeg / limit + EPS) + 1
+  return Math.floor(viewDeg / (limit - drift) + EPS) + 1
+}
+
+/** The shortest fast cycle that leaves Partial reveal room to hide frames with this much wobble */
+export function revealMinFast(frames: Pick<Frame, 'length'>[], offset: number, wobble: number) {
+  const options = revealOptions(frames, offset)
+  const target = options.at(0)
+  if (!target || wobble <= 0) return 0
+  const edges = frameEdges(frames)
+  const limit = breakpoints(edges, offset).find((r) => frames.length - reachedAt(edges, offset, r).size < target)
+  return limit ? Math.floor(wobble / limit + EPS) + 1 : 0
 }
 
 /** Where flat sits along the cycle for these settings */
@@ -145,10 +165,11 @@ export function lensState(tilt: TiltSettings, frames: Pick<Frame, 'length'>[] = 
   const dirY = tilt.runY === 'down' ? -1 : 1
   const dirX = tilt.runX === 'left' ? -1 : 1
   const revealAxis = tilt.revealAxis ?? 'y'
+  const wobble = Math.max(0, tilt.revealWobble ?? DEFAULT_WOBBLE)
   const y = tilt.cycleDeg
   const x = tilt.cycleXDeg ?? tilt.cycleDeg
   const offset = flatOffset(tilt, frames)
-  const base = { effect, dirY, dirX, viewDeg, revealAxis, offset } as const
+  const base = { effect, dirY, dirX, viewDeg, revealAxis, wobble, revealSafe: true, offset } as const
   switch (effect) {
     case 'side':
       return { ...base, cycleY: null, cycleX: x }
@@ -156,10 +177,13 @@ export function lensState(tilt: TiltSettings, frames: Pick<Frame, 'length'>[] = 
       // Ridges at 45°: both tilts run through the frames at the same rate
       return { ...base, cycleY: y, cycleX: y }
     case 'reveal': {
-      const slow = revealCycle(frames, viewDeg, undefined, offset)
+      // Hidden at any tilt up to 90°, even with the hand drifting `wobble` degrees onto the fast tilt
+      const fast = revealAxis === 'y' ? y : x
+      const slow = revealCycle(frames, HIDE_LIMIT, undefined, offset, wobble / fast)
+      const revealSafe = slow != null
       return revealAxis === 'y'
-        ? { ...base, cycleY: y, cycleX: slow ?? x }
-        : { ...base, cycleY: slow ?? y, cycleX: x }
+        ? { ...base, revealSafe, cycleY: y, cycleX: slow ?? x }
+        : { ...base, revealSafe, cycleY: slow ?? y, cycleX: x }
     }
     case 'custom':
       return { ...base, cycleY: tilt.yOn === false ? null : y, cycleX: tilt.cycleXDeg ?? null }
@@ -214,6 +238,11 @@ export const respondsTo = (lens: LensState, axis: Axis) => (axis === 'x' ? lens.
 export function framesReached(note: Pick<Note, 'frames' | 'tilt'>, axis: Axis, lens = lensState(note.tilt, note.frames)) {
   const cycle = axis === 'x' ? lens.cycleX : lens.cycleY
   if (!cycle) return new Set<number>()
+  // Partial reveal's slow tilt promises more: hidden up to 90°, with the wobble on the fast tilt added
+  if (lens.effect === 'reveal' && axis !== lens.revealAxis) {
+    const fast = (axis === 'x' ? lens.cycleY : lens.cycleX) ?? Infinity
+    return reachedAt(frameEdges(note.frames), lens.offset, HIDE_LIMIT / cycle + lens.wobble / fast)
+  }
   return reachedAt(frameEdges(note.frames), lens.offset, lens.viewDeg / cycle)
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { playbackAngles, playbackTilts } from '../src/lib/exportRender'
 import { frameMix, frameSpans } from '../src/lib/frames'
-import { cyclesFromLens, framesReached, lensAngle, lensCycle, lensMix, lensState, revealCycle, revealOptions, tiltForPosition } from '../src/lib/lens'
+import { cyclesFromLens, framesReached, lensAngle, lensCycle, lensMix, lensState, revealCycle, revealMinFast, revealOptions, tiltForPosition } from '../src/lib/lens'
 import { migrateProject } from '../src/lib/notes'
 import type { TiltSettings } from '../src/lib/types'
 
@@ -65,16 +65,17 @@ describe('lens angle', () => {
 })
 
 describe('reveal on one tilt', () => {
-  it('keeps the middle frame out of the slow tilt, even at the edge of the viewing range', () => {
+  it('keeps the middle frame out of the slow tilt, at any tilt up to 90°', () => {
     const f = frames([10, 10, 10, 10, 10])
     // Frame 3 spans 0.4 to 0.6 of the cycle: 60° ÷ 0.4 = 150°, plus a degree
     expect(revealCycle(f, 60)).toBe(151)
-    const note = { frames: f, tilt: { cycleDeg: 90, transition: 0, effect: 'reveal', viewDeg: 60, flatAt: 'start' } as TiltSettings }
+    const note = { frames: f, tilt: { cycleDeg: 90, transition: 0, effect: 'reveal', revealWobble: 0, flatAt: 'start' } as TiltSettings }
     const lens = lensState(note.tilt, f)
-    expect(lens.cycleX).toBe(151)
+    // Hidden all the way to 90°: 90° ÷ 0.4 = 225°, plus a degree
+    expect(lens.cycleX).toBe(226)
     expect([...framesReached(note, 'x', lens)].sort()).toEqual([0, 1, 3, 4])
     expect([...framesReached(note, 'y', lens)].sort()).toEqual([0, 1, 2, 3, 4])
-    for (let x = -60; x <= 60; x += 0.5) expect(lensMix(note, { x, y: 0 }, lens).current).not.toBe(2)
+    for (let x = -90; x <= 90; x += 0.5) expect(lensMix(note, { x, y: 0 }, lens).current).not.toBe(2)
   })
 
   it('needs at least three frames', () => {
@@ -119,14 +120,25 @@ describe('flat at the middle of the middle frame', () => {
     expect(tiltForPosition(lensState(centred, f), 0.5)).toEqual({ x: 0, y: 0 })
   })
 
-  it('hides the outer frames on the slow tilt of Partial reveal, within ±60°', () => {
+  it('hides the outer frames on the slow tilt of Partial reveal at any angle, with a wobbling hand', () => {
     expect(revealOptions(f, 0.5)).toEqual([2, 4])
     expect(revealCycle(f, 60, undefined, 0.5)).toBe(201)
     const tilt = { ...centred, effect: 'reveal' } as TiltSettings
     const lens = lensState(tilt, f)
-    expect(lens.cycleX).toBe(201)
+    // 5° of wobble on the 50° fast tilt uses 0.1 of the 0.3 to frame 1's edge: 90° ÷ 0.2 = 450°, plus a degree
+    expect(lens.wobble).toBe(5)
+    expect(lens.revealSafe).toBe(true)
+    expect(lens.cycleX).toBe(451)
     expect([...framesReached({ frames: f, tilt }, 'x', lens)].sort()).toEqual([1, 2, 3])
-    for (let x = -60; x <= 60; x += 0.5) expect([0, 4]).not.toContain(lensMix({ frames: f, tilt }, { x, y: 0 }, lens).current)
+    for (let x = -90; x <= 90; x += 0.5)
+      for (const y of [-5, -2.5, 0, 2.5, 5]) expect([0, 4]).not.toContain(lensMix({ frames: f, tilt }, { x, y }, lens).current)
+  })
+
+  it('says when the fast cycle is too short for the wobble', () => {
+    // 10° of wobble on a 30° fast tilt is a third of a cycle, past frame 1's edge before any slow tilt
+    const lens = lensState({ ...centred, cycleDeg: 30, effect: 'reveal', revealWobble: 10 }, f)
+    expect(lens.revealSafe).toBe(false)
+    expect(revealMinFast(f, 0.5, 10)).toBe(34)
   })
 
   it('can still sit at the start of frame 1, where one frame can hide', () => {

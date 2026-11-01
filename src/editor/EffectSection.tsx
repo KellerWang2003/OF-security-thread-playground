@@ -14,7 +14,7 @@ import {
   lensMix,
   lensState,
   respondsTo,
-  revealCycle,
+  revealMinFast,
   type Axis,
   type LensEffect,
   type LensState,
@@ -113,11 +113,24 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
           </InlineField>
           <div className="grid grid-cols-2 gap-2">
             {cycleField(lens.revealAxis)}
-            <div className="flex h-8 items-center rounded-md bg-muted/40 px-2 text-sm tabular-nums text-muted-foreground"
-              title="Worked out: the slowest cycle that keeps the outer frames out of view within ±60°">
-              {lens.revealAxis === 'y' ? '↔' : '↕'} {revealCycle(note.frames, lens.viewDeg, undefined, lens.offset) ?? '–'}°
-            </div>
+            {lens.revealSafe ? (
+              <div className="flex h-8 items-center rounded-md bg-muted/40 px-2 text-sm tabular-nums text-muted-foreground"
+                title="Worked out: the slowest cycle that keeps the outer frames hidden at any tilt up to 90°, wobble included">
+                {lens.revealAxis === 'y' ? '↔' : '↕'} {round((lens.revealAxis === 'y' ? lens.cycleX : lens.cycleY) ?? 0)}°
+              </div>
+            ) : (
+              <div className="flex h-8 items-center rounded-md bg-destructive/10 px-2 text-sm tabular-nums text-destructive"
+                title="This cycle is too short for the wobble allowance: drifting onto this tilt alone would show the hidden frames">
+                {lens.revealAxis === 'y' ? '↕' : '↔'} ≥ {revealMinFast(note.frames, lens.offset, lens.wobble)}°
+              </div>
+            )}
           </div>
+          <Explain
+            picture={<WobblePreview note={note} lens={lens} />}
+            caption={`Hidden frames stay hidden even if the hand drifts ${round(lens.wobble, 1)}° ${lens.revealAxis === 'y' ? 'up or down' : 'sideways'} while tilting ${lens.revealAxis === 'y' ? 'sideways' : 'up or down'}`}>
+            <ScrubField label="Wobble" title="Allowance for a hand that isn't perfectly straight" value={round(lens.wobble, 1)} min={0} max={20} step={0.5} unit="°"
+              onChange={(v) => set({ revealWobble: v })} />
+          </Explain>
           {runY}{runX}
         </>
       )}
@@ -211,6 +224,20 @@ function RunPreview({ note, lens, axis }: { note: Note; lens: LensState; axis: A
     <div className="relative">
       <MiniNote note={note} lens={lens} tilt={tilt} label className="h-16 w-24" />
       <TiltArrow tilt={tilt} className="text-background/70" />
+    </div>
+  )
+}
+
+/** The slow tilt swept all the way to 90° each way while the hand drifts on the fast tilt: the outer frames never show */
+function WobblePreview({ note, lens }: { note: Note; lens: LensState }) {
+  const t = useClock()
+  const slow = Math.sin((t / 4) * Math.PI * 2) * 90
+  const drift = Math.sin(t * 7) * lens.wobble
+  const tilt = lens.revealAxis === 'y' ? { x: slow, y: drift } : { x: drift, y: slow }
+  return (
+    <div className="relative">
+      <MiniNote note={note} lens={lens} tilt={tilt} label className="h-16 w-24" />
+      <span className="pointer-events-none absolute top-0.5 right-1 text-[10px] leading-none text-background/70 tabular-nums">{Math.round(Math.abs(slow))}°</span>
     </div>
   )
 }
