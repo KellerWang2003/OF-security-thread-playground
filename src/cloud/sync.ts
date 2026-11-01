@@ -23,6 +23,8 @@ export class SaveConflict extends Error {
     this.remote = remote
   }
 }
+/** How long rapid edits wait to share one write to the device copy */
+const CHECKPOINT_DELAY_MS = 250
 export type SyncStatus = 'saved' | 'saving' | 'error' | 'conflict'
 
 /** One workspace, one ordered outbox. Project writes use compare-and-swap revisions. */
@@ -47,7 +49,24 @@ export class ProjectSync {
 
   private emit() { if (!this.stopped) this.notify() }
 
+  private checkpointTimer?: ReturnType<typeof setTimeout>
+
+  /**
+   * A drag edits on every pointer move; copying and writing the whole workspace to disk each time made
+   * dragging lag, so rapid edits share one write a moment later. Anything that needs the disk copy calls
+   * checkpoint(), which writes straight away.
+   */
+  private scheduleCheckpoint() {
+    if (this.checkpointTimer !== undefined) return
+    this.checkpointTimer = setTimeout(() => {
+      this.checkpointTimer = undefined
+      void this.checkpoint().then(() => { this.diskError = false }).catch(() => {})
+    }, CHECKPOINT_DELAY_MS)
+  }
+
   private checkpoint() {
+    clearTimeout(this.checkpointTimer)
+    this.checkpointTimer = undefined
     const snapshot = structuredClone(this.records)
     this.persistence = this.persistence.catch(() => {}).then(() => this.persist(snapshot))
     // Attach immediately so a failed local write is never an unhandled rejection.
@@ -94,7 +113,7 @@ export class ProjectSync {
     this.status = next.conflict ? 'conflict' : 'saving'
     this.error = ''
     this.emit()
-    void this.checkpoint().then(() => { this.diskError = false }).catch(() => {})
+    this.scheduleCheckpoint()
   }
 
   async flush(): Promise<void> {
@@ -166,5 +185,9 @@ export class ProjectSync {
 
   hasPending() { return this.diskError || this.records.some((r) => r.dirty) }
   async durable() { await this.checkpoint() }
-  stop() { this.stopped = true }
+  stop() {
+    // Never drop a pending device copy
+    if (this.checkpointTimer !== undefined) void this.checkpoint().catch(() => {})
+    this.stopped = true
+  }
 }

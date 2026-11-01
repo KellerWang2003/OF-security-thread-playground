@@ -425,23 +425,27 @@ const MAP_RES = 72
 function TiltMap({ note, lens }: { note: Note; lens: LensState }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const box = useRef<HTMLDivElement>(null)
-  const angle = useTilt((s) => (s.source === 'hold' ? s.target : s.angle))
-  const angleX = useTilt((s) => (s.source === 'hold' ? s.targetX : s.angleX))
   const range = lens.viewDeg
   const [dragging, setDragging] = useState(false)
+  const { frames, tilt } = note
 
+  // Redrawn only when the lens or frames change: moving or renaming the banknote used to redraw it on
+  // every pointer move. The lens follows from tilt and frames, so it is recomputed here, not read from props.
   useEffect(() => {
     const ctx = canvas.current?.getContext('2d')
     if (!ctx) return
+    const shape = { frames, tilt }
+    const map = lensState(tilt, frames)
+    const colours = frames.map((_, i) => swatch(shape, i))
     for (let py = 0; py < MAP_RES; py++) {
       for (let px = 0; px < MAP_RES; px++) {
         const x = ((px + 0.5) / MAP_RES) * 2 * range - range
         const y = range - ((py + 0.5) / MAP_RES) * 2 * range
-        ctx.fillStyle = swatch(note, lensMix(note, { x, y }, lens).current)
+        ctx.fillStyle = colours[lensMix(shape, { x, y }, map).current] ?? colours[0] ?? 'transparent'
         ctx.fillRect(px, py, 1, 1)
       }
     }
-  }, [note, lens, range])
+  }, [frames, tilt, range])
 
   const tiltAt = (clientX: number, clientY: number) => {
     const rect = box.current?.getBoundingClientRect()
@@ -450,7 +454,6 @@ function TiltMap({ note, lens }: { note: Note; lens: LensState }) {
     const y = clamp(range - ((clientY - rect.top) / rect.height) * 2 * range, -range, range)
     setTilt({ source: 'hold', target: respondsTo(lens, 'y') ? Math.round(y) : 0, targetX: respondsTo(lens, 'x') ? Math.round(x) : 0 })
   }
-  const dot = { left: `${((clamp(angleX, -range, range) + range) / (2 * range)) * 100}%`, top: `${((range - clamp(angle, -range, range)) / (2 * range)) * 100}%` }
 
   return (
     <div
@@ -471,7 +474,15 @@ function TiltMap({ note, lens }: { note: Note; lens: LensState }) {
       <canvas ref={canvas} width={MAP_RES} height={MAP_RES} className="absolute inset-0 size-full [image-rendering:pixelated] opacity-80" />
       <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-foreground/20" />
       <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-foreground/20" />
-      <div className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-foreground shadow" style={dot} />
+      <TiltMapDot range={range} />
     </div>
   )
+}
+
+/** The tilt map's dot; on its own so only it re-renders as the tilt moves */
+function TiltMapDot({ range }: { range: number }) {
+  const angle = useTilt((s) => (s.source === 'hold' ? s.target : s.angle))
+  const angleX = useTilt((s) => (s.source === 'hold' ? s.targetX : s.angleX))
+  const dot = { left: `${((clamp(angleX, -range, range) + range) / (2 * range)) * 100}%`, top: `${((range - clamp(angle, -range, range)) / (2 * range)) * 100}%` }
+  return <div className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-foreground shadow" style={dot} />
 }

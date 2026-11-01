@@ -29,6 +29,43 @@ function fixture() {
 }
 
 describe('durable cloud saving', () => {
+  it('shares one device write between rapid edits, such as a drag, and writes at once when asked', async () => {
+    vi.useFakeTimers()
+    try {
+      const f = fixture()
+      const sync = f.engine()
+      const project = createProject('Dragged')
+      for (let x = 0; x < 30; x++) sync.put({ ...project, name: `Dragged ${x}` })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(f.persist).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(300)
+      expect(f.persist).toHaveBeenCalledTimes(1)
+      expect(f.disk()[0].project.name).toBe('Dragged 29')
+      sync.put({ ...project, name: 'Released' })
+      await sync.durable()
+      expect(f.disk()[0].project.name).toBe('Released')
+      // The write durable() made replaces the pending one
+      await vi.advanceTimersByTimeAsync(300)
+      expect(f.persist).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps a pending device write when it stops', async () => {
+    vi.useFakeTimers()
+    try {
+      const f = fixture()
+      const sync = f.engine()
+      sync.put(createProject('Last edit'))
+      sync.stop()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(f.disk()[0]?.project.name).toBe('Last edit')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('writes images/project work to the local outbox before attempting the remote save', async () => {
     const f = fixture()
     const sync = f.engine()

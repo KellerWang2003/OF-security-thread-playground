@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
 import { clamp, cyclePhase } from '../lib/frames'
-import { cyclePosition, flatLabel, flatStep, framesReached, lensMix, lensState, reachSpans, respondsTo, tiltForPosition, tiltReach } from '../lib/lens'
+import { cyclePosition, flatLabel, flatStep, framesReached, lensMix, lensState, reachSpans, respondsTo, tiltForPosition, tiltReach, type LensState } from '../lib/lens'
 import { pickFiles } from '../lib/images'
 import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
 import type { Frame, Note } from '../lib/types'
@@ -143,11 +143,10 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const track = useRef<HTMLDivElement>(null)
   const gesture = useRef<{ mode: 'scrub' } | { mode: 'resize'; frameId: string; startX: number; startLength: number } | null>(null)
   const [pxPerUnit, setPxPerUnit] = useState(ZOOM.initial)
-  const angle = useTilt((s) => s.angle)
-  const angleX = useTilt((s) => s.angleX)
   const { frames, tilt } = note
   const lens = lensState(tilt, frames)
-  const { current } = lensMix(note, { x: angleX, y: angle }, lens)
+  // Only the frame shown, so the track re-renders when it changes rather than on every animation frame
+  const current = useTilt((s) => lensMix(note, { x: s.angleX, y: s.angle }, lens).current)
   const reachedY = framesReached(note, 'y', lens)
   const reachedX = framesReached(note, 'x', lens)
   const missed = (i: number) => [
@@ -158,8 +157,6 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const totalLength = lengths.reduce((sum, l) => sum + l, 0)
   const starts = lengths.map((_, i) => lengths.slice(0, i).reduce((sum, l) => sum + l, 0))
   const x = (units: number) => PAD + units * pxPerUnit
-  const position = cyclePosition(lens, { x: angleX, y: angle })
-  const phase = cyclePhase(position, 1)
   const bars = (['y', 'x'] as const).filter((a) => respondsTo(lens, a)).map((a) => ({ axis: a, spans: reachSpans(lens.offset, tiltReach(lens, a)) }))
   // With both tilts live, each tilt's reach gets its own lane above the frames instead of sitting on them
   const lanes = bars.length > 1 ? bars.length : 0
@@ -299,9 +296,7 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
             <div className="size-0 border-x-4 border-b-[5px] border-x-transparent border-b-foreground/70" />
           </div>
 
-          <div className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: x(phase * totalLength) }}>
-            <div className="absolute -top-0.5 left-1/2 size-2 -translate-x-1/2 rotate-45 bg-primary" />
-          </div>
+          <Playhead lens={lens} left={x(0)} width={totalLength * pxPerUnit} />
         </div>
       </div>
 
@@ -340,6 +335,16 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
       )}
 
     </>
+  )
+}
+
+/** Where in the cycle the current tilt is; on its own so it alone re-renders as the tilt moves */
+function Playhead({ lens, left, width }: { lens: LensState; left: number; width: number }) {
+  const phase = useTilt((s) => cyclePhase(cyclePosition(lens, { x: s.angleX, y: s.angle }), 1))
+  return (
+    <div className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: left + phase * width }}>
+      <div className="absolute -top-0.5 left-1/2 size-2 -translate-x-1/2 rotate-45 bg-primary" />
+    </div>
   )
 }
 

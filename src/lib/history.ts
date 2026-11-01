@@ -13,8 +13,17 @@ interface HistoryEntry {
 export const useHistory = create<{ entries: Record<string, HistoryEntry> }>(() => ({ entries: {} }))
 const gestures = new Map<string, string>()
 
-// Save timestamps are transport metadata, not user edits.
-const fingerprint = (project: Project) => JSON.stringify({ ...project, updatedAt: 0 })
+// Save timestamps are transport metadata, not user edits. Projects are never mutated, so each one is
+// stringified once: a drag edits on every pointer move, and re-stringifying every project each time lagged
+const fingerprints = new WeakMap<Project, string>()
+function fingerprint(project: Project) {
+  let value = fingerprints.get(project)
+  if (value === undefined) {
+    value = JSON.stringify({ ...project, updatedAt: 0 })
+    fingerprints.set(project, value)
+  }
+  return value
+}
 
 function changedPaths(before: unknown, after: unknown, path = ''): string[] {
   if (before === after) return []
