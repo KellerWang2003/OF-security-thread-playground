@@ -1,6 +1,6 @@
 import { runAction } from '../cloud/notices'
 import { Download, Maximize, Minus, Plus } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { IconButton } from '../components/controls'
@@ -25,6 +25,10 @@ const MAX_ZOOM = 8
 const FIT = { left: 284, right: 284, top: 48, bottom: 128 }
 /** How close, in screen px, a moving banknote's edge or centre must come to another's to snap to it */
 const SNAP_PX = 6
+/** How long a pan or zoom pauses before banknotes are redrawn at the new view */
+const COMMIT_MS = 120
+/** Background dot spacing at `scale` px per mm */
+const gridStep = (scale: number) => scale * (scale * 10 < 12 ? 50 : 10)
 
 /** Zoom level and where the canvas origin (0, 0 mm) sits on screen, in px */
 interface View {
@@ -117,17 +121,95 @@ export function Canvas({
 
   // Until the first pan or zoom, the view simply fits every note
   const current = view ?? (size && notes.length ? fitView(notes, size) : undefined)
-  const viewRef = useRef(current)
-  viewRef.current = current
   const scale = current ? current.zoom * PX_PER_MM : 0
+
+  /**
+   * Panning and zooming move the drawn canvas as one layer (a CSS transform on `content`) instead of
+   * re-rendering every banknote on each wheel step; the view is committed, and banknotes redrawn sharp
+   * at the new zoom, once the gesture pauses. `viewRef` is always the view on screen.
+   */
+  const content = useRef<HTMLDivElement>(null)
+  const live = useRef<View>(undefined)
+  const commitTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const committed = useRef(current)
+  committed.current = current
+  const viewRef = useRef(current)
+  viewRef.current = live.current ?? current
+
+  const showView = (v: View) => {
+    const base = committed.current
+    const element = ref.current
+    if (!base || !content.current || !element) return setView(v)
+    live.current = v
+    viewRef.current = v
+    clearTimeout(commitTimer.current)
+    commitTimer.current = setTimeout(commitView, COMMIT_MS)
+    // A trackpad sends several wheel events per frame: draw only the latest, once a frame
+    if (!frame.current) frame.current = requestAnimationFrame(drawLive)
+  }
+  const frame = useRef(0)
+  const drawLive = () => {
+    frame.current = 0
+    const v = live.current
+    const base = committed.current
+    const element = ref.current
+    if (!v || !base || !content.current || !element) return
+    const k = v.zoom / base.zoom
+    content.current.style.transform = `translate(${v.x - base.x * k}px, ${v.y - base.y * k}px) scale(${k})`
+    content.current.style.willChange = 'transform'
+    const s = v.zoom * PX_PER_MM
+    const g = gridStep(s)
+    element.style.backgroundSize = `${g}px ${g}px`
+    element.style.backgroundPosition = `${v.x}px ${v.y}px`
+    // Labels and the zoom readout stay their usual size and current while the layer scales
+    for (const label of content.current.querySelectorAll<HTMLElement>('[data-note-label]')) label.style.transform = k === 1 ? '' : `scale(${1 / k})`
+    const readout = element.querySelector('[data-zoom-readout]')?.firstChild
+    if (readout) readout.nodeValue = `${Math.round(v.zoom * 100)}%`
+  }
+  /** Ends a live pan or zoom: React draws the view for real */
+  const commitView = () => {
+    clearTimeout(commitTimer.current)
+    const v = live.current
+    if (v) setView(v)
+  }
+  /** A jump (zoom buttons, fit, focus) replaces any live view straight away */
+  const jumpTo = (v: View) => {
+    clearTimeout(commitTimer.current)
+    live.current = undefined
+    setView(v)
+  }
+  // Once React has drawn the committed view, the layer goes back to no transform, in the same frame
+  useLayoutEffect(() => {
+    if (live.current && current && live.current !== current) return
+    live.current = undefined
+    cancelAnimationFrame(frame.current)
+    frame.current = 0
+    if (content.current) {
+      content.current.style.transform = ''
+      content.current.style.willChange = ''
+      for (const label of content.current.querySelectorAll<HTMLElement>('[data-note-label]')) label.style.transform = ''
+    }
+    if (ref.current && current) {
+      const g = gridStep(current.zoom * PX_PER_MM)
+      ref.current.style.backgroundSize = `${g}px ${g}px`
+      ref.current.style.backgroundPosition = `${current.x}px ${current.y}px`
+    }
+  })
+  useEffect(() => () => {
+    clearTimeout(commitTimer.current)
+    cancelAnimationFrame(frame.current)
+  }, [])
 
   const zoomAround = (factor: number, cx: number, cy: number) => {
     const v = viewRef.current
     if (!v) return
     const zoom = clamp(v.zoom * factor, MIN_ZOOM, MAX_ZOOM)
     const k = zoom / v.zoom
-    setView({ zoom, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k })
+    jumpTo({ zoom, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k })
   }
+
+  const showViewRef = useRef(showView)
+  showViewRef.current = showView
 
   // Wheel needs a non-passive listener so the page itself never scrolls or zooms
   useEffect(() => {
@@ -145,9 +227,9 @@ export function Canvas({
         const k = zoom / v.zoom
         const cx = e.clientX - rect.left
         const cy = e.clientY - rect.top
-        setView({ zoom, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k })
+        showViewRef.current({ zoom, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k })
       } else {
-        setView({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY })
+        showViewRef.current({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY })
       }
     }
     element.addEventListener('wheel', onWheel, { passive: false })
@@ -160,7 +242,7 @@ export function Canvas({
     const v = viewRef.current
     if (!note || !v) return
     const s = v.zoom * PX_PER_MM
-    setView({
+    jumpTo({
       zoom: v.zoom,
       x: size.width / 2 - (note.x + note.widthMm / 2) * s,
       y: size.height / 2 - (note.y + note.heightMm / 2) * s,
@@ -180,6 +262,7 @@ export function Canvas({
   const endGesture = () => {
     const g = gesture.current
     if (g?.mode === 'tilt' && g.moved && useTilt.getState().springBack) springToFlat()
+    if (g?.mode === 'pan') commitView()
     gesture.current = null
     setActiveMode(undefined)
     setGuides([])
@@ -197,7 +280,7 @@ export function Canvas({
   const noteAt = (target: EventTarget, attribute: 'data-note-label' | 'data-note-body') =>
     (target as HTMLElement).closest(`[${attribute}]`)?.getAttribute(attribute) ?? undefined
 
-  const grid = scale * (scale * 10 < 12 ? 50 : 10)
+  const grid = gridStep(scale)
 
   return (
     <div
@@ -222,8 +305,10 @@ export function Canvas({
         if (!v || e.button > 1) return
         // A click on the banknote outside the thread's windows ends window editing and tilts as usual
         if (editingWindows && noteAt(e.target, 'data-note-body') === selectedId) onExitWindows?.()
-        // Freeze the fitted view, or moving a note would refit the canvas under the pointer
-        if (!view) setView(v)
+        // Freeze the fitted view, or moving a note would refit the canvas under the pointer. A live pan or
+        // zoom is committed first, so drags measure in the scale on screen.
+        if (live.current) commitView()
+        else if (!view) setView(v)
         e.currentTarget.setPointerCapture(e.pointerId)
         const labelId = noteAt(e.target, 'data-note-label')
         const bodyId = noteAt(e.target, 'data-note-body')
@@ -273,7 +358,7 @@ export function Canvas({
         const dx = e.clientX - g.startX
         const dy = e.clientY - g.startY
         if (g.mode === 'pan') {
-          setView({ ...g.view, x: g.view.x + dx, y: g.view.y + dy })
+          showView({ ...g.view, x: g.view.x + dx, y: g.view.y + dy })
         } else if (g.mode === 'thread') {
           updateNote(projectId, g.noteId, (n) => {
             const horizontal = n.thread.direction === 'horizontal'
@@ -343,6 +428,8 @@ export function Canvas({
         runAction(addImageFrames({ projectId, noteId }, Array.from(e.dataTransfer.files)))
       }}
     >
+      {/* Everything drawn in canvas space, so a live pan or zoom can move it as one layer */}
+      <div ref={content} className="absolute top-0 left-0 origin-top-left">
       {current &&
         notes.map((note) => {
           const isSelected = note.id === selectedId
@@ -355,7 +442,7 @@ export function Canvas({
               <div
                 data-note-label={note.id}
                 className={cn(
-                  'absolute bottom-full left-0 mb-1.5 flex items-baseline gap-1.5 text-xs whitespace-nowrap',
+                  'absolute bottom-full left-0 mb-1.5 flex origin-bottom-left items-baseline gap-1.5 text-xs whitespace-nowrap',
                   'cursor-move',
                 )}
               >
@@ -398,6 +485,7 @@ export function Canvas({
             }
           />
         ))}
+      </div>
 
       {current && size && (
         // Top right, clear of the properties panel when one is open; Export floats here only without a selection
@@ -414,12 +502,12 @@ export function Canvas({
             title="Zoom to 100% (about true size)"
             onClick={() => zoomAround(1 / current.zoom, size.width / 2, size.height / 2)}
           >
-            {Math.round(current.zoom * 100)}%
+            <span data-zoom-readout="">{`${Math.round(current.zoom * 100)}%`}</span>
           </Button>
           <IconButton label="Zoom in" onClick={() => zoomAround(1.25, size.width / 2, size.height / 2)}>
             <Plus />
           </IconButton>
-          <IconButton label="Fit all notes" onClick={() => setView(fitView(notes, size))}>
+          <IconButton label="Fit all notes" onClick={() => jumpTo(fitView(notes, size))}>
             <Maximize />
           </IconButton>
         </div>

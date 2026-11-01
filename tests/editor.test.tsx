@@ -97,6 +97,39 @@ describe('username workspace editor', () => {
     expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
     expect(saves).not.toHaveBeenCalled()
   })
+  it('pans and zooms the canvas as one layer, then redraws the banknotes at the new view', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      callback: ResizeObserverCallback
+      constructor(callback: ResizeObserverCallback) { this.callback = callback }
+      observe() { this.callback([{ contentRect: { width: 1280, height: 720 } } as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      unobserve() {} disconnect() {}
+    })
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'pan-zoom-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    const note = () => document.querySelector('[data-note-body]')!.parentElement as HTMLElement
+    const layer = () => note().parentElement as HTMLElement
+    const canvas = layer().parentElement as HTMLElement
+    const left = parseFloat(note().style.left)
+    const readout = () => document.querySelector('[data-zoom-readout]')!.textContent
+
+    fireEvent.wheel(canvas, { deltaX: 40, deltaY: 0 })
+    fireEvent.wheel(canvas, { deltaX: 60, deltaY: 0 })
+    // While the gesture runs, the layer moves and the banknote isn't re-laid out
+    await waitFor(() => expect(layer().style.transform).toContain('translate(-100px, 0px)'))
+    expect(parseFloat(note().style.left)).toBe(left)
+    // Once it pauses, the banknote is drawn at its new place and the layer is back to no transform
+    await waitFor(() => expect(parseFloat(note().style.left)).toBeCloseTo(left - 100))
+    expect(layer().style.transform).toBe('')
+
+    const before = readout()
+    fireEvent.wheel(canvas, { deltaY: -40, ctrlKey: true, clientX: 0, clientY: 0 })
+    await waitFor(() => expect(layer().style.transform).toContain('scale('))
+    await waitFor(() => expect(readout()).not.toBe(before))
+    await waitFor(() => expect(layer().style.transform).toBe(''))
+  })
+
   it('edits the lens effect, Cycle included, for the selected banknote only', async () => {
     const user = userEvent.setup()
     localStorage.setItem('of-thread-workspace', 'per-note-lens-ui-test')
