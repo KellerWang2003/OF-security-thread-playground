@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { create } from 'zustand'
-import { advancePlayback, playbackEase, playbackSettings, type PlaybackSettings } from '../lib/playback'
 import { TILT_LIMIT, clamp } from '../lib/frames'
-import { FLAT, sweepTarget, type Axis, type LensState } from '../lib/lens'
+import { tiltAt, type PlaybackPlan } from '../lib/moves'
 
 /** drag springs back on release, slider scrubs within one cycle, hold stays at a set angle */
 export type TiltSource = 'drag' | 'wobble' | 'slider' | 'hold'
@@ -54,20 +53,18 @@ export function togglePlayback() {
 }
 
 /**
- * Manual tilt uses a critically damped spring. Playback eases from flat to the full cycle angle and back on
- * each axis in `axes`, one sweep after another, reaching both endpoints without spring attenuation.
+ * Manual tilt uses a critically damped spring. Playback follows the project's moves exactly (no spring), from
+ * the start each time it begins; a change to the plan while playing keeps the same share of the way through.
  */
-export function useTiltLoop(lens: LensState, axes: Axis[], settings: PlaybackSettings = {}, limit = TILT_LIMIT) {
-  const { speed, curve, holdSeconds } = playbackSettings(settings)
-  const current = useRef({ speed, curve, holdSeconds, lens, axes, limit })
-  useEffect(() => { current.current = { speed, curve, holdSeconds, lens, axes, limit } })
+export function useTiltLoop(plan: PlaybackPlan, limit = TILT_LIMIT) {
+  const current = useRef({ plan, limit })
+  useEffect(() => { current.current = { plan, limit } })
   useEffect(() => {
     let raf = 0
     let last = performance.now()
     let velocity = 0
     let velocityX = 0
-    let position = { phase: 0, holdRemaining: 0 }
-    let sweep = 0
+    let share = 0
     let lastSource: TiltSource | undefined
     const stiffness = 140
     const damping = 2 * Math.sqrt(stiffness)
@@ -76,22 +73,11 @@ export function useTiltLoop(lens: LensState, axes: Axis[], settings: PlaybackSet
       const dt = Math.min((now - last) / 1000, 1 / 20)
       last = now
       const s = useTilt.getState()
-      const { speed, curve, holdSeconds, lens, axes, limit } = current.current
+      const { plan, limit } = current.current
       if (s.source === 'wobble') {
-        if (lastSource === 'wobble') {
-          const before = position.phase
-          position = advancePlayback(position, dt, speed, holdSeconds)
-          // A finished sweep (back to flat) hands over to the next axis
-          if (position.phase < before) sweep++
-        } else {
-          position = { phase: 0, holdRemaining: 0 }
-          sweep = 0
-        }
-        const progress = position.phase <= 1 ? position.phase : 2 - position.phase
-        const end = axes.length ? sweepTarget(lens, axes[sweep % axes.length]) : FLAT
-        const k = playbackEase(progress, curve)
-        const target = end.y * k
-        const targetX = end.x * k
+        if (lastSource === 'wobble' && plan.seconds > 0) share = (share + dt / plan.seconds) % 1
+        else share = 0
+        const { x: targetX, y: target } = tiltAt(plan, share * plan.seconds)
         velocity = 0
         velocityX = 0
         if (target !== s.angle || targetX !== s.angleX || target !== s.target || targetX !== s.targetX) {

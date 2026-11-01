@@ -1,5 +1,6 @@
 import { TILT_LIMIT } from './frames'
-import { lensMix, lensState, sweepAxes, sweepTarget, type Tilt2 } from './lens'
+import { lensMix, lensState, type Tilt2 } from './lens'
+import { playbackPlan, tiltAt } from './moves'
 import { loadImageUrl } from './images'
 import { advancePlayback, playbackEase, playbackSettings } from './playback'
 import { fitSections, imageTiles, threadLength } from './thread'
@@ -32,17 +33,11 @@ export function playbackAngles(tilt: Note['tilt'], fps: number, loops = 1) {
   return sweepProgress(tilt, fps, loops).map(({ k }) => Math.max(0, tilt.cycleDeg) * k)
 }
 
-/**
- * The tilt of every video frame for `loops` passes of the project's playback: each axis it sweeps in turn,
- * flat → full cycle → flat, exactly as live playback.
- */
+/** The tilt of every video frame for `loops` passes of the project's playback moves, exactly as live playback */
 export function playbackTilts(note: Pick<Note, 'tilt' | 'frames'>, fps: number, loops = 1): Tilt2[] {
-  const lens = lensState(note.tilt, note.frames)
-  const axes = sweepAxes(note.tilt, lens)
-  return sweepProgress(note.tilt, fps, loops * axes.length).map(({ sweep, k }) => {
-    const end = sweepTarget(lens, axes[sweep % axes.length])
-    return { x: end.x * k, y: end.y * k }
-  })
+  const plan = playbackPlan(note.tilt, lensState(note.tilt, note.frames))
+  const count = Math.max(1, Math.round(plan.seconds * loops * fps))
+  return Array.from({ length: count }, (_, i) => tiltAt(plan, i / fps))
 }
 
 const asTilt = (t: Tilt2 | number): Tilt2 => (typeof t === 'number' ? { x: 0, y: t } : t)
