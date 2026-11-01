@@ -14,7 +14,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { InlineField, ScrubField, Section, Segmented } from '../components/controls'
+import { ScrubField, Section, Segmented } from '../components/controls'
 import { clamp } from '../lib/frames'
 import {
   LENS_EFFECTS,
@@ -123,9 +123,12 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
       )}
       {lens.effect === 'reveal' && (
         <>
-          <InlineField label="Hidden on" title="The tilt that never shows the outer frames, at any angle; the other tilt plays every frame">
-            <Segmented value={lens.revealAxis === 'y' ? 'x' : 'y'} options={[{ value: 'x', label: '↔ Side tilt' }, { value: 'y', label: '↕ Up/down tilt' }]} onChange={(v) => set({ revealAxis: v === 'y' ? 'x' : 'y' })} />
-          </InlineField>
+          <div className="flex items-center gap-3" title="The tilt that never shows the outer frames, at any angle; the other tilt plays every frame">
+            <span className="shrink-0 text-xs text-muted-foreground">Hidden on</span>
+            <div className="min-w-0 flex-1">
+              <Segmented value={lens.revealAxis === 'y' ? 'x' : 'y'} options={[{ value: 'x', label: '↔ Side' }, { value: 'y', label: '↕ Up/down' }]} onChange={(v) => set({ revealAxis: v === 'y' ? 'x' : 'y' })} />
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             {cycleField(lens.revealAxis)}
             {lens.revealSafe ? (
