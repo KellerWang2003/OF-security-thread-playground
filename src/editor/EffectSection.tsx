@@ -94,10 +94,14 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
     if (effect === 'custom') {
       // Custom starts from exactly what the current effect gives
       set({ effect, cycleDeg: round(lens.cycleY ?? tilt.cycleDeg), yOn: lens.cycleY != null, cycleXDeg: lens.cycleX == null ? null : round(lens.cycleX) })
-    } else if (effect === 'side' || effect === 'both') {
-      set({ effect, cycleXDeg: tilt.cycleXDeg ?? tilt.cycleDeg })
     } else {
-      set({ effect })
+      // The other effects carry over the fastest cycle that's playing now. A slow cycle left behind by Partial
+      // reveal or Custom (hundreds of degrees) would otherwise keep frames out of reach of a 90° tilt.
+      const playing = [lens.cycleY, lens.cycleX].filter((c): c is number => c != null)
+      const fast = round(playing.length ? Math.min(...playing) : tilt.cycleDeg)
+      if (effect === 'side') set({ effect, cycleXDeg: fast })
+      else if (effect === 'reveal') set(lens.revealAxis === 'x' ? { effect, cycleXDeg: fast } : { effect, cycleDeg: fast })
+      else set({ effect, cycleDeg: fast })
     }
   }
 
