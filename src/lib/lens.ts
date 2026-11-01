@@ -25,7 +25,7 @@ export const LENS_EFFECTS: { value: LensEffect; label: string; description: stri
   { value: 'updown', label: 'Horizontal', description: 'Frames change as you tilt up and down' },
   { value: 'side', label: 'Vertical', description: 'Frames change as you tilt side to side' },
   { value: 'both', label: 'Diagonal 45°', description: 'Frames change the same on both tilts' },
-  { value: 'reveal', label: 'Partial reveal', description: 'One tilt shows every frame; the other only the middle ones' },
+  { value: 'reveal', label: 'Partial reveal on one tilt', description: 'One tilt shows every frame; the other never shows the outer ones' },
   { value: 'custom', label: 'Custom angle', description: 'Set the ridge angle and cycle yourself' },
 ]
 /** Playback never turns a banknote further than a viewer would, however long a cycle is */

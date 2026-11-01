@@ -123,8 +123,8 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
       )}
       {lens.effect === 'reveal' && (
         <>
-          <InlineField label="All frames" title="The tilt that plays every frame; the other only reaches the middle ones within ±60°">
-            <Segmented value={lens.revealAxis} options={[{ value: 'y', label: '↕ Up/down' }, { value: 'x', label: '↔ Side' }]} onChange={(v) => set({ revealAxis: v })} />
+          <InlineField label="Hidden on" title="The tilt that never shows the outer frames, at any angle; the other tilt plays every frame">
+            <Segmented value={lens.revealAxis === 'y' ? 'x' : 'y'} options={[{ value: 'x', label: '↔ Side tilt' }, { value: 'y', label: '↕ Up/down tilt' }]} onChange={(v) => set({ revealAxis: v === 'y' ? 'x' : 'y' })} />
           </InlineField>
           <div className="grid grid-cols-2 gap-2">
             {cycleField(lens.revealAxis)}
