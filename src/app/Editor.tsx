@@ -119,7 +119,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   }, [project.id])
 
   const note = project.notes.find((n) => n.id === selectedId)
-  // The lens is project-wide; any banknote's settings describe it
+  // Each banknote has its own lens; playback and the tilt pad follow the selected one (or the first)
   const reference = note ?? project.notes.at(0)
   const lens = reference ? lensState(reference.tilt, reference.frames) : undefined
   const noteRef = note ? { projectId: project.id, noteId: note.id } : undefined

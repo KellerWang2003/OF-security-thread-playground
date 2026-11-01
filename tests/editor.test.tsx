@@ -97,6 +97,22 @@ describe('username workspace editor', () => {
     expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
     expect(saves).not.toHaveBeenCalled()
   })
+  it('edits the lens effect, Cycle included, for the selected banknote only', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'per-note-lens-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Duplicate', exact: true }))
+    const before = useProjects.getState().demoPreview!.notes.map((n) => n.tilt.cycleDeg)
+    const cycle = screen.getByText('Cycle', { exact: true }).closest('label, div')!.querySelector('input')!
+    fireEvent.change(cycle, { target: { value: '47' } })
+    fireEvent.blur(cycle)
+    const notes = useProjects.getState().demoPreview!.notes
+    const changed = notes.filter((n, i) => n.tilt.cycleDeg !== before[i])
+    expect(changed).toHaveLength(1)
+    expect(changed[0].tilt.cycleDeg).toBe(47)
+  })
   it('opens playback settings and applies saved fade, speed, curve and hold to every banknote', async () => {
     const user = userEvent.setup()
     localStorage.setItem('of-thread-workspace', 'playback-settings-ui-test')

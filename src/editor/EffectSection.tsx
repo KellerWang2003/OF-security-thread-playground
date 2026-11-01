@@ -40,15 +40,15 @@ import {
 import { CYCLE_LIMITS } from '../lib/notes'
 import { switchEffect } from '../lib/switchEffect'
 import { CycleBar, Explain, MiniNote, RidgeIcon, swatch, useClock } from './LensVisuals'
-import { updateProject } from '../lib/store'
+import { updateNote } from '../lib/store'
 import type { Note, TiltSettings } from '../lib/types'
 import { setTilt, useTilt } from '../tilt/tilt'
 
 const round = (v: number, digits = 0) => Math.round(v * 10 ** digits) / 10 ** digits
 
 /**
- * The project's lens, as an effect: what tilting does. Each effect asks only what it needs and works out the
- * rest; Custom exposes the raw values. Like Cycle, it applies to every banknote in the project.
+ * The banknote's lens, as an effect: what tilting does. Each effect asks only what it needs and works out the
+ * rest; Custom exposes the raw values. It applies only to the selected banknote, flat and Cycle included.
  */
 /**
  * Which way frames run on each tilt. Flat always shows the middle frame, so the default (1 → 5 top to bottom
@@ -57,7 +57,7 @@ const round = (v: number, digits = 0) => Math.round(v * 10 ** digits) / 10 ** di
 export function LensMenu({ projectId, note }: { projectId: string; note: Note }) {
   const lens = lensState(note.tilt, note.frames)
   const set = (patch: Partial<TiltSettings>) =>
-    updateProject(projectId, (p) => ({ ...p, notes: p.notes.map((n) => ({ ...n, tilt: { ...n.tilt, ...patch } })) }))
+    updateNote(projectId, note.id, (n) => ({ ...n, tilt: { ...n.tilt, ...patch } }))
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Lens options" className="text-muted-foreground" />}>
@@ -89,7 +89,7 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
   const lens = lensState(tilt, note.frames)
   const [setBy, setSetBy] = useState<'tilt' | 'lens'>('tilt')
   const set = (patch: Partial<TiltSettings>) =>
-    updateProject(projectId, (p) => ({ ...p, notes: p.notes.map((n) => ({ ...n, tilt: { ...n.tilt, ...patch } })) }))
+    updateNote(projectId, note.id, (n) => ({ ...n, tilt: { ...n.tilt, ...patch } }))
 
   const chooseEffect = (effect: LensEffect) => set(switchEffect(tilt, lens, effect))
 
