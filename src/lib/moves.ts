@@ -112,9 +112,27 @@ function moveSegments(move: PlaybackMove, lens: LensState, speed: number, holdSe
     })
     return [line(FLAT, top, leg), ...holds(top), { seconds: 2 * leg, eased: false, points: ring, at: byDistance(ring) }, line(top, FLAT, leg), ...holds(FLAT)]
   }
-  // Up/down and side swing between a start (flat unless set) and their end, through flat when the signs differ
-  const start = moveStart(move)
-  return [line(start, end, leg), ...holds(end), line(end, start, leg), ...holds(start)]
+  // Up/down and side make one pass from their start to their end; the plan glides to and from flat around it.
+  // A move left at flat to start keeps going out and back, as before.
+  const { start, end: stop } = swingEnds(move, lens)
+  if (distance(start, FLAT) < 0.5) return [line(FLAT, stop, leg), ...holds(stop), line(stop, FLAT, leg), ...holds(FLAT)]
+  return [line(start, stop, leg), ...holds(stop)]
+}
+
+/**
+ * Where an up/down or side move starts and ends. One that was never set swings once across a full cycle centred
+ * on flat (−½ to +½ cycle), so every frame plays once; the fallback moves of old projects keep their sweep.
+ */
+export function swingEnds(move: PlaybackMove, lens: LensState): { start: Tilt2; end: Tilt2 } {
+  const axis = move.kind === 'x' ? 'x' : 'y'
+  const untouched = move.from === undefined && move[axis] === undefined && !move.id.startsWith('default-')
+  if ((move.kind === 'y' || move.kind === 'x') && untouched) {
+    const cycle = axis === 'y' ? lens.cycleY : lens.cycleX
+    const dir = axis === 'y' ? lens.dirY : lens.dirX
+    const half = (cycle ? Math.min(cycle / 2, SWEEP_MAX) : lens.viewDeg / 2) * dir
+    return axis === 'y' ? { start: { x: 0, y: -half }, end: { x: 0, y: half } } : { start: { x: -half, y: 0 }, end: { x: half, y: 0 } }
+  }
+  return { start: moveStart(move), end: moveReach(move, lens) }
 }
 
 /** Where a move begins: flat, or for up/down and side moves the angle set as From */
