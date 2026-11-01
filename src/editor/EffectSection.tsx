@@ -123,6 +123,26 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
     <Section nested>
       <EffectPicker note={note} lens={lens} onChoose={chooseEffect} />
 
+      {/* The main controls first: which tilt hides frames, where flat sits and how far each tilt reaches, the wobble
+          allowance. The cycles they work out come after. */}
+      {lens.effect === 'reveal' && (
+          <div className="flex items-center gap-3" title="The tilt that never shows the outer frames, at any angle; the other tilt plays every frame">
+            <span className="shrink-0 text-xs text-muted-foreground">Hidden on</span>
+            <div className="min-w-0 flex-1">
+              <Segmented value={lens.revealAxis === 'y' ? 'x' : 'y'} options={[{ value: 'x', label: '↔ Side' }, { value: 'y', label: '↕ Up/down' }]} onChange={(v) => set({ revealAxis: v === 'y' ? 'x' : 'y' })} />
+            </div>
+          </div>
+      )}
+      <FlatStrip note={note} lens={lens} set={set} />
+      {lens.effect === 'reveal' && (
+          <Explain
+            picture={<WobblePreview note={note} lens={lens} />}
+            caption={`Hidden frames stay hidden even if the hand drifts ${round(lens.wobble, 1)}° ${lens.revealAxis === 'y' ? 'up or down' : 'sideways'} while tilting ${lens.revealAxis === 'y' ? 'sideways' : 'up or down'}`}>
+            <ScrubField label="Wobble" title="Allowance for a hand that isn't perfectly straight" value={round(lens.wobble, 1)} min={0} max={20} step={0.5} unit="°"
+              onChange={(v) => set({ revealWobble: v })} />
+          </Explain>
+      )}
+
       {lens.effect === 'updown' && (cycleField('y', 'Cycle'))}
       {lens.effect === 'side' && (cycleField('x', 'Cycle'))}
       {lens.effect === 'both' && (
@@ -130,12 +150,6 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
       )}
       {lens.effect === 'reveal' && (
         <>
-          <div className="flex items-center gap-3" title="The tilt that never shows the outer frames, at any angle; the other tilt plays every frame">
-            <span className="shrink-0 text-xs text-muted-foreground">Hidden on</span>
-            <div className="min-w-0 flex-1">
-              <Segmented value={lens.revealAxis === 'y' ? 'x' : 'y'} options={[{ value: 'x', label: '↔ Side' }, { value: 'y', label: '↕ Up/down' }]} onChange={(v) => set({ revealAxis: v === 'y' ? 'x' : 'y' })} />
-            </div>
-          </div>
           <div className="grid grid-cols-2 gap-2">
             {cycleField(lens.revealAxis)}
             {lens.revealSafe ? (
@@ -150,12 +164,6 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
               </div>
             )}
           </div>
-          <Explain
-            picture={<WobblePreview note={note} lens={lens} />}
-            caption={`Hidden frames stay hidden even if the hand drifts ${round(lens.wobble, 1)}° ${lens.revealAxis === 'y' ? 'up or down' : 'sideways'} while tilting ${lens.revealAxis === 'y' ? 'sideways' : 'up or down'}`}>
-            <ScrubField label="Wobble" title="Allowance for a hand that isn't perfectly straight" value={round(lens.wobble, 1)} min={0} max={20} step={0.5} unit="°"
-              onChange={(v) => set({ revealWobble: v })} />
-          </Explain>
         </>
       )}
       {lens.effect === 'custom' && (
@@ -196,8 +204,6 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
           <div className="text-sm font-medium tabular-nums">{round(lensCycle(lens), 1)}°</div>
         </div>
       </div>
-
-      <FlatStrip note={note} lens={lens} set={set} />
 
       <div className="flex flex-col gap-1.5">
         {(['y', 'x'] as const).filter((a) => respondsTo(lens, a)).map((axis) => (
