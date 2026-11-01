@@ -85,6 +85,15 @@ function lensFields(tilt: TiltSettings): Partial<TiltSettings> {
   return Object.fromEntries(keys.filter((k) => tilt[k] !== undefined).map((k) => [k, tilt[k]]))
 }
 
+/**
+ * Presets keep their one Cycle in `cycleDeg`; only Custom reads `cycleXDeg`. Vertical, and Partial reveal hidden
+ * on up/down, used to keep theirs in `cycleXDeg`: move it over, once, so it's the Cycle they show
+ */
+function presetCycle(tilt: TiltSettings): { cycleDeg?: number; cycleXDeg?: undefined } {
+  const sideCycle = tilt.effect === 'side' || (tilt.effect === 'reveal' && tilt.revealAxis === 'x')
+  return sideCycle && tilt.cycleXDeg != null ? { cycleDeg: tilt.cycleXDeg, cycleXDeg: undefined } : {}
+}
+
 /** Projects saved before notes existed held a single note's settings at the top level */
 export function migrateProject(raw: unknown): Project {
   const p = raw as Project & {
@@ -111,8 +120,10 @@ export function migrateProject(raw: unknown): Project {
       tilt: {
         ...playbackSettings(raw.tilt),
         ...lensFields(raw.tilt),
+        ...presetCycle(raw.tilt),
         transition: raw.tilt.transition,
         cycleDeg:
+          presetCycle(raw.tilt).cycleDeg ??
           raw.tilt.cycleDeg ??
           (raw.frames.every((f) => (f as { spanDeg?: number }).spanDeg !== undefined)
             ? raw.frames.reduce((total, f) => total + ((f as { spanDeg?: number }).spanDeg ?? 0), 0)

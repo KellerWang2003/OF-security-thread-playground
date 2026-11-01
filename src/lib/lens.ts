@@ -204,26 +204,27 @@ export function lensState(tilt: TiltSettings, frames: Pick<Frame, 'length'>[] = 
   const revealAxis = tilt.revealAxis ?? 'y'
   const wobble = Math.max(0, tilt.revealWobble ?? DEFAULT_WOBBLE)
   const y = tilt.cycleDeg
-  const x = tilt.cycleXDeg ?? tilt.cycleDeg
   const offset = flatOffset(tilt, frames)
   const base = { effect, dirY, dirX, viewDeg, revealAxis, wobble, revealSafe: true, offset } as const
   switch (effect) {
+    // The presets all play their one Cycle (`cycleDeg`) on the tilt that responds fastest; only Custom reads
+    // `cycleXDeg`, so switching between presets never picks up a cycle another effect left behind
     case 'side':
-      return { ...base, cycleY: null, cycleX: x }
+      return { ...base, cycleY: null, cycleX: y }
     case 'both':
       // Ridges at 45°: both tilts run through the frames at the same rate
       return { ...base, cycleY: y, cycleX: y }
     case 'reveal': {
       // Hidden at any tilt up to 90°, even with the hand drifting `wobble` degrees onto the fast tilt
-      const fast = revealAxis === 'y' ? y : x
+      const fast = y
       const reaches = revealReaches(frames, offset, fast, wobble)
       // The reach chosen on the strip, as a step inwards from the widest; it clamps if flat or the frames change
       const level = Math.min(Math.max(0, Math.round(tilt.revealLevel ?? 0)), Math.max(0, reaches.length - 1))
       const slow = reaches.at(level)?.slow ?? null
       const revealSafe = slow != null
       return revealAxis === 'y'
-        ? { ...base, revealSafe, cycleY: y, cycleX: slow ?? x }
-        : { ...base, revealSafe, cycleY: slow ?? y, cycleX: x }
+        ? { ...base, revealSafe, cycleY: y, cycleX: slow ?? y }
+        : { ...base, revealSafe, cycleY: slow ?? y, cycleX: y }
     }
     case 'custom':
       return { ...base, cycleY: tilt.yOn === false ? null : y, cycleX: tilt.cycleXDeg ?? null }

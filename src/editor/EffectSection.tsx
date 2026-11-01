@@ -38,6 +38,7 @@ import {
   type LensState,
 } from '../lib/lens'
 import { CYCLE_LIMITS } from '../lib/notes'
+import { switchEffect } from '../lib/switchEffect'
 import { CycleBar, Explain, MiniNote, RidgeIcon, swatch, useClock } from './LensVisuals'
 import { updateProject } from '../lib/store'
 import type { Note, TiltSettings } from '../lib/types'
@@ -90,20 +91,7 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
   const set = (patch: Partial<TiltSettings>) =>
     updateProject(projectId, (p) => ({ ...p, notes: p.notes.map((n) => ({ ...n, tilt: { ...n.tilt, ...patch } })) }))
 
-  const chooseEffect = (effect: LensEffect) => {
-    if (effect === 'custom') {
-      // Custom starts from exactly what the current effect gives
-      set({ effect, cycleDeg: round(lens.cycleY ?? tilt.cycleDeg), yOn: lens.cycleY != null, cycleXDeg: lens.cycleX == null ? null : round(lens.cycleX) })
-    } else {
-      // The other effects carry over the fastest cycle that's playing now. A slow cycle left behind by Partial
-      // reveal or Custom (hundreds of degrees) would otherwise keep frames out of reach of a 90° tilt.
-      const playing = [lens.cycleY, lens.cycleX].filter((c): c is number => c != null)
-      const fast = round(playing.length ? Math.min(...playing) : tilt.cycleDeg)
-      if (effect === 'side') set({ effect, cycleXDeg: fast })
-      else if (effect === 'reveal') set(lens.revealAxis === 'x' ? { effect, cycleXDeg: fast } : { effect, cycleDeg: fast })
-      else set({ effect, cycleDeg: fast })
-    }
-  }
+  const chooseEffect = (effect: LensEffect) => set(switchEffect(tilt, lens, effect))
 
   const cycleField = (axis: Axis, label?: string) => {
     const value = round((axis === 'y' ? lens.cycleY : lens.cycleX) ?? tilt.cycleDeg)
@@ -117,7 +105,7 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
           min={CYCLE_LIMITS.min}
           max={CYCLE_LIMITS.max}
           unit="°"
-          onChange={(v) => set(axis === 'y' ? { cycleDeg: v } : { cycleXDeg: v })}
+          onChange={(v) => set({ cycleDeg: v })}
         />
       </Explain>
     )
