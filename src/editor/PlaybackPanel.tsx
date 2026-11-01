@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { IconButton, ScrubField } from '../components/controls'
+import { cn } from '@/lib/utils'
 import { SWEEP_MAX, type LensState } from '../lib/lens'
 import {
   MOVES_MAX,
@@ -40,10 +41,10 @@ export function PlaybackPanel({ projectId, tilt, lens }: { projectId: string; ti
   const loopSeconds = playbackPlan(tilt, lens).seconds
 
   return (
-    <div className="flex gap-3">
-      <div className="flex w-[168px] shrink-0 flex-col gap-3">
-        <Section title="Moves">
-          <ul className="flex max-h-[260px] flex-col gap-0.5 overflow-y-auto">
+    <div className="flex h-[400px]">
+      <aside className="flex w-[184px] shrink-0 flex-col border-r bg-muted/40 p-3">
+        <Section title="Moves" className="min-h-0 flex-1">
+          <ul className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
             {MOVE_KINDS.map((k) => (
               <LibraryRow key={k.value} name={presetName(k.value)} disabled={full} onAdd={() => add(newMove(k.value))} />
             ))}
@@ -52,13 +53,11 @@ export function PlaybackPanel({ projectId, tilt, lens }: { projectId: string; ti
             ))}
           </ul>
         </Section>
-      </div>
+      </aside>
 
-      <div className="w-px shrink-0 bg-border" />
-
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
-        <Section title="Playlist" aside={<span className="tabular-nums" title="Time for the whole playlist, including holds">{Math.round(loopSeconds * 10) / 10} s loop</span>}>
-          <ol className="flex flex-col gap-1">
+      <div className="flex min-w-0 flex-1 flex-col gap-4 p-3">
+        <Section title="Playlist" className="min-h-0 flex-1" aside={<span className="tabular-nums" title="Time for the whole playlist, including holds">{Math.round(loopSeconds * 10) / 10} s loop</span>}>
+          <ol className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto rounded-lg bg-muted/50 p-1.5">
             {moves.map((move, i) => (
               <PlaylistRow
                 key={move.id}
@@ -85,11 +84,11 @@ export function PlaybackPanel({ projectId, tilt, lens }: { projectId: string; ti
   )
 }
 
-function Section({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
+function Section({ title, aside, className, children }: { title: string; aside?: React.ReactNode; className?: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">{title}</span>
+    <section className={cn('flex flex-col gap-2', className)}>
+      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+        <span className="font-medium tracking-wide uppercase">{title}</span>
         {aside}
       </div>
       {children}
@@ -106,7 +105,7 @@ function LibraryRow({ name, seconds, disabled, onAdd, onDelete }: {
   onDelete?: () => void
 }) {
   return (
-    <li className="group flex h-8 items-center gap-1 rounded-md pr-0.5 pl-2 hover:bg-muted/60">
+    <li className="group flex h-8 shrink-0 items-center gap-1 rounded-md pr-0.5 pl-2 hover:bg-background">
       <button type="button" disabled={disabled} onClick={onAdd} title="Add to the playlist"
         className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs outline-none disabled:opacity-50">
         <span className="truncate">{name}</span>
@@ -132,7 +131,7 @@ function PlaylistRow({ index, count, move, lens, recordings, onChange, onMove, o
   const axes = movesAxes(move)
   const name = move.kind === 'gesture' ? (recordings.find((r) => r.id === move.recordingId)?.name ?? 'Recording') : presetName(move.kind)
   return (
-    <li className="flex h-9 items-center gap-1.5 rounded-md bg-muted/40 px-1">
+    <li className="flex h-10 shrink-0 items-center gap-1.5 rounded-md bg-background px-1.5 shadow-xs">
       <span className="w-3 shrink-0 text-center text-[10px] text-muted-foreground tabular-nums">{index + 1}</span>
       <div className="min-w-0 flex-1 truncate text-xs">
         {name}

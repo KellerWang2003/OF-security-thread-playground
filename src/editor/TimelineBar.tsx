@@ -100,8 +100,8 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
         <PopoverTrigger render={<Button variant="outline" size="sm" className="h-8 w-full gap-1.5 text-xs" />}>
           <SlidersHorizontal className="size-3.5" />Playback settings
         </PopoverTrigger>
-        <PopoverContent side="top" align="start" sideOffset={12} className="w-[540px] gap-3 p-3">
-          <PopoverTitle className="text-sm">Playback settings</PopoverTitle>
+        <PopoverContent side="top" align="start" sideOffset={12} className="w-[580px] gap-0 overflow-hidden p-0">
+          <PopoverTitle className="border-b px-3 py-2.5 text-sm">Playback settings</PopoverTitle>
           <PlaybackPanel projectId={projectId} tilt={tilt} lens={lens} />
         </PopoverContent>
       </Popover>
