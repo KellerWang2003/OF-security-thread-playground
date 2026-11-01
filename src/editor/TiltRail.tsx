@@ -1,12 +1,16 @@
-import { Lock, LockOpen, RotateCcw } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { Circle, Lock, LockOpen, RotateCcw, Square } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { TILT_LIMIT, clamp } from '../lib/frames'
+import type { LensState } from '../lib/lens'
+import { MOVES_MAX, editableMoves, gestureFromRecording, movesOf, planPath, playbackPlan } from '../lib/moves'
+import type { TiltSettings } from '../lib/types'
 import { setTilt, useTilt } from '../tilt/tilt'
+import { saveMoves } from './playbackActions'
 
 /** Width and height of the pad, in px */
 const PAD_PX = 136
@@ -33,18 +37,59 @@ function holdAt(next: { x?: number; y?: number }, limit: number, respectLocks = 
  * vertically, side to side horizontally), held where you let go. Each axis has a field for an exact angle
  * and a lock that keeps the pad and canvas drag off it.
  */
-export function TiltRail({ limit = TILT_LIMIT }: { limit?: number }) {
+export function TiltRail({ limit = TILT_LIMIT, playback }: {
+  limit?: number
+  /** The project's playback, drawn on the pad and added to by recording; absent in tests of the pad alone */
+  playback?: { projectId: string; tilt: TiltSettings; lens: LensState }
+}) {
+  const [recording, setRecording] = useState(false)
+  const full = playback ? movesOf(playback.tilt, playback.lens).length >= MOVES_MAX : true
   return (
     <Panel className="absolute top-1/2 left-3 flex -translate-y-1/2 flex-col gap-1.5 rounded-[calc(var(--radius)+0.375rem+1px)] p-1.5">
-      <Pad limit={limit} />
+      <Pad
+        limit={limit}
+        playback={playback}
+        recording={recording}
+        onRecorded={(samples) => {
+          setRecording(false)
+          if (!playback) return
+          const move = gestureFromRecording(samples, limit)
+          if (!move) return
+          saveMoves(playback.projectId, [...editableMoves(playback.tilt, playback.lens), move])
+          setTilt({ source: 'wobble' })
+        }}
+      />
       <div className="flex items-end gap-1">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <AxisRow axis="y" limit={limit} />
           <AxisRow axis="x" limit={limit} />
         </div>
-        <IconButton label="Back to flat" size="icon-sm" onClick={() => setTilt({ source: 'hold', target: 0, targetX: 0 })}>
-          <RotateCcw />
-        </IconButton>
+        <div className="flex flex-col gap-1">
+          {playback && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Toggle
+                    size="sm"
+                    aria-label="Record a gesture"
+                    pressed={recording}
+                    disabled={full && !recording}
+                    onPressedChange={(on) => {
+                      setRecording(on)
+                      if (on) setTilt({ source: 'hold', target: shownTilt().y, targetX: shownTilt().x })
+                    }}
+                  />
+                }
+              >
+                {recording ? <Square className="fill-destructive text-destructive" /> : <Circle className="fill-destructive/80 text-destructive" />}
+              </TooltipTrigger>
+              <TooltipContent>{recording ? 'Cancel recording' : 'Record a gesture: drag on the pad, release to add it to playback'}</TooltipContent>
+            </Tooltip>
+          )}
+          <IconButton label="Back to flat" size="icon-sm" onClick={() => setTilt({ source: 'hold', target: 0, targetX: 0 })}>
+            <RotateCcw />
+          </IconButton>
+        </div>
       </div>
     </Panel>
   )
@@ -120,15 +165,50 @@ function AngleField({ axis, limit }: { axis: Axis; limit: number }) {
 }
 
 /** The square maps ±limit on each axis: the centre is flat, the top edge full up tilt, the right edge full right */
-function Pad({ limit }: { limit: number }) {
+function Pad({ limit, playback, recording, onRecorded }: {
+  limit: number
+  playback?: { tilt: TiltSettings; lens: LensState }
+  recording: boolean
+  onRecorded: (samples: { t: number; x: number; y: number }[]) => void
+}) {
   const x = useShown('x')
   const y = useShown('y')
   const lockX = useTilt((s) => s.lockX)
   const lockY = useTilt((s) => s.lockY)
+  const playing = useTilt((s) => s.source === 'wobble')
   const pad = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
   const half = PAD_PX / 2
   const toPx = (deg: number) => half + (clamp(deg, -limit, limit) / limit) * (half - 6)
+  const path = useMemo(() => {
+    if (!playback) return ''
+    const points = planPath(playbackPlan(playback.tilt, playback.lens))
+    return points.map((p, i) => `${i ? 'L' : 'M'}${toPx(p.x).toFixed(1)},${toPx(-p.y).toFixed(1)}`).join(' ')
+    // toPx only depends on limit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playback, limit])
+
+  // While recording a drag, sample the held tilt every animation frame, so pauses are kept too
+  const samples = useRef<{ t: number; x: number; y: number }[] | null>(null)
+  useEffect(() => {
+    if (!recording || !dragging) return
+    samples.current = []
+    let raf = 0
+    const sample = () => {
+      const s = useTilt.getState()
+      samples.current?.push({ t: performance.now() / 1000, x: s.targetX, y: s.target })
+      raf = requestAnimationFrame(sample)
+    }
+    raf = requestAnimationFrame(sample)
+    return () => {
+      cancelAnimationFrame(raf)
+      const taken = samples.current
+      samples.current = null
+      if (taken) onRecorded(taken)
+    }
+    // Only a change in recording or dragging starts or ends a take
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording, dragging])
 
   const follow = (clientX: number, clientY: number) => {
     const box = pad.current?.getBoundingClientRect()
@@ -146,6 +226,7 @@ function Pad({ limit }: { limit: number }) {
       className={cn(
         'relative touch-none overflow-hidden rounded-md bg-muted outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50',
         dragging ? 'cursor-grabbing' : 'cursor-crosshair',
+        recording && 'ring-2 ring-destructive/70',
       )}
       style={{
         width: PAD_PX,
@@ -182,6 +263,11 @@ function Pad({ limit }: { limit: number }) {
         e.preventDefault()
       }}
     >
+      {path && (
+        <svg className="pointer-events-none absolute inset-0" width={PAD_PX} height={PAD_PX} aria-hidden>
+          <path d={path} fill="none" stroke="var(--primary)" strokeOpacity={playing ? 0.55 : 0.3} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+        </svg>
+      )}
       {/* Flat crosshair; a locked axis's line turns solid to show the dot stays on it */}
       <div className={cn('pointer-events-none absolute inset-x-0 h-px', lockY ? 'bg-primary/60' : 'bg-foreground/15')} style={{ top: toPx(-y) - 0.5 }} />
       <div className={cn('pointer-events-none absolute inset-y-0 w-px', lockX ? 'bg-primary/60' : 'bg-foreground/15')} style={{ left: toPx(x) - 0.5 }} />

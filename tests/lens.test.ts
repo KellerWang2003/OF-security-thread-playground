@@ -95,6 +95,9 @@ describe('playback', () => {
 
   it('matches the up/down angles of a project from before lenses', () => {
     const tilt = { cycleDeg: 30, transition: 0, speed: 1, curve: 'smooth' } as TiltSettings
-    expect(playbackTilts({ tilt, frames: frames([1, 1]) }, 30).map((t) => t.y)).toEqual(playbackAngles(tilt, 30))
+    const old = playbackAngles(tilt, 30)
+    const now = playbackTilts({ tilt, frames: frames([1, 1]) }, 30)
+    expect(now).toHaveLength(old.length)
+    now.forEach((t, i) => expect(t.y).toBeCloseTo(old[i], 9))
   })
 })

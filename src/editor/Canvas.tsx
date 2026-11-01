@@ -6,7 +6,8 @@ import { cn } from '@/lib/utils'
 import { IconButton } from '../components/controls'
 import { NoteView } from '../components/NoteView'
 import { clamp } from '../lib/frames'
-import { lensState, sweepAxes } from '../lib/lens'
+import { lensState } from '../lib/lens'
+import { playbackPlan } from '../lib/moves'
 import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
 import { setTilt, springToFlat, useTilt, useTiltLoop } from '../tilt/tilt'
@@ -99,8 +100,8 @@ export function Canvas({
   const reference = selected ?? notes.at(0)
   const lens = useMemo(() => (reference ? lensState(reference.tilt, reference.frames) : undefined), [reference])
   const loopLens = lens ?? lensState({ cycleDeg: 30, transition: 0 })
-  const axes = useMemo(() => (reference && lens ? sweepAxes(reference.tilt, lens) : ['y' as const]), [reference, lens])
-  useTiltLoop(loopLens, axes, reference?.tilt, loopLens.viewDeg)
+  const plan = useMemo(() => playbackPlan(reference?.tilt ?? { cycleDeg: 30, transition: 0 }, loopLens), [reference, loopLens])
+  useTiltLoop(plan, loopLens.viewDeg)
 
   // Until the first pan or zoom, the view simply fits every note
   const current = view ?? (size && notes.length ? fitView(notes, size) : undefined)

@@ -180,25 +180,11 @@ export function tiltForPosition(lens: LensState, position: number): Tilt2 {
   return FLAT
 }
 
-/** How far playback turns each axis: through its whole cycle in the 1 → 5 direction, within SWEEP_MAX */
-export function sweepTarget(lens: LensState, axis: Axis): Tilt2 {
-  if (axis === 'y') return lens.cycleY ? { x: 0, y: Math.min(lens.cycleY, SWEEP_MAX) * lens.dirY } : FLAT
-  return lens.cycleX ? { x: Math.min(lens.cycleX, SWEEP_MAX) * lens.dirX, y: 0 } : FLAT
-}
-
-/** The axes playback sweeps, in order */
-export function sweepAxes(tilt: TiltSettings, lens: LensState): Axis[] {
-  const choice = tilt.playTilt ?? 'y'
-  const axes: Axis[] = choice === 'both' ? ['y', 'x'] : [choice]
-  const live = axes.filter((a) => respondsTo(lens, a))
-  if (live.length) return live
-  return respondsTo(lens, 'y') ? ['y'] : ['x']
-}
-
 /** The cycle the bottom bar edits: the one tilt that responds, or the one playback sweeps first */
 export function primaryAxis(tilt: TiltSettings, lens: LensState): Axis {
   if (!respondsTo(lens, 'y')) return 'x'
   if (!respondsTo(lens, 'x')) return 'y'
   if (lens.effect === 'reveal') return lens.revealAxis
-  return tilt.playTilt === 'x' ? 'x' : 'y'
+  const first = tilt.moves?.[0]?.kind ?? tilt.playTilt
+  return first === 'x' ? 'x' : 'y'
 }

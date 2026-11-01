@@ -59,8 +59,24 @@ export interface TiltSettings {
   viewDeg?: number
   /** Reveal only: the tilt that plays every frame */
   revealAxis?: 'x' | 'y'
-  /** Which tilt playback sweeps: up/down, side to side, or one after the other */
+  /** Which tilt playback sweeps: up/down, side to side, or one after the other. Superseded by `moves` */
   playTilt?: 'x' | 'y' | 'both'
+  /** What playback does, in order; absent means what `playTilt` chose */
+  moves?: PlaybackMove[]
+}
+
+/**
+ * One step of playback. Preset moves go out from flat and back: up/down, side to side, both at once
+ * (diagonal), or once round an ellipse (circle). `x`/`y` are the signed angles reached; absent means one full
+ * cycle of that tilt. A gesture is a recording of the tilt pad.
+ */
+export interface PlaybackMove {
+  id: string
+  kind: 'y' | 'x' | 'diagonal' | 'circle' | 'gesture'
+  x?: number
+  y?: number
+  /** Gesture only: seconds from the start, and the tilt then */
+  points?: { t: number; x: number; y: number }[]
 }
 
 /** One banknote in a project, with its own size, thread and frames */

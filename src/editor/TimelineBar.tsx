@@ -19,9 +19,11 @@ import { clamp, cyclePhase } from '../lib/frames'
 import { framesReached, lensMix, lensState, reachShare, respondsTo, tiltForPosition, primaryAxis } from '../lib/lens'
 import { pickFiles } from '../lib/images'
 import { CYCLE_LIMITS, DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
+import { playbackPlan } from '../lib/moves'
 import { updateProject } from '../lib/store'
 import type { Frame, Note } from '../lib/types'
 import { setTilt, togglePlayback, useTilt } from '../tilt/tilt'
+import { MovesList } from './MovesList'
 import { addColorFrame, addImageFrames, deleteFrame, moveFrame, replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
 
 /** Opens the system colour picker without a visible input */
@@ -92,22 +94,16 @@ function playbackMotionPath(speed: number, curve: NonNullable<Note['tilt']['curv
   return points.join(' ')
 }
 
-const PLAY_TILTS: { value: 'y' | 'x' | 'both'; label: string }[] = [
-  { value: 'y', label: 'Up/down' },
-  { value: 'x', label: 'Side to side' },
-  { value: 'both', label: 'One after the other' },
-]
-
 /** Project-wide playback controls, shared by every banknote. */
 function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) {
   const tilt = note?.tilt ?? DEFAULT_TILT
   const lens = lensState(tilt, note?.frames)
   const axis = primaryAxis(tilt, lens)
   const both = respondsTo(lens, 'x') && respondsTo(lens, 'y')
+  const loopSeconds = playbackPlan(tilt, lens).seconds
   const setTiltSettings = (patch: Partial<Note['tilt']>) =>
     updateProject(projectId, (p) => ({ ...p, notes: p.notes.map((n) => ({ ...n, tilt: { ...n.tilt, ...patch } })) }))
   const { speed, curve, holdSeconds } = playbackSettings(tilt)
-  const duration = 2 / speed + 2 * holdSeconds
   const motion = playbackMotionPath(speed, curve, holdSeconds)
 
   return (
@@ -125,25 +121,15 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
         <PopoverTrigger render={<Button variant="outline" size="sm" className="h-8 w-full gap-1.5 text-xs" />}>
           <SlidersHorizontal className="size-3.5" />Playback settings
         </PopoverTrigger>
-        <PopoverContent side="top" align="start" sideOffset={12} className="w-[272px] gap-3 p-3">
+        <PopoverContent side="top" align="start" sideOffset={12} className="w-[332px] gap-3 p-3">
           <PopoverTitle className="text-xs">Playback settings</PopoverTitle>
-          {both && (
-            <div className="space-y-1.5">
-              <div className="text-xs text-muted-foreground">Tilt</div>
-              <Select value={tilt.playTilt ?? 'y'} items={PLAY_TILTS} onValueChange={(next) => { if (next) setTiltSettings({ playTilt: next }) }}>
-                <SelectTrigger aria-label="Playback tilt" className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent alignItemWithTrigger={false}>
-                  {PLAY_TILTS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          <MovesList projectId={projectId} tilt={tilt} lens={lens} />
           <ScrubField label="Fade" title="How much neighbouring frames blend into each other" value={Math.round(tilt.transition * 100)} min={0} max={100} step={5} unit="%" onChange={(v) => setTiltSettings({ transition: v / 100 })} />
           <ScrubField label="Speed" title="Playback speed multiplier; 1× takes two seconds for the full motion, before holds" value={speed} {...SPEED_LIMITS} unit="×" onChange={(next) => setTiltSettings({ speed: next })} />
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>Curve</span>
-              <span className="tabular-nums" title="Time for flat to tilted and back, including holds">{Math.round(duration * 100) / 100} s / loop</span>
+              <span className="tabular-nums" title="Time for every move, including holds">{Math.round(loopSeconds * 100) / 100} s / loop</span>
             </div>
             <Select value={curve} items={PLAYBACK_CURVES} onValueChange={(next) => { if (next) setTiltSettings({ curve: next }) }}>
               <SelectTrigger aria-label="Playback curve" className="w-full"><SelectValue /></SelectTrigger>

@@ -81,7 +81,7 @@ function oldLength(frames: Frame[], frame: Frame) {
 
 /** The optional lens settings, kept as saved; a project from before lenses has none and stays Up/down */
 function lensFields(tilt: TiltSettings): Partial<TiltSettings> {
-  const keys = ['effect', 'cycleXDeg', 'yOn', 'runY', 'runX', 'viewDeg', 'revealAxis', 'playTilt'] as const
+  const keys = ['effect', 'cycleXDeg', 'yOn', 'runY', 'runX', 'viewDeg', 'revealAxis', 'playTilt', 'moves'] as const
   return Object.fromEntries(keys.filter((k) => tilt[k] !== undefined).map((k) => [k, tilt[k]]))
 }
 
