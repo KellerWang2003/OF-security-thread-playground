@@ -15,13 +15,12 @@ import {
   lensState,
   respondsTo,
   revealCycle,
-  revealOptions,
   type Axis,
   type LensEffect,
   type LensState,
 } from '../lib/lens'
 import { CYCLE_LIMITS } from '../lib/notes'
-import { CycleBar, Explain, MiniNote, TiltArrow, previewTilt, swatch, useClock } from './LensVisuals'
+import { CycleBar, Explain, MiniNote, RidgeIcon, TiltArrow, previewTilt, swatch, useClock } from './LensVisuals'
 import { updateProject } from '../lib/store'
 import type { Note, TiltSettings } from '../lib/types'
 import { setTilt, useTilt } from '../tilt/tilt'
@@ -36,8 +35,6 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
   const { tilt } = note
   const lens = lensState(tilt, note.frames)
   const [setBy, setSetBy] = useState<'tilt' | 'lens'>('tilt')
-  const hideOptions = revealOptions(note.frames, lens.offset)
-  const hidden = tilt.revealHide && hideOptions.includes(tilt.revealHide) ? tilt.revealHide : (hideOptions.at(0) ?? 0)
   const set = (patch: Partial<TiltSettings>) =>
     updateProject(projectId, (p) => ({ ...p, notes: p.notes.map((n) => ({ ...n, tilt: { ...n.tilt, ...patch } })) }))
 
@@ -69,9 +66,17 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
       </Explain>
     )
   }
+  // Flat shows the middle frame; one way plays on towards the last frame, the other back towards frame 1
+  const runCaption = ([toLast, toFirst]: [string, string]) => {
+    const n = note.frames.length
+    const mid = lens.offset > 0 ? Math.ceil(n / 2) : 1
+    return lens.offset > 0
+      ? `Flat shows frame ${mid}. Tilting ${toLast} plays on to ${n}; tilting ${toFirst} goes back to 1`
+      : `Frames play 1 → ${n} as the banknote tilts ${toLast}, and backwards the other way`
+  }
   const runY = (
     <InlineField label={<Explain label={respondsTo(lens, 'x') ? '1 → 5 ↕' : '1 → 5'} picture={<RunPreview note={note} lens={lens} axis="y" />}
-      caption={`Frames play 1 → ${note.frames.length} as the banknote tilts ${lens.dirY > 0 ? 'up' : 'down'}, and backwards the other way`} />}>
+      caption={runCaption(lens.dirY > 0 ? ['up', 'down'] : ['down', 'up'])} />}>
       <Segmented value={tilt.runY ?? 'up'} options={[
         { value: 'down', label: <><ArrowDown className="size-3" />Down</> },
         { value: 'up', label: <><ArrowUp className="size-3" />Up</> },
@@ -80,7 +85,7 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
   )
   const runX = (
     <InlineField label={<Explain label={respondsTo(lens, 'y') ? '1 → 5 ↔' : '1 → 5'} picture={<RunPreview note={note} lens={lens} axis="x" />}
-      caption={`Frames play 1 → ${note.frames.length} as the banknote tilts ${lens.dirX > 0 ? 'right' : 'left'}, and backwards the other way`} />}>
+      caption={runCaption(lens.dirX > 0 ? ['right', 'left'] : ['left', 'right'])} />}>
       <Segmented value={tilt.runX ?? 'right'} options={[
         { value: 'left', label: <><ArrowLeft className="size-3" />Left</> },
         { value: 'right', label: <><ArrowRight className="size-3" />Right</> },
@@ -97,25 +102,20 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
       {lens.effect === 'side' && (<>{cycleField('x', 'Cycle')}{runX}</>)}
       {lens.effect === 'both' && (
         <>
-          <div className="grid grid-cols-2 gap-2">{cycleField('y')}{cycleField('x')}</div>
+          {cycleField('y', 'Cycle')}
           {runY}{runX}
         </>
       )}
       {lens.effect === 'reveal' && (
         <>
-          <InlineField label="All frames" title="The tilt that plays every frame; the other never reaches the middle frames">
+          <InlineField label="All frames" title="The tilt that plays every frame; the other only reaches the middle ones within ±60°">
             <Segmented value={lens.revealAxis} options={[{ value: 'y', label: '↕ Up/down' }, { value: 'x', label: '↔ Side' }]} onChange={(v) => set({ revealAxis: v })} />
           </InlineField>
-          {hideOptions.length > 1 && (
-            <InlineField label="Hidden" title="How many frames the other tilt never shows">
-              <Segmented value={String(hidden)} options={hideOptions.map((n) => ({ value: String(n), label: String(n) }))} onChange={(v) => set({ revealHide: Number(v) })} />
-            </InlineField>
-          )}
           <div className="grid grid-cols-2 gap-2">
             {cycleField(lens.revealAxis)}
             <div className="flex h-8 items-center rounded-md bg-muted/40 px-2 text-sm tabular-nums text-muted-foreground"
-              title="The slowest cycle that keeps those frames out of view within ±60°">
-              {lens.revealAxis === 'y' ? '↔' : '↕'} {revealCycle(note.frames, lens.viewDeg, hidden, lens.offset) ?? '–'}°
+              title="Worked out: the slowest cycle that keeps the outer frames out of view within ±60°">
+              {lens.revealAxis === 'y' ? '↔' : '↕'} {revealCycle(note.frames, lens.viewDeg, undefined, lens.offset) ?? '–'}°
             </div>
           </div>
           {runY}{runX}
@@ -174,19 +174,25 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
   )
 }
 
-/**
- * The effect dropdown. Each option has a tiny banknote rocking up/down and then side to side with this
- * project's frames, so you can see what an effect does before picking it.
- */
+/** The effect dropdown: each option named by its ridges, with a picture of them and what it does in a line */
 function EffectPicker({ note, lens, onChoose }: { note: Note; lens: LensState; onChoose: (effect: LensEffect) => void }) {
+  // Each option's ridges as they would be if picked now; Custom shows the lens as it stands
+  const angleOf = (effect: LensEffect) =>
+    effect === 'custom' || effect === lens.effect ? lensAngle(lens) : lensAngle(lensState({ ...note.tilt, effect }, note.frames))
   return (
     <Select value={lens.effect} items={LENS_EFFECTS} onValueChange={(v) => { if (v) onChoose(v) }}>
-      <SelectTrigger aria-label="Effect" className="w-full"><SelectValue /></SelectTrigger>
+      <SelectTrigger aria-label="Effect" className="w-full">
+        <RidgeIcon angle={lensAngle(lens)} />
+        <SelectValue className="flex-1 text-left" />
+      </SelectTrigger>
       <SelectContent alignItemWithTrigger={false}>
-        {LENS_EFFECTS.map(({ value, label }) => (
-          <SelectItem key={value} value={value}>
-            <EffectPreview note={note} lens={lens} effect={value} />
-            {label}
+        {LENS_EFFECTS.map(({ value, label, description }) => (
+          <SelectItem key={value} value={value} className="items-start py-1.5">
+            <RidgeIcon angle={angleOf(value)} className="mt-0.5" />
+            <span className="flex min-w-0 flex-col gap-0.5 whitespace-normal">
+              <span>{label}</span>
+              <span className="text-[11px] leading-snug whitespace-normal text-muted-foreground">{description}</span>
+            </span>
           </SelectItem>
         ))}
       </SelectContent>
@@ -194,20 +200,12 @@ function EffectPicker({ note, lens, onChoose }: { note: Note; lens: LensState; o
   )
 }
 
-function EffectPreview({ note, lens, effect }: { note: Note; lens: LensState; effect: LensEffect }) {
-  const t = useClock()
-  const tilt = previewTilt(t, lens.viewDeg)
-  // Custom previews the lens as it stands; the others as they would be if picked now
-  const preview = effect === 'custom' ? lens : lensState({ ...note.tilt, effect, cycleXDeg: note.tilt.cycleXDeg ?? note.tilt.cycleDeg }, note.frames)
-  return <MiniNote note={note} lens={preview} tilt={tilt} className="h-7 w-10 shrink-0 rounded-sm bg-muted/60" />
-}
-
 /** A banknote rocking in the 1 → 5 direction and back, its thread numbered with the frame that shows */
 function RunPreview({ note, lens, axis }: { note: Note; lens: LensState; axis: Axis }) {
   const t = useClock()
   const cycle = (axis === 'y' ? lens.cycleY : lens.cycleX) ?? 30
-  const sign = axis === 'y' ? lens.dirY : lens.dirX
-  // Far enough to pass every frame once, within what a hand would tilt
+  // One way, then the other, as far as a viewer would tilt
+  const sign = Math.floor(t / 2.4) % 2 === 0 ? 1 : -1
   const tilt = previewTilt(t, Math.min(cycle, 60), { axis, sign })
   return (
     <div className="relative">

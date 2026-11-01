@@ -36,17 +36,18 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('flat-to-upward playback', () => {
-  it.each([30, 75, 120])('reaches the full %s° cycle, returns flat, and never tilts below it', (cycle) => {
+  it.each([30, 75, 120])('reaches the %s° cycle (at most the ±60° viewing range), returns flat, and never tilts below it', (cycle) => {
+    const top = Math.min(cycle, 60)
     renderHook(() => useTiltLoop(planFor(cycle)))
     setTilt({ source: 'wobble' })
     tick(20)
     expect(useTilt.getState().angle).toBe(0)
     const angles = [useTilt.getState().angle]
     for (let i = 0; i < 100; i++) { tick(20); angles.push(useTilt.getState().angle) }
-    expect(angles[50]).toBeCloseTo(cycle, 8)
+    expect(angles[50]).toBeCloseTo(top, 8)
     expect(angles[100]).toBeCloseTo(0, 8)
     expect(Math.min(...angles)).toBeGreaterThanOrEqual(0)
-    expect(Math.max(...angles)).toBeLessThanOrEqual(cycle)
+    expect(Math.max(...angles)).toBeLessThanOrEqual(top)
   })
 
   it.each([

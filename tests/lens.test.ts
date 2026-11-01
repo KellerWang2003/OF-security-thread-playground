@@ -51,7 +51,7 @@ describe('frames run', () => {
 
 describe('lens angle', () => {
   it('follows from the two cycles, and back', () => {
-    const lens = lensState({ cycleDeg: 90, cycleXDeg: 301, effect: 'both', transition: 0 })
+    const lens = lensState({ cycleDeg: 90, cycleXDeg: 301, effect: 'custom', transition: 0 })
     expect(Math.abs(lensAngle(lens))).toBeCloseTo((Math.atan2(90, 301) * 180) / Math.PI)
     const back = cyclesFromLens(lensAngle(lens), lensCycle(lens))
     expect(back.cycleX).toBeCloseTo(301)
@@ -89,7 +89,8 @@ describe('playback', () => {
     expect(tilts).toHaveLength(40)
     expect(tilts[10].x).toBeCloseTo(0)
     expect(tilts[10].y).toBeCloseTo(40)
-    expect(tilts[30].x).toBeCloseTo(-80)
+    // Diagonal 45°: the side tilt runs at the up/down cycle
+    expect(tilts[30].x).toBeCloseTo(-40)
     expect(tilts[30].y).toBeCloseTo(0)
   })
 
@@ -102,32 +103,33 @@ describe('playback', () => {
   })
 })
 
-describe('flat at the centre of frame 1', () => {
+describe('flat at the middle of the middle frame', () => {
   const f = frames([10, 10, 10, 10, 10])
   const centred = { cycleDeg: 50, transition: 0 } as TiltSettings
 
-  it('shows frame 1 for half a frame either way, then frame 2 one way and 5 the other', () => {
+  it('shows frame 3 for half a frame either way, then plays towards 5 one way and 1 the other', () => {
     const note = { frames: f, tilt: centred }
-    expect(lensMix(note, { x: 0, y: 0 }).current).toBe(0)
-    expect(lensMix(note, { x: 0, y: 4.9 }).current).toBe(0)
-    expect(lensMix(note, { x: 0, y: -4.9 }).current).toBe(0)
-    expect(lensMix(note, { x: 0, y: 6 }).current).toBe(1)
-    expect(lensMix(note, { x: 0, y: -6 }).current).toBe(4)
-    expect(tiltForPosition(lensState(centred, f), 0.1)).toEqual({ x: 0, y: 0 })
+    expect(lensMix(note, { x: 0, y: 0 }).current).toBe(2)
+    expect(lensMix(note, { x: 0, y: 4.9 }).current).toBe(2)
+    expect(lensMix(note, { x: 0, y: -4.9 }).current).toBe(2)
+    expect(lensMix(note, { x: 0, y: 6 }).current).toBe(3)
+    expect(lensMix(note, { x: 0, y: 16 }).current).toBe(4)
+    expect(lensMix(note, { x: 0, y: -6 }).current).toBe(1)
+    expect(lensMix(note, { x: 0, y: -16 }).current).toBe(0)
+    expect(tiltForPosition(lensState(centred, f), 0.5)).toEqual({ x: 0, y: 0 })
   })
 
-  it('hides frames in pairs on Reveal: 2 by default, or 4', () => {
-    expect(revealOptions(f, 0.1)).toEqual([2, 4])
-    expect(revealCycle(f, 60, undefined, 0.1)).toBe(201)
-    expect(revealCycle(f, 60, 4, 0.1)).toBe(601)
-    const tilt = { ...centred, effect: 'reveal', viewDeg: 60 } as TiltSettings
+  it('hides the outer frames on the slow tilt of Partial reveal, within ±60°', () => {
+    expect(revealOptions(f, 0.5)).toEqual([2, 4])
+    expect(revealCycle(f, 60, undefined, 0.5)).toBe(201)
+    const tilt = { ...centred, effect: 'reveal' } as TiltSettings
     const lens = lensState(tilt, f)
     expect(lens.cycleX).toBe(201)
-    expect([...framesReached({ frames: f, tilt }, 'x', lens)].sort()).toEqual([0, 1, 4])
-    for (let x = -60; x <= 60; x += 0.5) expect([2, 3]).not.toContain(lensMix({ frames: f, tilt }, { x, y: 0 }, lens).current)
+    expect([...framesReached({ frames: f, tilt }, 'x', lens)].sort()).toEqual([1, 2, 3])
+    for (let x = -60; x <= 60; x += 0.5) expect([0, 4]).not.toContain(lensMix({ frames: f, tilt }, { x, y: 0 }, lens).current)
   })
 
-  it('can still sit at the start edge, where one frame can hide', () => {
+  it('can still sit at the start of frame 1, where one frame can hide', () => {
     expect(revealOptions(f)).toEqual([1, 3])
     expect(revealCycle(f, 60)).toBe(151)
   })

@@ -141,3 +141,21 @@ export function Explain({ label, picture, caption, children }: { label?: ReactNo
     </Tooltip>
   )
 }
+
+/**
+ * The lens ridges as a little picture: parallel lines at the ridge angle (0 = horizontal ridges, which play on
+ * up/down tilt; 90 = vertical, which play side to side).
+ */
+export function RidgeIcon({ angle, className }: { angle: number; className?: string }) {
+  const id = `ridges-${Math.round(angle * 10)}`
+  return (
+    <svg viewBox="0 0 28 20" className={cn('h-5 w-7 shrink-0 overflow-hidden rounded-[3px] bg-muted', className)} aria-hidden>
+      <defs>
+        <pattern id={id} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform={`rotate(${-angle})`}>
+          <line x1="0" y1="2" x2="4" y2="2" stroke="currentColor" strokeWidth="1.1" />
+        </pattern>
+      </defs>
+      <rect width="28" height="20" fill={`url(#${id})`} className="text-foreground/55" />
+    </svg>
+  )
+}

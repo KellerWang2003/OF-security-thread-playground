@@ -20,15 +20,16 @@ export interface Tilt2 {
 }
 
 export const FLAT: Tilt2 = { x: 0, y: 0 }
-export const LENS_EFFECTS: { value: LensEffect; label: string }[] = [
-  { value: 'updown', label: 'Up/down' },
-  { value: 'side', label: 'Side to side' },
-  { value: 'both', label: 'Both ways' },
-  { value: 'reveal', label: 'Reveal on one tilt' },
-  { value: 'custom', label: 'Custom' },
+/** The effects by ridge angle, with what each does in a line */
+export const LENS_EFFECTS: { value: LensEffect; label: string; description: string }[] = [
+  { value: 'updown', label: 'Horizontal', description: 'Frames change as you tilt up and down' },
+  { value: 'side', label: 'Vertical', description: 'Frames change as you tilt side to side' },
+  { value: 'both', label: 'Diagonal 45°', description: 'Frames change the same on both tilts' },
+  { value: 'reveal', label: 'Partial reveal', description: 'One tilt shows every frame; the other only the middle ones' },
+  { value: 'custom', label: 'Custom angle', description: 'Set the ridge angle and cycle yourself' },
 ]
-/** Playback never turns a banknote further than this, however long a cycle is */
-export const SWEEP_MAX = 120
+/** Playback never turns a banknote further than a viewer would, however long a cycle is */
+export const SWEEP_MAX = TILT_LIMIT
 
 /** The lens as the frames see it: each tilt's cycle (null when that tilt does nothing) and direction */
 export interface LensState {
@@ -129,7 +130,12 @@ export function revealCycle(frames: Pick<Frame, 'length'>[], viewDeg: number, hi
 
 /** Where flat sits along the cycle for these settings */
 export function flatOffset(tilt: Pick<TiltSettings, 'flatAt'>, frames: Pick<Frame, 'length'>[]) {
-  return tilt.flatAt !== 'start' && frames.length ? (frameEdges(frames).at(1) ?? 0) / 2 : 0
+  if (tilt.flatAt === 'start' || !frames.length) return 0
+  // The middle of the middle frame (frame 3 of 5): tilting one way plays towards the last frame, the other
+  // towards the first, and the frames a slow tilt never reaches are the outer ones
+  const edges = frameEdges(frames)
+  const m = Math.ceil(frames.length / 2) - 1
+  return ((edges.at(m) ?? 0) + (edges.at(m + 1) ?? 1)) / 2
 }
 
 /** The lens settings a note carries, with the defaults a project from before lenses gets */
@@ -147,9 +153,10 @@ export function lensState(tilt: TiltSettings, frames: Pick<Frame, 'length'>[] = 
     case 'side':
       return { ...base, cycleY: null, cycleX: x }
     case 'both':
-      return { ...base, cycleY: y, cycleX: x }
+      // Ridges at 45°: both tilts run through the frames at the same rate
+      return { ...base, cycleY: y, cycleX: y }
     case 'reveal': {
-      const slow = revealCycle(frames, viewDeg, tilt.revealHide, offset)
+      const slow = revealCycle(frames, viewDeg, undefined, offset)
       return revealAxis === 'y'
         ? { ...base, cycleY: y, cycleX: slow ?? x }
         : { ...base, cycleY: slow ?? y, cycleX: x }

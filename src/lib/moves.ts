@@ -53,8 +53,8 @@ export function defaultReach(lens: LensState, axis: Axis) {
 export function moveReach(move: PlaybackMove, lens: LensState): Tilt2 {
   const uses = movesAxes(move)
   return {
-    x: uses.includes('x') ? (move.x ?? defaultReach(lens, 'x')) : 0,
-    y: uses.includes('y') ? (move.y ?? defaultReach(lens, 'y')) : 0,
+    x: uses.includes('x') ? clamp(move.x ?? defaultReach(lens, 'x'), -SWEEP_MAX, SWEEP_MAX) : 0,
+    y: uses.includes('y') ? clamp(move.y ?? defaultReach(lens, 'y'), -SWEEP_MAX, SWEEP_MAX) : 0,
   }
 }
 
