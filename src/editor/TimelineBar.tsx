@@ -32,6 +32,8 @@ function pickColor(initial: string, onPick: (color: string) => void) {
 }
 
 const PAD = 12
+/** Height of one tilt-reach lane above the frames, in px */
+const LANE = 9
 /** Pixels per unit of frame length; a new frame (10 units) starts 100 px wide */
 const ZOOM = { min: 3, max: 40, initial: 10 }
 
@@ -59,7 +61,7 @@ export function TimelineBar({
     <Panel
       className={cn(
         'absolute bottom-3 left-3 flex h-[88px] items-stretch gap-2 p-2 rounded-[calc(var(--radius)+0.5rem+1px)]',
-        note && (besidePanel ? 'right-[268px]' : 'right-3'),
+        note && (besidePanel ? 'right-[calc(var(--panel-w)+20px)]' : 'right-3'),
       )}
     >
       <IconButton
@@ -138,6 +140,9 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const position = cyclePosition(lens, { x: angleX, y: angle })
   const phase = cyclePhase(position, 1)
   const bars = (['y', 'x'] as const).filter((a) => respondsTo(lens, a)).map((a) => ({ axis: a, spans: reachSpans(lens.offset, tiltReach(lens, a)) }))
+  // With both tilts live, each tilt's reach gets its own lane above the frames instead of sitting on them
+  const lanes = bars.length > 1 ? bars.length : 0
+  const framesTop = lanes ? 4 + lanes * LANE : 4
 
   // Wheel: ⌘/Ctrl zooms the timeline, a plain vertical wheel scrolls it sideways
   useEffect(() => {
@@ -215,10 +220,10 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
               <div
                 key={frame.id}
                 className={cn(
-                  'group absolute inset-y-1 overflow-hidden rounded-sm border bg-background',
+                  'group absolute bottom-1 overflow-hidden rounded-sm border bg-background',
                   i === current && 'ring-1 ring-primary/30',
                 )}
-                style={{ left: left + 1, width: Math.max(width - 2, 4) }}
+                style={{ top: framesTop, left: left + 1, width: Math.max(width - 2, 4) }}
               >
                 <FrameThumb frame={frame} backgroundColor={note.thread.backgroundColor} />
                 {width > 28 && (
@@ -249,14 +254,22 @@ function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
             )
           })}
 
-          {bars.length > 1 && bars.map(({ axis, spans }, row) => (
-            // How far each tilt alone reaches either way from flat, wrapping round the loop
-            <div key={axis} className="pointer-events-none absolute h-0.5" style={{ top: 1 + row * 3, left: x(0), width: totalLength * pxPerUnit }}
-              title={axis === 'y' ? 'Up/down reach' : 'Side reach'}>
+          {lanes > 0 && bars.map(({ axis, spans }, row) => (
+            // The frames each tilt alone shows: how far it reaches either way from flat (to ±90°), wrapping round the loop
+            <div key={axis} className="absolute" style={{ top: 3 + row * LANE, height: LANE - 3, left: x(0), width: totalLength * pxPerUnit }}
+              title={axis === 'y' ? 'Frames tilting up or down shows' : 'Frames tilting side to side shows'}>
+              <div className="absolute inset-0 rounded-full bg-foreground/5" />
               {spans.map(([lo, hi], k) => (
                 <div key={k} className={cn('absolute inset-y-0 rounded-full', axis === 'y' ? 'bg-sky-500' : 'bg-amber-500')} style={{ left: `${lo * 100}%`, width: `${(hi - lo) * 100}%` }} />
               ))}
             </div>
+          ))}
+          {lanes > 0 && bars.map(({ axis }, row) => (
+            // Which lane is which, just left of the first frame
+            <span key={axis} className={cn('pointer-events-none absolute text-[9px] leading-none font-semibold', axis === 'y' ? 'text-sky-600' : 'text-amber-600')}
+              style={{ top: 3 + row * LANE - 1.5, left: 1 }}>
+              {axis === 'y' ? '↕' : '↔'}
+            </span>
           ))}
 
           {/* Flat: what a straight-on view shows; set on the Lens effect strip */}

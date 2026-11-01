@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { reportError } from '../cloud/notices'
 import { Download, ImageUp, RectangleHorizontal, RectangleVertical, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,6 +9,7 @@ import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
 import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
+import { PANEL_WIDTH, savePanelWidth, setPanelWidth, usePanelWidth } from '../lib/panelWidth'
 import { EffectSection, LensMenu } from './EffectSection'
 import { WindowsCard } from './WindowsCard'
 import { setFaceImage, type NoteRef } from './frameActions'
@@ -60,7 +62,9 @@ export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onE
   const background = useImageUrl(note.faceImageId)
 
   return (
-    <Panel className="absolute top-3 right-3 bottom-3 flex w-[248px] flex-col overflow-y-auto">
+    <>
+    <PanelResizer />
+    <Panel className="absolute top-3 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-y-auto">
       <div className="flex items-center justify-between gap-2 border-b border-border/60 py-2 pr-2 pl-4">
         <span className="truncate text-sm font-medium">{note.name}</span>
         <Button variant="outline" size="sm" onClick={onExport}><Download />Export</Button>
@@ -189,5 +193,49 @@ export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onE
         <EffectSection projectId={noteRef.projectId} note={note} />
       </Group>
     </Panel>
+    </>
+  )
+}
+
+/**
+ * The panel's left edge: drag it to make the panel wider for controls that need finer placement,
+ * double-click to go back to the default width. The width is remembered.
+ */
+function PanelResizer() {
+  const width = usePanelWidth((s) => s.width)
+  const drag = useRef<{ startX: number; startWidth: number } | null>(null)
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize panel"
+      title="Drag to resize the panel, double-click to reset"
+      className="group absolute top-3 bottom-3 z-10 w-3 translate-x-1/2 cursor-col-resize touch-none"
+      style={{ right: `calc(${width}px + 12px)` }}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        e.preventDefault()
+        e.currentTarget.setPointerCapture(e.pointerId)
+        drag.current = { startX: e.clientX, startWidth: width }
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current
+        if (d) setPanelWidth(d.startWidth + d.startX - e.clientX)
+      }}
+      onPointerUp={() => {
+        if (drag.current) savePanelWidth()
+        drag.current = null
+      }}
+      onLostPointerCapture={() => {
+        if (drag.current) savePanelWidth()
+        drag.current = null
+      }}
+      onDoubleClick={() => {
+        setPanelWidth(PANEL_WIDTH.initial)
+        savePanelWidth()
+      }}
+    >
+      <div className="absolute inset-y-6 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-primary/0 transition-colors group-hover:bg-primary/50 group-active:bg-primary" />
+    </div>
   )
 }

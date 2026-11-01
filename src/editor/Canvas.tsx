@@ -8,6 +8,7 @@ import { NoteView } from '../components/NoteView'
 import { clamp } from '../lib/frames'
 import { lensState } from '../lib/lens'
 import { playbackPlan } from '../lib/moves'
+import { usePanelWidth } from '../lib/panelWidth'
 import { type Guide, snapBox } from '../lib/snap'
 import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
@@ -21,7 +22,7 @@ const PX_PER_MM = 96 / 25.4
 const MIN_ZOOM = 0.1
 const MAX_ZOOM = 8
 /** Room kept clear of the floating panels when fitting notes into view */
-const FIT_INSETS = { left: 284, right: 284, top: 48, bottom: 128 }
+const FIT = { left: 284, right: 284, top: 48, bottom: 128 }
 /** How close, in screen px, a moving banknote's edge or centre must come to another's to snap to it */
 const SNAP_PX = 6
 
@@ -40,6 +41,8 @@ type Gesture =
   | { mode: 'thread'; noteId: string; startX: number; startY: number; startPosition: number; alongMm: number }
 
 function fitView(notes: Note[], size: { width: number; height: number }): View {
+  // A widened right panel takes more room
+  const FIT_INSETS = { ...FIT, right: Math.max(FIT.right, usePanelWidth.getState().width + 36) }
   const minX = Math.min(...notes.map((n) => n.x))
   const minY = Math.min(...notes.map((n) => n.y))
   const maxX = Math.max(...notes.map((n) => n.x + n.widthMm))
@@ -394,7 +397,7 @@ export function Canvas({
       {current && size && (
         // Top right, clear of the properties panel when one is open; Export floats here only without a selection
         // Its own pointer events, or the canvas captures the pointer and the buttons never get a click
-        <div className={cn('absolute top-3 flex items-center gap-2', selected ? 'right-[268px]' : 'right-3')} onPointerDown={(e) => e.stopPropagation()}>
+        <div className={cn('absolute top-3 flex items-center gap-2', selected ? 'right-[calc(var(--panel-w)+20px)]' : 'right-3')} onPointerDown={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-0.5 rounded-lg border border-border/70 bg-background/95 p-0.5 shadow-panel backdrop-blur [&>[data-slot=button]]:rounded-[calc(var(--radius)-3px)]">
           <IconButton label="Zoom out" onClick={() => zoomAround(1 / 1.25, size.width / 2, size.height / 2)}>
             <Minus />
