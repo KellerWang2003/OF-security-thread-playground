@@ -73,8 +73,8 @@ describe('tilt pad curve', () => {
   it('is fine near flat and fast at the edges, reaching the full tilt', () => {
     expect(padToTilt(1)).toBe(1)
     expect(padToTilt(-1)).toBe(-1)
-    expect(padToTilt(0.5)).toBeCloseTo(0.25)
-    expect(padToTilt(0.1)).toBeCloseTo(0.01)
+    expect(padToTilt(0.5)).toBeCloseTo(0.379, 3)
+    expect(padToTilt(0.1)).toBeCloseTo(0.0398, 3)
     expect(tiltToPad(padToTilt(-0.7))).toBeCloseTo(-0.7)
   })
 })
