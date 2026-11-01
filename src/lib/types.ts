@@ -45,6 +45,38 @@ export interface TiltSettings {
   cycleDeg: number
   /** 0 = hard cut between frames, 1 = crossfade across the whole slice */
   transition: number
+  /** What tilting does; absent on projects from before lenses, which are Up/down */
+  effect?: 'updown' | 'side' | 'both' | 'reveal' | 'custom'
+  /** Degrees of side tilt for one pass; null when side tilt does nothing (Custom) */
+  cycleXDeg?: number | null
+  /** Custom only: false when up/down tilt does nothing */
+  yOn?: boolean
+  /** Which way 1 → 5 plays on the up/down tilt; absent means up, as before lenses */
+  runY?: 'up' | 'down'
+  /** Which way 1 → 5 plays on the side tilt */
+  runX?: 'right' | 'left'
+  /** How far viewers tilt, each way, in degrees; also the manual tilt limit */
+  viewDeg?: number
+  /** Reveal only: the tilt that plays every frame */
+  revealAxis?: 'x' | 'y'
+  /** Which tilt playback sweeps: up/down, side to side, or one after the other. Superseded by `moves` */
+  playTilt?: 'x' | 'y' | 'both'
+  /** What playback does, in order; absent means what `playTilt` chose */
+  moves?: PlaybackMove[]
+}
+
+/**
+ * One step of playback. Preset moves go out from flat and back: up/down, side to side, both at once
+ * (diagonal), or once round an ellipse (circle). `x`/`y` are the signed angles reached; absent means one full
+ * cycle of that tilt. A gesture is a recording of the tilt pad.
+ */
+export interface PlaybackMove {
+  id: string
+  kind: 'y' | 'x' | 'diagonal' | 'circle' | 'gesture'
+  x?: number
+  y?: number
+  /** Gesture only: seconds from the start, and the tilt then */
+  points?: { t: number; x: number; y: number }[]
 }
 
 /** One banknote in a project, with its own size, thread and frames */

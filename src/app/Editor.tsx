@@ -1,6 +1,7 @@
 import { undoProject, redoProject, updateNote } from '../lib/store'
 import { beginHistoryGroup, endHistoryGroup, breakHistoryGroup } from '../lib/history'
 import { togglePlayback } from '../tilt/tilt'
+import { lensState } from '../lib/lens'
 import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -21,7 +22,17 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   const [selectedId, setSelectedId] = useState<string>()
   const [editingNoteId, setEditingNoteId] = useState<string>()
   const [selectedWindowId, setSelectedWindowId] = useState<string>()
+  // Window editing has no mode of its own: it starts when a window is picked (on the canvas or in the panel,
+  // or by turning windows on) and ends on a click elsewhere on the banknote, on the canvas, or with Escape
   const editingWindows = editingNoteId !== undefined && editingNoteId === selectedId
+  const exitWindows = () => {
+    setEditingNoteId(undefined)
+    setSelectedWindowId(undefined)
+  }
+  const selectNote = (noteId: string | undefined) => {
+    if (noteId !== selectedId) exitWindows()
+    setSelectedId(noteId)
+  }
   const [adding, setAdding] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [focus, setFocus] = useState<{ noteId: string; token: number }>()
@@ -40,8 +51,9 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return
       if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement) && !document.querySelector('[role=dialog]')) {
-        if (editingWindows) { setEditingNoteId(undefined); setSelectedWindowId(undefined) }
-        else setSelectedId(undefined)
+        // Clearing the selection always leaves window editing; avoids reading a stale selectedId here
+        exitWindows()
+        if (!editingWindows) setSelectedId(undefined)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -107,10 +119,13 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   }, [project.id])
 
   const note = project.notes.find((n) => n.id === selectedId)
+  // The lens is project-wide; any banknote's settings describe it
+  const reference = note ?? project.notes.at(0)
+  const lens = reference ? lensState(reference.tilt, reference.frames) : undefined
   const noteRef = note ? { projectId: project.id, noteId: note.id } : undefined
 
   const selectAndFocus = (noteId: string) => {
-    setSelectedId(noteId)
+    selectNote(noteId)
     setFocus({ noteId, token: Date.now() })
   }
 
@@ -130,23 +145,24 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
           </Button>
         </div>
       ) : (
-        <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={setSelectedId} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} onExport={() => setExporting(true)}
+        <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={selectNote} onExitWindows={exitWindows} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} onExport={() => setExporting(true)}
           onEditWindow={(noteId, windowId) => {
-            setSelectedId(noteId)
+            selectNote(noteId)
             setEditingNoteId(noteId)
             setSelectedWindowId(windowId)
           }} />
       )}
 
-      {!isEmpty && !editingWindows && <TiltRail />}
+      {!isEmpty && !editingWindows && <TiltRail limit={lens?.viewDeg} playback={reference && lens ? { projectId: project.id, tilt: reference.tilt, lens } : undefined} />}
       <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} />
       {!isEmpty && (
         <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
       )}
-      {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} onExport={() => setExporting(true)} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId}
-        onEditingWindowsChange={(editing) => {
-          setEditingNoteId(editing ? note.id : undefined)
-          setSelectedWindowId(undefined)
+      {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} onExport={() => setExporting(true)} selectedWindowId={editingWindows ? selectedWindowId : undefined}
+        onWindowSelect={(windowId) => {
+          if (!windowId) return exitWindows()
+          setEditingNoteId(note.id)
+          setSelectedWindowId(windowId)
         }} />}
 
       {exporting && <ExportDialog project={project} selectedId={note?.id} open={exporting} onOpenChange={setExporting} />}

@@ -1,14 +1,17 @@
 import { runAction } from '../cloud/notices'
 import { Download, Maximize, Minus, Plus } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { IconButton } from '../components/controls'
 import { NoteView } from '../components/NoteView'
-import { TILT_LIMIT, clamp } from '../lib/frames'
+import { clamp } from '../lib/frames'
+import { lensState } from '../lib/lens'
+import { playbackPlan } from '../lib/moves'
+import { type Guide, snapBox } from '../lib/snap'
 import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
-import { setTilt, useTilt, useTiltLoop } from '../tilt/tilt'
+import { setTilt, springToFlat, useTilt, useTiltLoop } from '../tilt/tilt'
 import { addImageFrames } from './frameActions'
 import { WindowEditor } from './WindowEditor'
 import { useElementSize } from './useElementSize'
@@ -19,6 +22,8 @@ const MIN_ZOOM = 0.1
 const MAX_ZOOM = 8
 /** Room kept clear of the floating panels when fitting notes into view */
 const FIT_INSETS = { left: 284, right: 284, top: 48, bottom: 128 }
+/** How close, in screen px, a moving banknote's edge or centre must come to another's to snap to it */
+const SNAP_PX = 6
 
 /** Zoom level and where the canvas origin (0, 0 mm) sits on screen, in px */
 interface View {
@@ -30,7 +35,8 @@ interface View {
 type Gesture =
   | { mode: 'pan'; startX: number; startY: number; view: View; onBackground: boolean }
   | { mode: 'move'; noteId: string; startX: number; startY: number; noteX: number; noteY: number }
-  | { mode: 'tilt'; startX: number; startY: number; start: number }
+  /** `moved` once the drag passes a few px: a plain click leaves the tilt where it is */
+  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; moved: boolean }
   | { mode: 'thread'; noteId: string; startX: number; startY: number; startPosition: number; alongMm: number }
 
 function fitView(notes: Note[], size: { width: number; height: number }): View {
@@ -67,6 +73,7 @@ export function Canvas({
   editingWindows = false,
   selectedWindowId,
   onWindowSelect,
+  onExitWindows,
   onExport,
   onEditWindow,
 }: {
@@ -79,6 +86,7 @@ export function Canvas({
   editingWindows?: boolean
   selectedWindowId?: string
   onWindowSelect: (id: string | undefined) => void
+  onExitWindows?: () => void
   onExport: () => void
   /** A click on a thread window opens it for editing */
   onEditWindow?: (noteId: string, windowId: string) => void
@@ -89,11 +97,15 @@ export function Canvas({
   const gesture = useRef<Gesture | null>(null)
   const [activeMode, setActiveMode] = useState<Gesture['mode']>()
   const [dropping, setDropping] = useState(false)
-  const { angle, source, perspective, sheen } = useTilt()
+  const [guides, setGuides] = useState<Guide[]>([])
+  const { angle, angleX, source, perspective, sheen } = useTilt()
 
   const selected = notes.find((n) => n.id === selectedId)
   const reference = selected ?? notes.at(0)
-  useTiltLoop(reference?.tilt.cycleDeg ?? 30, reference?.tilt)
+  const lens = useMemo(() => (reference ? lensState(reference.tilt, reference.frames) : undefined), [reference])
+  const loopLens = lens ?? lensState({ cycleDeg: 30, transition: 0 })
+  const plan = useMemo(() => playbackPlan(reference?.tilt ?? { cycleDeg: 30, transition: 0 }, loopLens), [reference, loopLens])
+  useTiltLoop(plan, loopLens.viewDeg)
 
   // Until the first pan or zoom, the view simply fits every note
   const current = view ?? (size && notes.length ? fitView(notes, size) : undefined)
@@ -152,9 +164,27 @@ export function Canvas({
   // Editing windows pauses playback but leaves the view where it is, so you edit at the zoom you chose
   useEffect(() => {
     if (!editingWindows || !selected) return
-    setTilt({ source: 'slider', target: useTilt.getState().angle })
+    setTilt({ source: 'slider', target: useTilt.getState().angle, targetX: useTilt.getState().angleX })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingWindows, selectedId])
+
+  // Every way a gesture can end comes through here, so a tilt drag always springs back the same way
+  const endGesture = () => {
+    const g = gesture.current
+    if (g?.mode === 'tilt' && g.moved && useTilt.getState().springBack) springToFlat()
+    gesture.current = null
+    setActiveMode(undefined)
+    setGuides([])
+  }
+  const endGestureRef = useRef(endGesture)
+  endGestureRef.current = endGesture
+
+  // Switching apps or windows mid-drag can swallow the release
+  useEffect(() => {
+    const onBlur = () => endGestureRef.current()
+    window.addEventListener('blur', onBlur)
+    return () => window.removeEventListener('blur', onBlur)
+  }, [])
 
   const noteAt = (target: EventTarget, attribute: 'data-note-label' | 'data-note-body') =>
     (target as HTMLElement).closest(`[${attribute}]`)?.getAttribute(attribute) ?? undefined
@@ -180,11 +210,10 @@ export function Canvas({
       }
       onPointerDown={(e) => {
         const v = viewRef.current
-        if (!v) return
-        if (editingWindows && noteAt(e.target, 'data-note-body') === selectedId) {
-          onWindowSelect(undefined)
-          return
-        }
+        // Only the left and middle buttons drag; a right-click's menu would swallow the release
+        if (!v || e.button > 1) return
+        // A click on the banknote outside the thread's windows ends window editing and tilts as usual
+        if (editingWindows && noteAt(e.target, 'data-note-body') === selectedId) onExitWindows?.()
         // Freeze the fitted view, or moving a note would refit the canvas under the pointer
         if (!view) setView(v)
         e.currentTarget.setPointerCapture(e.pointerId)
@@ -212,13 +241,16 @@ export function Canvas({
           onSelect(note.id)
           const s = useTilt.getState()
           const start = s.source === 'drag' ? s.target : s.angle
+          const startSide = s.source === 'drag' ? s.targetX : s.angleX
           gesture.current = {
             mode: 'tilt',
             startX: e.clientX,
             startY: e.clientY,
             start,
+            startSide,
+            moved: false,
           }
-          setTilt({ source: 'drag', target: start })
+          setTilt({ source: 'drag', target: start, targetX: startSide })
         }
         setActiveMode(gesture.current.mode)
       }}
@@ -227,8 +259,7 @@ export function Canvas({
         if (!g) return
         // A release that never reached us: stop following the pointer
         if (e.buttons === 0) {
-          gesture.current = null
-          setActiveMode(undefined)
+          endGesture()
           return
         }
         const dx = e.clientX - g.startX
@@ -244,18 +275,38 @@ export function Canvas({
             return positionMm === n.thread.positionMm ? n : { ...n, thread: { ...n.thread, positionMm } }
           })
         } else if (g.mode === 'move') {
-          const snap = (mm: number) => Math.round(mm * 2) / 2
-          updateNote(projectId, g.noteId, (n) => ({ ...n, x: snap(g.noteX + dx / scale), y: snap(g.noteY + dy / scale) }))
+          const round = (mm: number) => Math.round(mm * 2) / 2
+          const rawX = g.noteX + dx / scale
+          const rawY = g.noteY + dy / scale
+          const moving = notes.find((n) => n.id === g.noteId)
+          // Edges and centres snap to the other banknotes; hold ⌘/Ctrl to place freely on the 0.5 mm grid
+          const snapped =
+            moving && !(e.metaKey || e.ctrlKey)
+              ? snapBox(
+                  { x: rawX, y: rawY, width: moving.widthMm, height: moving.heightMm },
+                  notes.filter((n) => n.id !== g.noteId).map((n) => ({ x: n.x, y: n.y, width: n.widthMm, height: n.heightMm })),
+                  SNAP_PX / scale,
+                )
+              : undefined
+          const x = snapped && snapped.guides.some((d) => d.axis === 'x') ? snapped.x : round(rawX)
+          const y = snapped && snapped.guides.some((d) => d.axis === 'y') ? snapped.y : round(rawY)
+          setGuides(snapped?.guides ?? [])
+          updateNote(projectId, g.noteId, (n) => (n.x === x && n.y === y ? n : { ...n, x, y }))
         } else {
-          // About 160 px of drag sweeps half the range
-          // Lenticular lenses respond to tilting back and forth, so only vertical drags tilt
-          // About 160 px of drag tilts the note 30°; past one cycle the frames loop
-          setTilt({ target: clamp(g.start - (dy * 30) / 160, -TILT_LIMIT, TILT_LIMIT) })
+          if (!g.moved && Math.hypot(dx, dy) < 3) return
+          g.moved = true
+          // About 160 px of drag tilts the note 30°; past one cycle the frames loop. Both directions always
+          // tilt, unless locked on the tilt pad.
+          const limit = loopLens.viewDeg
+          const { lockX, lockY } = useTilt.getState()
+          setTilt({
+            target: lockY ? g.start : clamp(g.start - (dy * 30) / 160, -limit, limit),
+            targetX: lockX ? g.startSide : clamp(g.startSide + (dx * 30) / 160, -limit, limit),
+          })
         }
       }}
       onPointerUp={(e) => {
         const g = gesture.current
-        if (g?.mode === 'tilt' && useTilt.getState().springBack) setTilt({ target: 0 })
         // A click on a window, without dragging, opens it for resizing
         if (g?.mode === 'thread' && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) {
           const note = notes.find((n) => n.id === g.noteId)
@@ -266,14 +317,10 @@ export function Canvas({
         }
         // A click on empty canvas, without dragging, clears the selection
         if (g?.mode === 'pan' && g.onBackground && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) onSelect(undefined)
-        gesture.current = null
-        setActiveMode(undefined)
+        endGesture()
       }}
-      onPointerCancel={() => {
-        if (gesture.current?.mode === 'tilt' && useTilt.getState().springBack) setTilt({ target: 0 })
-        gesture.current = null
-        setActiveMode(undefined)
-      }}
+      onPointerCancel={endGesture}
+      onLostPointerCapture={endGesture}
       onDragOver={(e) => {
         e.preventDefault()
         setDropping(true)
@@ -320,7 +367,7 @@ export function Canvas({
                   source === 'wobble' || activeMode === 'tilt' || activeMode === 'move' ? 'outline-primary/5' : 'outline-primary/25',
                 )}
               >
-                <NoteView note={note} scale={scale} angle={angle} perspective={perspective && !(isSelected && editingWindows)} sheen={sheen} showWindowCuts={isSelected && editingWindows} />
+                <NoteView note={note} scale={scale} angle={angle} angleX={angleX} perspective={perspective && !(isSelected && editingWindows)} sheen={sheen} showWindowCuts={isSelected && editingWindows} />
                 {isSelected && editingWindows && note.thread.windows.enabled && (
                   <WindowEditor note={note} scale={scale} selectedId={selectedWindowId} onSelect={onWindowSelect}
                     onChange={(sections) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, windows: { ...n.thread.windows, sections } } }))} />
@@ -330,6 +377,19 @@ export function Canvas({
           )
         })}
 
+      {current &&
+        guides.map((d) => (
+          <div
+            key={`${d.axis}${d.at}`}
+            data-snap-guide={d.axis}
+            className="pointer-events-none absolute bg-rose-500"
+            style={
+              d.axis === 'x'
+                ? { left: current.x + d.at * scale - 0.5, top: current.y + d.from * scale, width: 1, height: (d.to - d.from) * scale }
+                : { top: current.y + d.at * scale - 0.5, left: current.x + d.from * scale, height: 1, width: (d.to - d.from) * scale }
+            }
+          />
+        ))}
 
       {current && size && (
         // Top right, clear of the properties panel when one is open; Export floats here only without a selection

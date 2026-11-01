@@ -1,38 +1,32 @@
 import { reportError } from '../cloud/notices'
-import { Download, ImageUp, RectangleHorizontal, RectangleVertical, Trash2, X } from 'lucide-react'
+import { Download, ImageUp, RectangleHorizontal, RectangleVertical, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ColorField, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
+import { ColorField, Group, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
 import { updateNote } from '../lib/store'
-import { fitSections, sectionBounds, WINDOW_STEP } from '../lib/thread'
+import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
+import { EffectSection } from './EffectSection'
+import { WindowsCard } from './WindowsCard'
 import { setFaceImage, type NoteRef } from './frameActions'
 
 type Change = (note: Note) => Note
 
 /** Right: the selected note's properties, Figma style */
-export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChange, selectedWindowId, onWindowSelect, onExport }: {
+export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onExport }: {
   note: Note
   onExport: () => void
   noteRef: NoteRef
-  editingWindows: boolean
-  onEditingWindowsChange: (editing: boolean) => void
   selectedWindowId?: string
+  /** Selecting a window edits it on the canvas; undefined leaves window editing */
   onWindowSelect: (id: string | undefined) => void
 }) {
   const update = (change: Change) => updateNote(noteRef.projectId, noteRef.noteId, change)
   const { thread } = note
   const threadLength = thread.direction === 'vertical' ? note.heightMm : note.widthMm
   const setThread = (patch: Partial<Note['thread']>) => update((n) => ({ ...n, thread: { ...n.thread, ...patch } }))
-  const { windows } = thread
-  const setWindows = (patch: Partial<Note['thread']['windows']>) =>
-    update((n) => ({ ...n, thread: { ...n.thread, windows: { ...n.thread.windows, ...patch } } }))
-  const selectedWindow = windows.sections.find((s) => s.id === selectedWindowId)
-  const bounds = sectionBounds(windows.sections, selectedWindowId ?? '', threadLength)
-  const updateWindow = (patch: { startMm?: number; endMm?: number }) =>
-    setWindows({ sections: windows.sections.map((s) => s.id === selectedWindowId ? { ...s, ...patch } : s) })
   const acrossOf = (n: Pick<Note, 'widthMm' | 'heightMm'>, direction: Note['thread']['direction']) =>
     direction === 'vertical' ? n.widthMm : n.heightMm
   const setSize = (widthMm: number, heightMm: number) =>
@@ -72,7 +66,8 @@ export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChang
         <Button variant="outline" size="sm" onClick={onExport}><Download />Export</Button>
       </div>
 
-      <Section title="Note">
+      <Group title="Banknote">
+      <Section nested>
         <Segmented
           value={portrait ? 'portrait' : 'landscape'}
           options={[
@@ -89,7 +84,7 @@ export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChang
         </div>
       </Section>
 
-      <Section title="Background">
+      <Section nested>
         <Segmented
           value={note.background}
           options={[
@@ -130,8 +125,10 @@ export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChang
           </div>
         )}
       </Section>
+      </Group>
 
-      <Section title="Thread">
+      <Group title="Security thread">
+      <Section nested>
         <Segmented
           value={thread.direction}
           options={[
@@ -162,6 +159,10 @@ export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChang
             onChange={(positionMm) => setThread({ positionMm })}
           />
         </div>
+        <WindowsCard note={note} noteRef={noteRef} selectedWindowId={selectedWindowId} onWindowSelect={onWindowSelect} />
+      </Section>
+
+      <Section nested title="Artwork">
         <SwitchField
           label="Background"
           checked={!!thread.backgroundColor}
@@ -182,37 +183,11 @@ export function Inspector({ note, noteRef, editingWindows, onEditingWindowsChang
         />
       </Section>
 
-      <Section title="Windows">
-        <Segmented
-          value={windows.enabled ? 'windowed' : 'continuous'}
-          options={[{ value: 'continuous', label: 'Continuous' }, { value: 'windowed', label: 'Windowed' }]}
-          onChange={(mode) => {
-            setWindows({ enabled: mode === 'windowed' })
-            if (mode === 'continuous') onEditingWindowsChange(false)
-          }}
-        />
-        {windows.enabled && (
-          <>
-            <Button variant={editingWindows ? 'secondary' : 'outline'} size="sm" aria-pressed={editingWindows}
-              onClick={() => onEditingWindowsChange(!editingWindows)}>
-              {editingWindows ? 'Done editing' : 'Edit windows'}
-            </Button>
-            {editingWindows && selectedWindow && (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  <ScrubField label="Start" title="Visible section starts here" value={selectedWindow.startMm} min={bounds.min} max={selectedWindow.endMm - Math.min(WINDOW_STEP, selectedWindow.endMm - selectedWindow.startMm)} step={WINDOW_STEP} unit="mm" onChange={(startMm) => updateWindow({ startMm })} />
-                  <ScrubField label="End" title="Visible section ends here" value={selectedWindow.endMm} min={selectedWindow.startMm + Math.min(WINDOW_STEP, selectedWindow.endMm - selectedWindow.startMm)} max={bounds.max} step={WINDOW_STEP} unit="mm" onChange={(endMm) => updateWindow({ endMm })} />
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => {
-                  setWindows({ sections: windows.sections.filter((s) => s.id !== selectedWindowId) })
-                  onWindowSelect(undefined)
-                }}><Trash2 />Delete window</Button>
-              </>
-            )}
-          </>
-        )}
-      </Section>
+      </Group>
 
+      <Group title="Lens effect">
+        <EffectSection projectId={noteRef.projectId} note={note} />
+      </Group>
     </Panel>
   )
 }

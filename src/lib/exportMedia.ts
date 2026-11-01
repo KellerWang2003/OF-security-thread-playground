@@ -1,7 +1,8 @@
 import { zipSync } from 'fflate'
 import { GIFEncoder, applyPalette, quantize } from 'gifenc'
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, QUALITY_HIGH, WebMOutputFormat, getFirstEncodableVideoCodec } from 'mediabunny'
-import { drawExportFrame, exportGroups, exportLayout, loadNoteAssets, playbackAngles, scaleForHeight, type NoteAssets } from './exportRender'
+import { drawExportFrame, exportGroups, exportLayout, loadNoteAssets, playbackTilts, scaleForHeight, type NoteAssets } from './exportRender'
+import type { Tilt2 } from './lens'
 import type { Note } from './types'
 
 export type ExportFormat = 'mp4' | 'gif'
@@ -26,13 +27,13 @@ const safeName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-').trim() ||
 
 async function renderFile(notes: Note[], assets: Map<string, NoteAssets>, options: ExportOptions, onFrame: () => void, signal: AbortSignal) {
   // Every banknote shares the project-wide cycle and playback settings
-  const angles = playbackAngles(notes[0].tilt, options.fps, options.format === 'gif' ? 1 : options.loops)
+  const angles = playbackTilts(notes[0], options.fps, options.format === 'gif' ? 1 : options.loops)
   const scale = scaleForHeight(notes, angles, options.perspective, options.height)
   const layout = exportLayout(notes, scale, angles, options.perspective)
   const canvas = new OffscreenCanvas(layout.width, layout.height)
   const ctx = canvas.getContext('2d', { willReadFrequently: options.format === 'gif' })!
   const faces = new Map(notes.map((n) => [n.id, new OffscreenCanvas(Math.ceil(n.widthMm * scale), Math.ceil(n.heightMm * scale))]))
-  const draw = (angle: number) => drawExportFrame(ctx, layout, assets, faces, scale, angle, options)
+  const draw = (angle: Tilt2) => drawExportFrame(ctx, layout, assets, faces, scale, angle, options)
 
   if (options.format === 'gif') {
     const gif = GIFEncoder()
@@ -89,7 +90,7 @@ export async function exportTilt(projectName: string, options: ExportOptions, on
   const { notes } = options
   const assets = new Map(await Promise.all(notes.map(async (n) => [n.id, await loadNoteAssets(n)] as const)))
   const groups = exportGroups(notes, options.separate)
-  const framesEach = playbackAngles(notes[0].tilt, options.fps, options.format === 'gif' ? 1 : options.loops).length
+  const framesEach = playbackTilts(notes[0], options.fps, options.format === 'gif' ? 1 : options.loops).length
   const total = framesEach * groups.length
   let done = 0
   const files: { name: string; blob: Blob }[] = []

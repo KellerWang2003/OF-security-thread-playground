@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
-import { TILT_LIMIT, frameMix, frameSpans } from '../lib/frames'
+import { TILT_LIMIT } from '../lib/frames'
+import { lensMix } from '../lib/lens'
 import { useImageUrl } from '../lib/images'
 import { imageTiles, threadWindowMask, windowEdges } from '../lib/thread'
 import type { Frame, Note } from '../lib/types'
@@ -84,13 +85,15 @@ export function FrameThumb({ frame, backgroundColor }: { frame: Frame; backgroun
 }
 
 /**
- * The note with its thread, drawn at `scale` px per mm. The frame shown comes from the tilt angle; with
- * `perspective` the note also turns in 3D, and `sheen` adds a highlight that travels along the thread.
+ * The note with its thread, drawn at `scale` px per mm. The frame shown comes from the tilt (up/down `angle`,
+ * side `angleX`) through the note's lens; with `perspective` the note also turns in 3D, and `sheen` adds a
+ * highlight that travels along the thread.
  */
 export function NoteView({
   note,
   scale,
   angle = 0,
+  angleX = 0,
   perspective = false,
   sheen = false,
   showWindowCuts = false,
@@ -98,19 +101,20 @@ export function NoteView({
   note: Note
   scale: number
   angle?: number
+  angleX?: number
   perspective?: boolean
   sheen?: boolean
   showWindowCuts?: boolean
 }) {
-  const { thread, frames, tilt } = note
+  const { thread, frames } = note
   const mm = (value: number) => value * scale
   const face = useImageUrl(note.background === 'image' ? note.faceImageId : undefined)
-  const spans = frameSpans(note)
-  const mix = frameMix(angle, spans, tilt.transition)
+  const mix = lensMix(note, { x: angleX, y: angle })
   const baseFrame = frames.at(mix.base)
   const nextFrame = frames.at(mix.next)
   const t = angle / TILT_LIMIT
-  const rotate = perspective ? `rotateX(${angle}deg)` : undefined
+  const tx = angleX / TILT_LIMIT
+  const rotate = perspective ? (angleX ? `rotateX(${angle}deg) rotateY(${angleX}deg)` : `rotateX(${angle}deg)`) : undefined
   const sheenAt = 50 + t * 120
   const direction = '180deg'
   const horizontal = thread.direction === 'horizontal'
@@ -168,6 +172,19 @@ export function NoteView({
               : { top: mm(edge), left: -4, right: -4, borderTopWidth: 1 }} />
           ))}
         </div>
+      )}
+
+      {perspective && tx !== 0 && (
+        // Turning sideways, the edge turning away darkens a little and the near edge catches the light
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              tx > 0
+                ? `linear-gradient(90deg, rgba(255,255,255,${tx * 0.12}), rgba(0,0,0,${tx * 0.08}))`
+                : `linear-gradient(90deg, rgba(0,0,0,${-tx * 0.08}), rgba(255,255,255,${-tx * 0.12}))`,
+          }}
+        />
       )}
 
       {perspective && (

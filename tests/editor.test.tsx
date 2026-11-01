@@ -54,7 +54,7 @@ describe('username workspace editor', () => {
     expect(screen.getByText('Renamed UI project', { exact: true })).toBeDefined()
     expect(screen.getAllByText('1 banknote')).toHaveLength(2)
   })
-  it('edits and deletes canvas windows, undoes deletion, and preserves sections across continuous mode', async () => {
+  it('edits windows without an edit mode, undoes deletion, and preserves sections when windows are off', async () => {
     vi.stubGlobal('ResizeObserver', class {
       callback: ResizeObserverCallback
       constructor(callback: ResizeObserverCallback) { this.callback = callback }
@@ -69,10 +69,11 @@ describe('username workspace editor', () => {
     render(<TooltipProvider><App /></TooltipProvider>)
     await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
     await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
-    await user.click(screen.getByRole('button', { name: 'Edit windows', exact: true }))
+    const row = (n: number) => screen.getByRole('button', { name: new RegExp(`^Window ${n},`) })
+    expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
+    await user.click(row(2))
     expect(screen.getByRole('group', { name: 'Edit thread windows' })).toBeDefined()
-    await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
-    const start = screen.getByTitle('Visible section starts here').querySelector('input')!
+    const start = screen.getByTitle('Window 2: visible section starts here').querySelector('input')!
     fireEvent.change(start, { target: { value: '16' } })
     expect(start.value).toBe('16')
     await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
@@ -80,15 +81,20 @@ describe('username workspace editor', () => {
     expect(screen.queryByRole('button', { name: 'Delete window', exact: true })).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Undo', exact: true }))
     await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
-    expect(screen.getByTitle('Visible section starts here').querySelector('input')!.value).toBe('16')
-    await user.click(screen.getByRole('button', { name: 'Done editing', exact: true }))
+    expect(screen.getByTitle('Window 2: visible section starts here').querySelector('input')!.value).toBe('16')
+    // Clicking the banknote away from its windows ends editing, and the banknote stays selected
+    fireEvent.pointerDown(document.querySelector('[data-note-body]')!, { button: 0, pointerId: 1 })
+    fireEvent.pointerUp(document.querySelector('[data-note-body]')!, { button: 0, pointerId: 1 })
     expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'Continuous', exact: true }))
-    expect(screen.queryByRole('button', { name: 'Edit windows', exact: true })).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'Windowed', exact: true }))
-    await user.click(screen.getByRole('button', { name: 'Edit windows', exact: true }))
-    await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
-    expect(screen.getByTitle('Visible section starts here').querySelector('input')!.value).toBe('16')
+    expect(row(2)).toBeDefined()
+    await user.click(screen.getByRole('switch', { name: 'Windows' }))
+    expect(screen.queryByRole('button', { name: /^Window 2,/ })).toBeNull()
+    await user.click(screen.getByRole('switch', { name: 'Windows' }))
+    expect(screen.getByRole('group', { name: 'Edit thread windows' })).toBeDefined()
+    await user.click(row(2))
+    expect(screen.getByTitle('Window 2: visible section starts here').querySelector('input')!.value).toBe('16')
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
     expect(saves).not.toHaveBeenCalled()
   })
   it('opens playback settings and applies saved fade, speed, curve and hold to every banknote', async () => {
@@ -199,4 +205,67 @@ describe('username workspace editor', () => {
     expect(saves).not.toHaveBeenCalled()
   })
 
+  it('springs a tilt drag back to flat however the drag ends, and leaves a held tilt alone on a click', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      callback: ResizeObserverCallback
+      constructor(callback: ResizeObserverCallback) { this.callback = callback }
+      observe() { this.callback([{ contentRect: { width: 1280, height: 720 } } as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      unobserve() {} disconnect() {}
+    })
+    for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
+    }
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'tilt-spring-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const body = () => document.querySelector('[data-note-body]')!
+    const target = () => ({ y: useTilt.getState().target, x: useTilt.getState().targetX })
+    const drag = (button = 0) => {
+      fireEvent.pointerDown(body(), { button, buttons: button === 0 ? 1 : 2, pointerId: 1, clientX: 100, clientY: 100 })
+      fireEvent.pointerMove(body(), { buttons: 1, pointerId: 1, clientX: 140, clientY: 60 })
+    }
+    const unlock = () => setTilt({ source: 'drag', angle: 0, angleX: 0, target: 0, targetX: 0, lockX: false, lockY: false })
+
+    // A clean release
+    unlock()
+    drag()
+    expect(target().y).not.toBe(0)
+    fireEvent.pointerUp(body(), { button: 0, pointerId: 1, clientX: 140, clientY: 60 })
+    expect(target()).toEqual({ y: 0, x: 0 })
+
+    // A release that never arrived, noticed on the next move
+    drag()
+    fireEvent.pointerMove(body(), { buttons: 0, pointerId: 1, clientX: 150, clientY: 50 })
+    expect(target()).toEqual({ y: 0, x: 0 })
+
+    // Losing pointer capture, or the window losing focus, mid-drag
+    drag()
+    fireEvent(body(), new Event('lostpointercapture', { bubbles: true }))
+    expect(target()).toEqual({ y: 0, x: 0 })
+    drag()
+    act(() => { window.dispatchEvent(new Event('blur')) })
+    expect(target()).toEqual({ y: 0, x: 0 })
+
+    // A locked axis keeps where it was dragged
+    setTilt({ lockX: true })
+    drag()
+    const side = target().x
+    fireEvent.pointerUp(body(), { button: 0, pointerId: 1 })
+    expect(target()).toEqual({ y: 0, x: side })
+    unlock()
+
+    // A right-click doesn't tilt
+    drag(2)
+    expect(target()).toEqual({ y: 0, x: 0 })
+    fireEvent.pointerUp(body(), { button: 2, pointerId: 1 })
+
+    // A click with no drag leaves a held tilt where it is
+    setTilt({ source: 'hold', angle: 12, target: 12, angleX: -5, targetX: -5 })
+    fireEvent.pointerDown(body(), { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(body(), { buttons: 1, pointerId: 1, clientX: 101, clientY: 101 })
+    fireEvent.pointerUp(body(), { button: 0, pointerId: 1, clientX: 101, clientY: 101 })
+    expect(target()).toEqual({ y: 12, x: -5 })
+  })
 })
