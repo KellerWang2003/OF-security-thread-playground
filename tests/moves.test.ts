@@ -48,3 +48,23 @@ describe('playback moves', () => {
     expect(migrateProject({ id: 'p', name: 'P', createdAt: 0, updatedAt: 0, notes: [note] }).notes[0].tilt.moves).toEqual(tilt.moves)
   })
 })
+
+describe('swing moves', () => {
+  it('swings up/down continuously from −12° to +12° and back, without returning to flat', () => {
+    const tilt = { ...base, moves: [{ id: 's', kind: 'y', from: -12, y: 12 }] } as TiltSettings
+    const plan = playbackPlan(tilt, lensState(tilt, frames))
+    expect(plan.seconds).toBeCloseTo(2)
+    expect(tiltAt(plan, 0).y).toBeCloseTo(-12)
+    expect(tiltAt(plan, 0.5).y).toBeCloseTo(0)
+    expect(tiltAt(plan, 1).y).toBeCloseTo(12)
+    expect(tiltAt(plan, 2).y).toBeCloseTo(-12)
+  })
+
+  it('travels between moves that start and end in different places', () => {
+    const tilt = { ...base, moves: [{ id: 'a', kind: 'y', from: -10, y: 10 }, { id: 'b', kind: 'x', x: 20 }] } as TiltSettings
+    const plan = playbackPlan(tilt, lensState(tilt, frames))
+    // Two 2 s moves plus a join from −10° up/down to flat and back
+    expect(plan.seconds).toBeGreaterThan(4)
+    expect(tiltAt(plan, plan.seconds - 1e-6).y).toBeCloseTo(-10, 0)
+  })
+})

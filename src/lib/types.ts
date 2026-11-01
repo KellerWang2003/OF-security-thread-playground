@@ -90,6 +90,8 @@ export interface PlaybackMove {
   kind: 'y' | 'x' | 'diagonal' | 'circle' | 'gesture'
   x?: number
   y?: number
+  /** Up/down and side only: the signed angle the move starts and returns to (flat when absent), so it can swing −12° to +12° */
+  from?: number
   /** Gesture only: seconds from the start, and the tilt then (a copy of the recording's) */
   points?: { t: number; x: number; y: number }[]
   /** Gesture only: the recording it came from; deleting that recording removes the move */
