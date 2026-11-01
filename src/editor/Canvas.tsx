@@ -101,7 +101,7 @@ export function Canvas({
   const [activeMode, setActiveMode] = useState<Gesture['mode']>()
   const [dropping, setDropping] = useState(false)
   const [guides, setGuides] = useState<Guide[]>([])
-  const { angle, angleX, source, perspective, sheen } = useTilt()
+  const { angle, angleX, source, perspective, sheen, frameNumbers } = useTilt()
 
   const selected = notes.find((n) => n.id === selectedId)
   const reference = selected ?? notes.at(0)
@@ -370,7 +370,7 @@ export function Canvas({
                   source === 'wobble' || activeMode === 'tilt' || activeMode === 'move' ? 'outline-primary/5' : 'outline-primary/25',
                 )}
               >
-                <NoteView note={note} scale={scale} angle={angle} angleX={angleX} perspective={perspective && !(isSelected && editingWindows)} sheen={sheen} showWindowCuts={isSelected && editingWindows} />
+                <NoteView note={note} scale={scale} angle={angle} angleX={angleX} perspective={perspective && !(isSelected && editingWindows)} sheen={sheen} showWindowCuts={isSelected && editingWindows} showFrameNumber={frameNumbers} />
                 {isSelected && editingWindows && note.thread.windows.enabled && (
                   <WindowEditor note={note} scale={scale} selectedId={selectedWindowId} onSelect={onWindowSelect}
                     onChange={(sections) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, windows: { ...n.thread.windows, sections } } }))} />

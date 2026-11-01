@@ -23,6 +23,8 @@ interface TiltState {
   recording: boolean
   perspective: boolean
   sheen: boolean
+  /** Shows the visible frame's number on each banknote's thread, as a teaching and debugging aid */
+  frameNumbers: boolean
 }
 
 // Preview state only: it is not part of a project and is not saved
@@ -38,6 +40,7 @@ export const useTilt = create<TiltState>()(() => ({
   perspective: true,
   sheen: true,
   recording: false,
+  frameNumbers: false,
 }))
 
 export const setTilt = (patch: Partial<TiltState>) => useTilt.setState(patch)

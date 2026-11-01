@@ -97,6 +97,7 @@ export function NoteView({
   perspective = false,
   sheen = false,
   showWindowCuts = false,
+  showFrameNumber = false,
 }: {
   note: Note
   scale: number
@@ -105,6 +106,8 @@ export function NoteView({
   perspective?: boolean
   sheen?: boolean
   showWindowCuts?: boolean
+  /** Labels the thread with the number of the frame it shows (preview only, not exported) */
+  showFrameNumber?: boolean
 }) {
   const { thread, frames } = note
   const mm = (value: number) => value * scale
@@ -171,6 +174,17 @@ export function NoteView({
               ? { left: mm(edge), top: -4, bottom: -4, borderLeftWidth: 1 }
               : { top: mm(edge), left: -4, right: -4, borderTopWidth: 1 }} />
           ))}
+        </div>
+      )}
+
+      {showFrameNumber && frames.length > 0 && (
+        <div aria-hidden="true" data-frame-number className="pointer-events-none absolute flex items-center justify-center" style={strip}>
+          <span
+            className="rounded-full bg-foreground/85 px-1.5 font-semibold leading-none text-background tabular-nums shadow-sm"
+            style={{ fontSize: Math.max(10, Math.min(mm(thread.widthMm) * 0.6, 18)), paddingBlock: 3 }}
+          >
+            {mix.current + 1}
+          </span>
         </div>
       )}
 

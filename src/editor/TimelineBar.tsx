@@ -1,5 +1,5 @@
 import { reportError } from '../cloud/notices'
-import { ArrowLeft, Circle, Square, ArrowRight, EyeOff, ImagePlus, MoreHorizontal, Palette, Pause, Play, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { ArrowLeft, Circle, Square, ArrowRight, EyeOff, Hash, ImagePlus, MoreHorizontal, Palette, Pause, Play, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -10,6 +10,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover'
+import { Toggle } from '@/components/ui/toggle'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
@@ -85,19 +87,38 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
   const tilt = note?.tilt ?? DEFAULT_TILT
   const lens = lensState(tilt, note?.frames)
   const recording = useTilt((s) => s.recording)
+  const frameNumbers = useTilt((s) => s.frameNumbers)
 
   return (
-    <div className="flex w-[148px] shrink-0 flex-col justify-center gap-1.5">
+    <div className="flex w-[186px] shrink-0 flex-col justify-center gap-1.5">
+      <div className="flex gap-1.5">
       <Button
         variant={recording ? 'destructive' : 'outline'}
         size="sm"
-        className="h-8 w-full gap-1.5 text-xs"
+        className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-xs"
         title={recording ? 'Cancel recording' : 'Drag on the tilt pad to record a playback move'}
         onClick={() => setRecording(!recording)}
       >
         {recording ? <Square className="size-3 fill-current" /> : <Circle className="size-3 fill-destructive text-destructive" />}
         {recording ? 'Drag on the pad…' : 'Record movement'}
       </Button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Toggle
+              variant="outline"
+              aria-label="Frame numbers on threads"
+              pressed={frameNumbers}
+              onPressedChange={(on) => setTilt({ frameNumbers: on })}
+              className="size-8 shrink-0 px-0 aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+            />
+          }
+        >
+          <Hash className="size-3.5" />
+        </TooltipTrigger>
+        <TooltipContent>{frameNumbers ? 'Hide frame numbers on threads' : 'Show frame numbers on threads'}</TooltipContent>
+      </Tooltip>
+      </div>
       <Popover>
         <PopoverTrigger render={<Button variant="outline" size="sm" className="h-8 w-full gap-1.5 text-xs" />}>
           <SlidersHorizontal className="size-3.5" />Playback settings
