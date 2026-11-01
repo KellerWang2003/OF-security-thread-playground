@@ -53,25 +53,27 @@ function MoveRow({ index, move, lens, removable, onChange }: {
 }) {
   const reach = moveReach(move, lens)
   const axes = movesAxes(move)
+  const kinds: { value: PlaybackMove['kind']; label: string }[] = move.kind === 'gesture'
+    ? [{ value: 'gesture', label: `● Recording · ${Math.round(gestureSeconds(move) * 10) / 10} s` }, ...MOVE_KINDS]
+    : MOVE_KINDS
   return (
     <li className="flex items-center gap-1">
       <span className="w-3 shrink-0 text-center text-[10px] text-muted-foreground tabular-nums">{index + 1}</span>
-      {move.kind === 'gesture' ? (
-        <div className="flex h-8 min-w-0 flex-1 items-center rounded-md bg-muted/60 px-2 text-xs" title="Recorded on the tilt pad">
-          Gesture <span className="ml-auto text-muted-foreground tabular-nums">{Math.round(gestureSeconds(move) * 10) / 10} s</span>
-        </div>
-      ) : (
+      <Select
+        value={move.kind}
+        items={kinds}
+        onValueChange={(kind) => {
+          // A preset replaces a recording outright; picking the recording again is a no-op
+          if (kind && kind !== 'gesture') onChange((m) => ({ id: m.id, kind, x: m.x, y: m.y }))
+        }}
+      >
+        <SelectTrigger aria-label={`Move ${index + 1}`} size="sm" className="h-8 min-w-0 flex-1 text-xs"><SelectValue /></SelectTrigger>
+        <SelectContent alignItemWithTrigger={false}>
+          {kinds.map((k) => <SelectItem key={k.value} value={k.value}>{k.label}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      {move.kind !== 'gesture' && (
         <>
-          <Select
-            value={move.kind}
-            items={MOVE_KINDS}
-            onValueChange={(kind) => { if (kind) onChange((m) => ({ id: m.id, kind, x: m.x, y: m.y })) }}
-          >
-            <SelectTrigger aria-label={`Move ${index + 1}`} size="sm" className="h-8 min-w-0 flex-1 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              {MOVE_KINDS.map((k) => <SelectItem key={k.value} value={k.value}>{k.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
           {axes.includes('y') && (
             <ScrubField
               className="w-[68px] shrink-0"

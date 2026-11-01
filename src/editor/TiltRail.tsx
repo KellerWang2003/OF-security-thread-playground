@@ -1,4 +1,4 @@
-import { Circle, Lock, LockOpen, RotateCcw, Square } from 'lucide-react'
+import { Lock, LockOpen, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Toggle } from '@/components/ui/toggle'
@@ -9,7 +9,7 @@ import { TILT_LIMIT, clamp } from '../lib/frames'
 import type { LensState } from '../lib/lens'
 import { MOVES_MAX, editableMoves, gestureFromRecording, movesOf, planPath, playbackPlan } from '../lib/moves'
 import type { TiltSettings } from '../lib/types'
-import { setTilt, useTilt } from '../tilt/tilt'
+import { setRecording, setTilt, useTilt } from '../tilt/tilt'
 import { saveMoves } from './playbackActions'
 
 /** Width and height of the pad, in px */
@@ -42,8 +42,7 @@ export function TiltRail({ limit = TILT_LIMIT, playback }: {
   /** The project's playback, drawn on the pad and added to by recording; absent in tests of the pad alone */
   playback?: { projectId: string; tilt: TiltSettings; lens: LensState }
 }) {
-  const [recording, setRecording] = useState(false)
-  const full = playback ? movesOf(playback.tilt, playback.lens).length >= MOVES_MAX : true
+  const recording = useTilt((s) => s.recording)
   return (
     <Panel className="absolute top-1/2 left-3 flex -translate-y-1/2 flex-col gap-1.5 rounded-[calc(var(--radius)+0.375rem+1px)] p-1.5">
       <Pad
@@ -52,7 +51,7 @@ export function TiltRail({ limit = TILT_LIMIT, playback }: {
         recording={recording}
         onRecorded={(samples) => {
           setRecording(false)
-          if (!playback) return
+          if (!playback || movesOf(playback.tilt, playback.lens).length >= MOVES_MAX) return
           const move = gestureFromRecording(samples, limit)
           if (!move) return
           saveMoves(playback.projectId, [...editableMoves(playback.tilt, playback.lens), move])
@@ -64,32 +63,9 @@ export function TiltRail({ limit = TILT_LIMIT, playback }: {
           <AxisRow axis="y" limit={limit} />
           <AxisRow axis="x" limit={limit} />
         </div>
-        <div className="flex flex-col gap-1">
-          {playback && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Toggle
-                    size="sm"
-                    aria-label="Record a gesture"
-                    pressed={recording}
-                    disabled={full && !recording}
-                    onPressedChange={(on) => {
-                      setRecording(on)
-                      if (on) setTilt({ source: 'hold', target: shownTilt().y, targetX: shownTilt().x })
-                    }}
-                  />
-                }
-              >
-                {recording ? <Square className="fill-destructive text-destructive" /> : <Circle className="fill-destructive/80 text-destructive" />}
-              </TooltipTrigger>
-              <TooltipContent>{recording ? 'Cancel recording' : 'Record a gesture: drag on the pad, release to add it to playback'}</TooltipContent>
-            </Tooltip>
-          )}
           <IconButton label="Back to flat" size="icon-sm" onClick={() => setTilt({ source: 'hold', target: 0, targetX: 0 })}>
             <RotateCcw />
           </IconButton>
-        </div>
       </div>
     </Panel>
   )
