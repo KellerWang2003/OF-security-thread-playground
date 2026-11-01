@@ -137,3 +137,9 @@ body,
 #root {
   height: 100%;
 }
+/* The editor is a pannable canvas: stop a two-finger trackpad swipe from
+   turning into browser back/forward (or rubber-band bounce) */
+html,
+body {
+  overscroll-behavior: none;
+}
