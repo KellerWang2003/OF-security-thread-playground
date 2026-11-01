@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { TILT_LIMIT, clamp } from '../lib/frames'
+import { padToTilt, tiltToPad } from '../lib/pad'
 import type { LensState } from '../lib/lens'
 import { moveFromRecording, nextRecordingName, planPath, playbackPlan, recordingFromSamples } from '../lib/moves'
 import type { TiltSettings } from '../lib/types'
@@ -157,7 +158,7 @@ function Pad({ limit, playback, recording, onRecorded }: {
   const pad = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
   const half = PAD_PX / 2
-  const toPx = (deg: number) => half + (clamp(deg, -limit, limit) / limit) * (half - 6)
+  const toPx = (deg: number) => half + tiltToPad(clamp(deg, -limit, limit) / limit) * (half - 6)
   const path = useMemo(() => {
     if (!playback) return ''
     const points = planPath(playbackPlan(playback.tilt, playback.lens))
@@ -191,8 +192,11 @@ function Pad({ limit, playback, recording, onRecorded }: {
   const follow = (clientX: number, clientY: number) => {
     const box = pad.current?.getBoundingClientRect()
     if (!box) return
-    const scale = limit / (half - 6)
-    holdAt({ x: (clientX - box.left - half) * scale, y: (box.top + half - clientY) * scale }, limit, true)
+    // Pointer offset as a share of the pad's reach, bent so the centre is fine and the edges fast
+    const reach = half - 6
+    const u = clamp((clientX - box.left - half) / reach, -1, 1)
+    const v = clamp((box.top + half - clientY) / reach, -1, 1)
+    holdAt({ x: padToTilt(u) * limit, y: padToTilt(v) * limit }, limit, true)
   }
 
   return (

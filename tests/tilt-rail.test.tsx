@@ -3,11 +3,12 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { TooltipProvider } from '../src/components/ui/tooltip'
 import { TiltRail } from '../src/editor/TiltRail'
+import { padToTilt, tiltToPad } from '../src/lib/pad'
 import { setTilt, springToFlat, useTilt } from '../src/tilt/tilt'
 
-// jsdom lays the pad out at 0,0: its 136 px square is centred on 68,68 and ±90° spans 62 px each way
+// jsdom lays the pad out at 0,0: its 136 px square is centred on 68,68 and ±90° spans 62 px each way, on a curve
 const C = 68
-const PX_PER_DEG = 62 / 90
+const px = (deg: number) => tiltToPad(deg / 90) * 62
 
 beforeEach(() => {
   setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0, lockX: false, lockY: false })
@@ -19,7 +20,7 @@ const renderPad = () => {
   render(<TooltipProvider><TiltRail /></TooltipProvider>)
   return screen.getByRole('group', { name: 'Tilt' })
 }
-const at = (x: number, y: number) => ({ clientX: C + x * PX_PER_DEG, clientY: C - y * PX_PER_DEG, pointerId: 1 })
+const at = (x: number, y: number) => ({ clientX: C + px(x), clientY: C - px(y), pointerId: 1 })
 
 describe('tilt pad', () => {
   it('tilts both ways from one drag and holds where you let go', () => {
@@ -65,5 +66,15 @@ describe('tilt pad', () => {
     fireEvent.pointerDown(pad, { button: 2, buttons: 2, ...at(0, 30) })
     fireEvent.pointerMove(pad, { buttons: 2, ...at(0, 40) })
     expect(useTilt.getState()).toMatchObject({ source: 'drag', target: 0 })
+  })
+})
+
+describe('tilt pad curve', () => {
+  it('is fine near flat and fast at the edges, reaching the full tilt', () => {
+    expect(padToTilt(1)).toBe(1)
+    expect(padToTilt(-1)).toBe(-1)
+    expect(padToTilt(0.5)).toBeCloseTo(0.25)
+    expect(padToTilt(0.1)).toBeCloseTo(0.01)
+    expect(tiltToPad(padToTilt(-0.7))).toBeCloseTo(-0.7)
   })
 })
