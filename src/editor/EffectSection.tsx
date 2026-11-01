@@ -133,7 +133,11 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
             </div>
           </div>
       )}
-      <FlatStrip note={note} lens={lens} set={set} />
+      <Explain caption={`Flat: ${flatLabel(flatStep(tilt, note.frames.length))}. ` + (lens.effect === 'reveal'
+        ? `Drag the pin to choose the frame seen straight on. Drag the band's ends to set how far the ${lens.revealAxis === 'y' ? '↔' : '↕'} tilt ever reaches: frames outside it stay hidden. Double-click to reset.`
+        : 'Drag the pin to choose the frame seen straight on; double-click to reset. The lines under it show how far each tilt reaches by 90°.')}>
+        <FlatStrip note={note} lens={lens} set={set} />
+      </Explain>
       {lens.effect === 'reveal' && (
           <Explain
             picture={<WobblePreview note={note} lens={lens} />}
@@ -338,7 +342,6 @@ function FlatStrip({ note, lens, set }: { note: Note; lens: LensState; set: (pat
         aria-valuemax={2 * count - 1}
         aria-valuenow={step}
         tabIndex={0}
-        title={`Flat: ${flatLabel(step)}`}
         className={cn('relative mt-2 h-6 touch-none rounded outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50', drag ? 'cursor-grabbing' : 'cursor-pointer')}
         onPointerDown={(e) => {
           if (e.button !== 0) return
