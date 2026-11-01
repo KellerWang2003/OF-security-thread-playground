@@ -132,12 +132,15 @@ const join = (a: Tilt2, b: Tilt2, speed: number) => line(a, b, Math.max(0.15, di
 export function playbackPlan(tilt: TiltSettings, lens: LensState): PlaybackPlan {
   const { speed, curve, holdSeconds } = playbackSettings(tilt)
   const runs = movesOf(tilt, lens).map((m) => moveSegments(m, lens, speed, holdSeconds).filter((s) => s.seconds > 0)).filter((r) => r.length)
-  // Each move picks up where the last left off, and the end leads back to the start for the loop
-  const segments = runs.flatMap((run, i) => {
-    const next = runs[(i + 1) % runs.length]
-    const from = lastPoint(run.at(-1)!)
-    const to = firstPoint(next[0])
-    return distance(from, to) < 0.5 ? run : [...run, join(from, to, speed)]
+  // Every move starts from flat and returns to flat before the next one
+  const segments = runs.flatMap((run) => {
+    const first = firstPoint(run[0])
+    const last = lastPoint(run.at(-1)!)
+    return [
+      ...(distance(FLAT, first) < 0.5 ? [] : [join(FLAT, first, speed)]),
+      ...run,
+      ...(distance(last, FLAT) < 0.5 ? [] : [join(last, FLAT, speed)]),
+    ]
   })
   const seconds = segments.reduce((total, s) => total + s.seconds, 0)
   return { segments, seconds, curve }

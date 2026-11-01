@@ -50,21 +50,25 @@ describe('playback moves', () => {
 })
 
 describe('swing moves', () => {
-  it('swings up/down continuously from −12° to +12° and back, without returning to flat', () => {
+  it('goes from flat to −12°, swings to +12° and back, then returns to flat', () => {
     const tilt = { ...base, moves: [{ id: 's', kind: 'y', from: -12, y: 12 }] } as TiltSettings
     const plan = playbackPlan(tilt, lensState(tilt, frames))
-    expect(plan.seconds).toBeCloseTo(2)
-    expect(tiltAt(plan, 0).y).toBeCloseTo(-12)
-    expect(tiltAt(plan, 0.5).y).toBeCloseTo(0)
-    expect(tiltAt(plan, 1).y).toBeCloseTo(12)
-    expect(tiltAt(plan, 2).y).toBeCloseTo(-12)
+    const join = 12 / 60
+    expect(plan.seconds).toBeCloseTo(2 + 2 * join)
+    expect(tiltAt(plan, 0).y).toBeCloseTo(0)
+    expect(tiltAt(plan, join).y).toBeCloseTo(-12)
+    expect(tiltAt(plan, join + 1).y).toBeCloseTo(12)
+    expect(tiltAt(plan, join + 2).y).toBeCloseTo(-12)
+    expect(tiltAt(plan, plan.seconds - 1e-6).y).toBeCloseTo(0, 1)
   })
 
-  it('travels between moves that start and end in different places', () => {
+  it('returns to flat between moves', () => {
     const tilt = { ...base, moves: [{ id: 'a', kind: 'y', from: -10, y: 10 }, { id: 'b', kind: 'x', x: 20 }] } as TiltSettings
     const plan = playbackPlan(tilt, lensState(tilt, frames))
-    // Two 2 s moves plus a join from −10° up/down to flat and back
-    expect(plan.seconds).toBeGreaterThan(4)
-    expect(tiltAt(plan, plan.seconds - 1e-6).y).toBeCloseTo(-10, 0)
+    const join = 10 / 60
+    // The second move starts at flat right after the first one's return
+    expect(tiltAt(plan, 2 + 2 * join).x).toBeCloseTo(0)
+    expect(tiltAt(plan, 2 + 2 * join).y).toBeCloseTo(0)
+    expect(tiltAt(plan, 2 + 2 * join + 1).x).toBeCloseTo(20)
   })
 })
