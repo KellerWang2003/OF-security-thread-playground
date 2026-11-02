@@ -24,6 +24,10 @@ vi.mock('../src/lib/images', async (importOriginal) => {
       return fixture(id) ?? url
     },
     loadImageUrl: async (id: string) => fixture(id) ?? actual.loadImageUrl(id),
+    useImageType: (id?: string) => {
+      const type = actual.useImageType(fixture(id) ? undefined : id)
+      return fixture(id) ? (id!.endsWith('.svg') ? 'image/svg+xml' : 'image/png') : type
+    },
   }
 })
 vi.mock('../src/cloud/repository', async (importOriginal) => {
@@ -423,6 +427,20 @@ describe('username workspace editor', () => {
     expect(placing()).not.toBeNull()
     expect(watermark()).toEqual(moved)
     fireEvent.keyDown(window, { key: 'Escape' })
+
+    // Blend picks how it mixes with the design; only an SVG offers a fill colour, white to start with
+    await user.click(screen.getByRole('combobox', { name: 'Blend' }))
+    await user.click(await screen.findByRole('option', { name: /^Multiply/ }))
+    expect(watermark()!.blend).toBe('multiply')
+    expect(screen.queryByRole('switch', { name: 'Fill colour' })).toBeNull()
+    act(() => updateNote(demo.id, demo.notes[0].id, (n) => ({ ...n, watermark: { ...n.watermark!, imageId: 'fixture-watermark.svg' } })))
+    await user.click(screen.getByRole('switch', { name: 'Fill colour' }))
+    expect(watermark()!.fill).toBe('#ffffff')
+    fireEvent.change(screen.getByLabelText('Pick colour'), { target: { value: '#ff0000' } })
+    expect(watermark()!.fill).toBe('#ff0000')
+    await user.click(screen.getByRole('switch', { name: 'Fill colour' }))
+    expect(watermark()!.fill).toBeUndefined()
+    expect(watermark()!.blend).toBe('multiply')
 
     // The lamp on the pad switches it off again
     await user.click(screen.getByRole('button', { name: 'Hold up to the light' }))

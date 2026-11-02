@@ -7,7 +7,10 @@ import { createNote } from '../src/lib/notes'
 import { setTilt } from '../src/tilt/tilt'
 
 // The watermark's relief is worked out from its image on a canvas, which jsdom lacks
-vi.mock('../src/lib/relief', () => ({ useRelief: (id?: string) => (id ? `blob:relief-${id}` : undefined) }))
+vi.mock('../src/lib/relief', () => ({
+  useRelief: (watermark?: { imageId?: string; blend?: string; fill?: string }) =>
+    watermark?.imageId ? `blob:relief-${watermark.imageId}${watermark.blend ? `-${watermark.blend}` : ''}${watermark.fill ? `-${watermark.fill}` : ''}` : undefined,
+}))
 
 afterEach(() => {
   cleanup()
@@ -125,6 +128,14 @@ describe("a NoteView's watermark", () => {
     expect(opacity(container)).toBeCloseTo(watermarkOpacity(0.6, 0))
     rerender(<NoteView note={withWatermark()} scale={1} angle={30} />)
     expect(opacity(container)).toBeCloseTo(0.6)
+  })
+
+  it('blends in its own mode, its relief worked out for that mode and fill', () => {
+    const { container, rerender } = render(<NoteView note={withWatermark()} scale={1} live />)
+    expect(mark(container).style.mixBlendMode).toBe('hard-light')
+    rerender(<NoteView note={{ ...withWatermark(), watermark: { ...withWatermark().watermark, blend: 'multiply', fill: '#ff0000' } }} scale={1} live />)
+    expect(mark(container).style.mixBlendMode).toBe('multiply')
+    expect(mark(container).style.backgroundImage).toContain('blob:relief-mark-multiply-#ff0000')
   })
 
   it('draws nothing until it has an image', () => {

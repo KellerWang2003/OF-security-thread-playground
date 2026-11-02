@@ -7,6 +7,7 @@ import { useImageUrl } from '../lib/images'
 import { imageTiles, threadWindowMask, windowEdges } from '../lib/thread'
 import type { Frame, Note } from '../lib/types'
 import { useRelief } from '../lib/relief'
+import { DEFAULT_BLEND } from '../lib/watermark'
 import { useTilt } from '../tilt/tilt'
 
 // Height ÷ width of each image, once loaded
@@ -171,7 +172,7 @@ export function NoteView({
   const [base, next, current] = (live ? liveShown : shownKey(note, angle, angleX)).split('|').map(Number)
   const baseFrame = frames.at(base)
   const nextFrame = next !== base ? frames.at(next) : undefined
-  const relief = useRelief(watermark?.imageId)
+  const relief = useRelief(watermark)
   const depth = watermark?.depth ?? 0
   const revealOf = (state: LiveState) => reveal ?? watermarkReveal(state.light, { x: state.angleX, y: state.angle })
 
@@ -227,11 +228,12 @@ export function NoteView({
       {face && <img src={face} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />}
 
       {watermarkBox && watermark?.imageId && (
-        // Thinner and thicker paper, hard-light blended over the design so it shows in the note's own colours: mid-grey
-        // leaves them as they are, lighter lightens them and darker darkens them. The thread lies over it, unchanged.
-        // On the canvas it takes a press, faint or clear, so it drags as the thread does; not with no depth to show.
+        // Thinner and thicker paper, blended over the design (hard light unless it has a blend of its own) so it shows in
+        // the note's own colours: plain paper leaves them as they are, thinner lightens them and thicker darkens them.
+        // The thread lies over it, unchanged. On the canvas it takes a press, faint or clear, so it drags as the thread
+        // does; not with no depth to show.
         <div data-watermark={note.id} className={cn('absolute', live && depth > 0 ? 'cursor-move' : 'pointer-events-none')}
-          {...part('watermark', { ...watermarkBox, backgroundImage: relief && `url(${relief})`, backgroundSize: '100% 100%', mixBlendMode: 'hard-light' })} />
+          {...part('watermark', { ...watermarkBox, backgroundImage: relief && `url(${relief})`, backgroundSize: '100% 100%', mixBlendMode: watermark.blend ?? DEFAULT_BLEND })} />
       )}
 
       {showWindowCuts && thread.windows.enabled && (

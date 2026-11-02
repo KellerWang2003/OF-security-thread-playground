@@ -127,7 +127,17 @@ export interface Watermark {
   heightMm: number
   /** How strongly the paper's thickness shows at its clearest (tilted or held to the light), 0 to 1 */
   depth: number
+  /** How it mixes with the design under it; absent is Hard light */
+  blend?: WatermarkBlend
+  /** SVG only: one colour (#rrggbb) every shape takes before it is read as paper; absent keeps the SVG's own */
+  fill?: string
 }
+
+/**
+ * Hard light shows thinner and thicker paper; Soft light the same, gentler; Multiply only the thicker (darker) parts;
+ * Screen only the thinner (lighter) parts
+ */
+export type WatermarkBlend = 'hard-light' | 'soft-light' | 'multiply' | 'screen'
 
 /** One banknote in a project, with its own size, thread and frames */
 export interface Note {

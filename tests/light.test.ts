@@ -4,7 +4,7 @@ import { WATERMARK_CLEAR_DEG, WATERMARK_FAINT, offAxisDeg, tiltReveal, watermark
 import { lensState } from '../src/lib/lens'
 import { createNote } from '../src/lib/notes'
 import { lightAt, playbackPlan, tiltAt } from '../src/lib/moves'
-import type { TiltSettings } from '../src/lib/types'
+import type { Note, TiltSettings } from '../src/lib/types'
 
 vi.mock('../src/lib/images', () => ({ loadImageUrl: async () => undefined }))
 
@@ -77,7 +77,7 @@ describe('exported light', () => {
     const note = { ...createNote({ name: 'N', x: 0, y: 0, widthMm: 100, heightMm: 50, color: '#336699' }), watermark: { imageId: 'w', xMm: 10, yMm: 5, widthMm: 20, heightMm: 30, depth: 0.6 } }
     const relief = { width: 1, height: 1 } as unknown as HTMLCanvasElement
     /** Every image drawn, and every fill, with the blend and opacity it was drawn at */
-    const draw = (reveal?: number, tilt = 0) => {
+    const draw = (reveal?: number, tilt = 0, drawn: Note = note) => {
       const calls: { what: string; blend: string; alpha: number; at?: number[] }[] = []
       const ctx = new Proxy({ globalCompositeOperation: 'source-over', globalAlpha: 1 } as Record<string, unknown>, {
         get(target, key) {
@@ -92,7 +92,7 @@ describe('exported light', () => {
           return true
         },
       }) as unknown as CanvasRenderingContext2D
-      drawFace(ctx, note, { frames: new Map(), relief }, 2, tilt, { sheen: false, perspective: true, reveal })
+      drawFace(ctx, drawn, { frames: new Map(), relief }, 2, tilt, { sheen: false, perspective: true, reveal })
       return calls
     }
     const flat = draw()
@@ -103,5 +103,9 @@ describe('exported light', () => {
     expect(flat.filter((c) => c.what !== 'watermark').every((c) => c.blend === 'source-over' && c.alpha === 1)).toBe(true)
     expect(draw(undefined, 20).find((c) => c.what === 'watermark')!.alpha).toBeCloseTo(watermarkOpacity(0.6, tiltReveal({ x: 0, y: 20 })))
     expect(draw(1).find((c) => c.what === 'watermark')!.alpha).toBeCloseTo(0.6)
+    // In its own blend mode, as the canvas draws it
+    const screened = draw(1, 0, { ...note, watermark: { ...note.watermark, blend: 'screen' } })
+    expect(screened.find((c) => c.what === 'watermark')!.blend).toBe('screen')
+    expect(screened.filter((c) => c.what !== 'watermark').every((c) => c.blend === 'source-over')).toBe(true)
   })
 })

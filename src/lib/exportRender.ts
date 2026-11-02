@@ -7,6 +7,7 @@ import { advancePlayback, playbackEase, playbackSettings } from './playback'
 import { loadRelief } from './relief'
 import { fitSections, imageTiles, threadLength } from './thread'
 import type { Note } from './types'
+import { DEFAULT_BLEND } from './watermark'
 
 // Draws banknotes to a canvas exactly as NoteView shows them on the canvas, so the tilt can be exported
 
@@ -110,7 +111,7 @@ export async function loadNoteAssets(note: Note): Promise<NoteAssets> {
   const frames = new Map<string, HTMLImageElement>()
   const [face, relief] = await Promise.all([
     note.background === 'image' && note.faceImageId ? loadArtwork(note.faceImageId) : undefined,
-    note.watermark?.imageId ? loadRelief(note.watermark.imageId).then((r) => r?.canvas) : undefined,
+    note.watermark?.imageId ? loadRelief({ ...note.watermark, imageId: note.watermark.imageId }).then((r) => r?.canvas) : undefined,
     ...note.frames.map(async (frame) => {
       if (frame.kind !== 'image' || !frame.imageId) return
       const img = await loadArtwork(frame.imageId)
@@ -151,8 +152,8 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     ctx.drawImage(face, (width - w) / 2, (height - h) / 2, w, h)
   }
   if (watermark && assets.relief) {
-    // As NoteView: hard-light blended over the design, so it shows in the note's own colours, under the thread
-    ctx.globalCompositeOperation = 'hard-light'
+    // As NoteView: blended over the design in its blend mode, so it shows in the note's own colours, under the thread
+    ctx.globalCompositeOperation = watermark.blend ?? DEFAULT_BLEND
     ctx.globalAlpha = watermarkOpacity(watermark.depth, options.reveal ?? watermarkReveal(0, { x: angleX, y: angle }))
     ctx.drawImage(assets.relief, mm(watermark.xMm), mm(watermark.yMm), mm(watermark.widthMm), mm(watermark.heightMm))
     ctx.globalAlpha = 1
