@@ -47,7 +47,7 @@ export function ProjectPanel({
   const [deleting, setDeleting] = useState<Note>()
 
   return (
-    <Panel className={cn('absolute top-3 left-3 flex w-[248px]', aboveTilt ? 'max-h-[calc(100%-340px)] min-h-12' : 'max-h-[calc(100%-120px)]', 'flex-col rounded-[calc(var(--radius)+0.375rem+1px)]')}>
+    <Panel className={cn('absolute top-3 left-3 flex w-[248px]', aboveTilt ? 'max-h-[calc(100%-312px)] min-h-12' : 'max-h-[calc(100%-120px)]', 'flex-col rounded-[calc(var(--radius)+0.375rem+1px)]')}>
       <div className="flex items-center justify-between gap-1 p-1.5">
         <Button variant="ghost" size="sm" className="rounded-lg px-1.5" onClick={() => (location.hash = '')}>
           <ChevronLeft />

@@ -31,6 +31,8 @@ export function ScrubField({
   step = 1,
   unit,
   title,
+  size = 'default',
+  trailing,
   className,
 }: {
   label: ReactNode
@@ -42,22 +44,31 @@ export function ScrubField({
   max: number
   step?: number
   unit?: string
+  /** 'sm' is shorter, with a narrow label and smaller digits, for tight floating panels */
+  size?: 'default' | 'sm'
+  /** A small control after the unit, inside the field */
+  trailing?: ReactNode
   className?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
   const [scrub, setScrub] = useState<{ x: number; start: number } | null>(null)
   const snap = (v: number) => clampValue(Math.round(v / step) * step, min, max)
+  const sm = size === 'sm'
 
   return (
     <div
       title={title}
       className={cn(
-        'flex h-8 min-w-0 items-center rounded-md border border-transparent bg-muted/60 focus-within:border-ring hover:border-border',
+        'flex min-w-0 items-center rounded-md border border-transparent bg-muted/60 focus-within:border-ring hover:border-border',
+        sm ? 'h-7' : 'h-8',
         className,
       )}
     >
       <span
-        className="flex h-full min-w-7 shrink-0 cursor-ew-resize touch-none items-center justify-center px-2 text-xs text-muted-foreground select-none"
+        className={cn(
+          'flex h-full shrink-0 cursor-ew-resize touch-none items-center justify-center text-xs text-muted-foreground select-none',
+          sm ? 'w-4 pl-0.5' : 'min-w-7 px-2',
+        )}
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId)
           setScrub({ x: e.clientX, start: value })
@@ -71,7 +82,10 @@ export function ScrubField({
       </span>
       <input
         type="number"
-        className="h-full w-full min-w-0 bg-transparent text-sm tabular-nums outline-none [&::-webkit-inner-spin-button]:appearance-none"
+        className={cn(
+          'h-full w-full min-w-0 bg-transparent tabular-nums outline-none [&::-webkit-inner-spin-button]:appearance-none',
+          sm ? 'pl-0.5 text-xs' : 'text-sm',
+        )}
         value={draft ?? String(round(value))}
         min={min}
         max={max}
@@ -86,7 +100,8 @@ export function ScrubField({
           if (e.key === 'Enter') e.currentTarget.blur()
         }}
       />
-      {unit && <span className="pr-2 text-xs text-muted-foreground">{unit}</span>}
+      {unit && <span className={cn('text-xs text-muted-foreground', sm ? (trailing ? 'pr-0.5' : 'pr-1.5') : 'pr-2')}>{unit}</span>}
+      {trailing}
     </div>
   )
 }

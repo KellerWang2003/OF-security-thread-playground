@@ -22,6 +22,7 @@ import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/note
 import type { Frame, Note } from '../lib/types'
 import { setRecording, setTilt, togglePlayback, useTilt } from '../tilt/tilt'
 import { PlaybackPanel } from './PlaybackPanel'
+import { TILT_PANEL_PX } from './TiltRail'
 import { addColorFrame, addImageFrames, deleteFrame, moveFrame, replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
 
 /** Opens the system colour picker without a visible input */
@@ -40,8 +41,8 @@ const LANE = 9
 const ZOOM = { min: 3, max: 40, initial: 10 }
 
 /**
- * Bottom of the canvas: play and pause and the project's cycle and playback settings, always; with a banknote
- * selected the panel widens to show that banknote's frames.
+ * Bottom of the canvas: play and pause with the project's playback controls stacked beside it, always, as wide
+ * as the tilt pad's panel above them; with a banknote selected the panel widens to show that banknote's frames.
  */
 export function TimelineBar({
   projectId,
@@ -66,23 +67,27 @@ export function TimelineBar({
         note && (besidePanel ? 'right-[calc(var(--panel-w)+20px)]' : 'right-3'),
       )}
     >
-      <IconButton
-        label={playing ? 'Pause' : 'Play'}
-        variant={playing ? 'default' : 'outline'}
-        size="icon"
-        className="size-[68px] rounded-lg [&_svg:not([class*='size-'])]:size-6"
-        onClick={togglePlayback}
-      >
-        {playing ? <Pause /> : <Play />}
-      </IconButton>
-
-      <FrameSettings projectId={projectId} note={note ?? notes.at(0)} />
+      <div className="flex shrink-0 gap-2" style={{ width: TILT_PANEL_PX - 2 * 8 - 2 }}>
+        <IconButton
+          label={playing ? 'Pause' : 'Play'}
+          variant={playing ? 'default' : 'outline'}
+          size="icon"
+          className="size-auto flex-1 rounded-lg [&_svg:not([class*='size-'])]:size-6"
+          onClick={togglePlayback}
+        >
+          {playing ? <Pause /> : <Play />}
+        </IconButton>
+        <FrameSettings projectId={projectId} note={note ?? notes.at(0)} />
+      </div>
       {note && noteRef && <FrameTrack note={note} noteRef={noteRef} />}
     </Panel>
   )
 }
 
-/** Project-wide playback controls, shared by every banknote. */
+/** One of the small buttons stacked beside Play, sharing the column's height (each with the same border, so the shares match) */
+const STACKED = 'min-h-0 flex-1 rounded-md border border-transparent'
+
+/** Project-wide playback controls, shared by every banknote, stacked in a column beside Play. */
 function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) {
   const tilt = note?.tilt ?? DEFAULT_TILT
   const lens = lensState(tilt, note?.frames)
@@ -90,27 +95,23 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
   const frameNumbers = useTilt((s) => s.frameNumbers)
 
   return (
-    <div className="flex w-[186px] shrink-0 flex-col justify-center gap-1.5">
-      <div className="flex gap-1.5">
-      <Button
-        variant={recording ? 'destructive' : 'outline'}
-        size="sm"
-        className="h-8 min-w-0 flex-1 gap-1.5 px-2 text-xs"
-        title={recording ? 'Cancel recording' : 'Drag on the tilt pad to record a playback move'}
+    <div className="flex w-8 shrink-0 flex-col gap-0.5">
+      <IconButton
+        label={recording ? 'Drag on the tilt pad to record; click to cancel' : 'Record movement'}
+        variant={recording ? 'destructive' : 'ghost'}
+        className={cn(STACKED, 'size-auto')}
         onClick={() => setRecording(!recording)}
       >
-        {recording ? <Square className="size-3 fill-current" /> : <Circle className="size-3 fill-destructive text-destructive" />}
-        {recording ? 'Drag on the pad…' : 'Record movement'}
-      </Button>
+        {recording ? <Square className="size-2.5 fill-current" /> : <Circle className="size-2.5 fill-destructive text-destructive" />}
+      </IconButton>
       <Tooltip>
         <TooltipTrigger
           render={
             <Toggle
-              variant="outline"
               aria-label="Frame numbers on threads"
               pressed={frameNumbers}
               onPressedChange={(on) => setTilt({ frameNumbers: on })}
-              className="size-8 shrink-0 px-0 aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+              className={cn(STACKED, 'h-auto min-w-0 px-0 aria-pressed:bg-primary aria-pressed:text-primary-foreground')}
             />
           }
         >
@@ -118,11 +119,15 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
         </TooltipTrigger>
         <TooltipContent>{frameNumbers ? 'Hide frame numbers on threads' : 'Show frame numbers on threads'}</TooltipContent>
       </Tooltip>
-      </div>
       <Popover>
-        <PopoverTrigger render={<Button variant="outline" size="sm" className="h-8 w-full gap-1.5 text-xs" />}>
-          <SlidersHorizontal className="size-3.5" />Playback settings
-        </PopoverTrigger>
+        <Tooltip>
+          <TooltipTrigger
+            render={<PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Playback settings" className={cn(STACKED, 'size-auto')} />} />}
+          >
+            <SlidersHorizontal className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipContent>Playback settings</TooltipContent>
+        </Tooltip>
         <PopoverContent side="top" align="start" sideOffset={12} className="w-[580px] gap-0 overflow-hidden p-0">
           <PopoverTitle className="border-b px-3 py-2.5 text-sm">Playback settings</PopoverTitle>
           <PlaybackPanel projectId={projectId} tilt={tilt} lens={lens} />

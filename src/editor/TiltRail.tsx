@@ -1,10 +1,9 @@
 import { Lock, LockOpen, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Input } from '@/components/ui/input'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { IconButton, Panel } from '../components/controls'
+import { IconButton, Panel, ScrubField } from '../components/controls'
 import { TILT_LIMIT, clamp } from '../lib/frames'
 import { padToTilt, tiltToPad } from '../lib/pad'
 import type { LensState } from '../lib/lens'
@@ -15,6 +14,8 @@ import { saveTilt } from './playbackActions'
 
 /** Width and height of the pad, in px */
 const PAD_PX = 136
+/** Outer width of the pad's panel (the pad, its p-1.5 padding and border), which the playback bar's controls line up with */
+export const TILT_PANEL_PX = PAD_PX + 2 * 6 + 2
 
 type Axis = 'x' | 'y'
 
@@ -61,14 +62,9 @@ export function TiltRail({ limit = TILT_LIMIT, playback }: {
           setTilt({ source: 'wobble' })
         }}
       />
-      <div className="flex items-end gap-1">
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <AxisRow axis="y" limit={limit} />
-          <AxisRow axis="x" limit={limit} />
-        </div>
-          <IconButton label="Back to flat" size="icon-sm" onClick={() => setTilt({ source: 'hold', target: 0, targetX: 0 })}>
-            <RotateCcw />
-          </IconButton>
+      <div className="flex gap-1" style={{ width: PAD_PX }}>
+        <AxisField axis="y" limit={limit} />
+        <AxisField axis="x" limit={limit} />
       </div>
     </Panel>
   )
@@ -78,68 +74,43 @@ function useShown(axis: Axis) {
   return useTilt((s) => (axis === 'y' ? (s.source === 'hold' ? s.target : s.angle) : (s.source === 'hold' ? s.targetX : s.angleX)))
 }
 
-function AxisRow({ axis, limit }: { axis: Axis; limit: number }) {
+/** One axis's angle as a scrub field, with its lock inside: shown on hover, and always while locked */
+function AxisField({ axis, limit }: { axis: Axis; limit: number }) {
+  const shown = useShown(axis)
   const locked = useTilt((s) => (axis === 'x' ? s.lockX : s.lockY))
   const name = axis === 'y' ? 'up/down' : 'side'
   return (
-    <div className="flex items-center gap-1">
-      <span className="w-3 shrink-0 text-center text-xs text-muted-foreground" title={axis === 'y' ? 'Up/down tilt' : 'Side tilt'}>
-        {axis === 'y' ? '↕' : '↔'}
-      </span>
-      <AngleField axis={axis} limit={limit} />
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Toggle
-              size="sm"
-              aria-label={`Lock ${name} tilt`}
-              pressed={locked}
-              onPressedChange={(on) => setTilt(axis === 'x' ? { lockX: on } : { lockY: on })}
-            />
-          }
-        >
-          {locked ? <Lock /> : <LockOpen className="text-muted-foreground" />}
-        </TooltipTrigger>
-        <TooltipContent>{locked ? `Unlock ${name} tilt` : `Lock ${name} tilt`}</TooltipContent>
-      </Tooltip>
-    </div>
-  )
-}
-
-function AngleField({ axis, limit }: { axis: Axis; limit: number }) {
-  const shown = useShown(axis)
-  const [draft, setDraft] = useState<string | null>(null)
-  const label = axis === 'y' ? 'Up/down tilt angle' : 'Side tilt angle'
-  return (
-    <div className="relative min-w-0 flex-1" title={label}>
-      <Input
-        aria-label={label}
-        type="number"
-        inputMode="decimal"
-        className="h-7 w-full px-0.5 pr-2.5 text-center text-xs tabular-nums [&::-webkit-inner-spin-button]:appearance-none"
-        value={draft ?? String(Math.round(shown))}
-        min={-limit}
-        max={limit}
-        onFocus={(e) => {
-          setDraft(String(Math.round(shown)))
-          e.currentTarget.select()
-        }}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          const value = Number(draft)
-          if (draft !== null && draft !== '' && Number.isFinite(value)) holdAt({ [axis]: value }, limit)
-          setDraft(null)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur()
-          if (e.key === 'Escape') {
-            setDraft(null)
-            e.currentTarget.blur()
-          }
-        }}
-      />
-      <span className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 text-[10px] text-muted-foreground">°</span>
-    </div>
+    <ScrubField
+      size="sm"
+      className="group/axis flex-1"
+      label={axis === 'y' ? '↕' : '↔'}
+      title={axis === 'y' ? 'Up/down tilt' : 'Side tilt'}
+      value={Math.round(shown)}
+      min={-limit}
+      max={limit}
+      unit="°"
+      onChange={(value) => holdAt({ [axis]: value }, limit)}
+      trailing={
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                aria-label={`Lock ${name} tilt`}
+                pressed={locked}
+                onPressedChange={(on) => setTilt(axis === 'x' ? { lockX: on } : { lockY: on })}
+                className={cn(
+                  'mr-0.5 h-5 min-w-5 rounded px-0 aria-pressed:bg-transparent',
+                  !locked && 'opacity-0 group-hover/axis:opacity-100 focus-visible:opacity-100',
+                )}
+              />
+            }
+          >
+            {locked ? <Lock className="size-3" /> : <LockOpen className="size-3 text-muted-foreground" />}
+          </TooltipTrigger>
+          <TooltipContent>{locked ? `Unlock ${name} tilt` : `Lock ${name} tilt`}</TooltipContent>
+        </Tooltip>
+      }
+    />
   )
 }
 
@@ -155,6 +126,8 @@ function Pad({ limit, playback, recording, onRecorded }: {
   const lockX = useTilt((s) => s.lockX)
   const lockY = useTilt((s) => s.lockY)
   const playing = useTilt((s) => s.source === 'wobble')
+  // Back to flat only shows once there is somewhere to go back from; while playing it stays put rather than blink at each pass through flat
+  const offFlat = playing || Math.round(x) !== 0 || Math.round(y) !== 0
   const pad = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
   const half = PAD_PX / 2
@@ -258,6 +231,20 @@ function Pad({ limit, playback, recording, onRecorded }: {
         className="pointer-events-none absolute size-3 -translate-1/2 rounded-full border-2 border-background bg-primary shadow"
         style={{ left: toPx(x), top: toPx(-y) }}
       />
+      {offFlat && (
+        <IconButton
+          label="Back to flat"
+          variant="outline"
+          size="icon-xs"
+          className="absolute top-1 right-1 bg-background/95"
+          // A press here is not a drag on the pad
+          onPointerDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onClick={() => setTilt({ source: 'hold', target: 0, targetX: 0 })}
+        >
+          <RotateCcw />
+        </IconButton>
+      )}
     </div>
   )
 }
