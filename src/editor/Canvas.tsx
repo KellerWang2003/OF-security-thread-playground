@@ -11,7 +11,8 @@ import { playbackPlan } from '../lib/moves'
 import { usePanelWidth } from '../lib/panelWidth'
 import { type Guide, snapBox } from '../lib/snap'
 import { updateNote } from '../lib/store'
-import type { Note } from '../lib/types'
+import type { Note, Watermark } from '../lib/types'
+import { moveWatermark } from '../lib/watermark'
 import { setTilt, springToFlat, useTilt, useTiltLoop } from '../tilt/tilt'
 import { addImageFrames, type NoteRef } from './frameActions'
 import { WatermarkEditor } from './WatermarkEditor'
@@ -42,12 +43,11 @@ interface View {
 type Gesture =
   | { mode: 'pan'; startX: number; startY: number; view: View; onBackground: boolean }
   | { mode: 'move'; noteId: string; startX: number; startY: number; noteX: number; noteY: number }
-  /**
-   * `moved` once the drag passes a few px: a plain click leaves the tilt where it is. A press on a watermark while
-   * it shows clearly (`watermarkOf`) picks its layer if it ends as a click.
-   */
-  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; moved: boolean; watermarkOf?: string }
+  /** `moved` once the drag passes a few px: a plain click leaves the tilt where it is */
+  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; moved: boolean }
   | { mode: 'thread'; noteId: string; startX: number; startY: number; startPosition: number; alongMm: number }
+  /** The watermark moves only once the drag passes a few px, so a click just picks it */
+  | { mode: 'watermark'; noteId: string; startX: number; startY: number; original: Watermark; moved: boolean }
 
 function fitView(notes: Note[], size: { width: number; height: number }): View {
   // A widened right panel takes more room
@@ -74,7 +74,8 @@ function fitView(notes: Note[], size: { width: number; height: number }): View {
 
 /**
  * Every note of the project on one zoomable canvas. Scroll or drag the background to pan, pinch or
- * ⌘/Ctrl-scroll to zoom, drag a note's label to move it and drag the note itself to tilt.
+ * ⌘/Ctrl-scroll to zoom, drag a note's label to move it, its thread or watermark to move that across it,
+ * and the note itself to tilt.
  */
 export function Canvas({
   projectId,
@@ -97,7 +98,7 @@ export function Canvas({
   selectedId: string | undefined
   /** Selects a banknote, keeping the layer shown */
   onSelect: (noteId: string | undefined) => void
-  /** A click on a banknote's thread picks its thread, on its watermark (while it shows clearly) its watermark */
+  /** A press on a banknote's thread or watermark picks that layer */
   onSelectLayer: (noteId: string, layer: Layer) => void
   /** Centres the canvas on a note whenever the token changes */
   focus?: { noteId: string; token: number }
@@ -303,6 +304,7 @@ export function Canvas({
         'relative flex-1 touch-none overflow-hidden select-none',
         dropping ? 'bg-muted' : 'bg-muted/40',
         activeMode === 'pan' && 'cursor-grabbing',
+        activeMode === 'watermark' && 'cursor-move',
       )}
       style={
         current
@@ -329,6 +331,7 @@ export function Canvas({
         const bodyId = noteAt(e.target, 'data-note-body')
         const note = notes.find((n) => n.id === (labelId ?? bodyId))
         const onThread = !labelId && (e.target as HTMLElement).closest('[data-thread]') !== null
+        const onWatermark = !labelId && (e.target as HTMLElement).closest('[data-watermark]') !== null
         if (e.button === 1 || !note) {
           gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, view: v, onBackground: !note }
         } else if (onThread && e.button === 0) {
@@ -342,6 +345,11 @@ export function Canvas({
               : ((e.clientY - rect.top) / rect.height) * note.heightMm
             : -1
           gesture.current = { mode: 'thread', noteId: note.id, startX: e.clientX, startY: e.clientY, startPosition: note.thread.positionMm, alongMm }
+        } else if (onWatermark && e.button === 0 && note.watermark) {
+          // The watermark moves around the banknote, as the thread moves across it. Picking it shows its box, whose
+          // corners resize it.
+          onSelectLayer(note.id, 'watermark')
+          gesture.current = { mode: 'watermark', noteId: note.id, startX: e.clientX, startY: e.clientY, original: note.watermark, moved: false }
         } else if (labelId) {
           onSelect(note.id)
           gesture.current = { mode: 'move', noteId: note.id, startX: e.clientX, startY: e.clientY, noteX: note.x, noteY: note.y }
@@ -350,16 +358,7 @@ export function Canvas({
           const s = useTilt.getState()
           const start = s.source === 'drag' ? s.target : s.angle
           const startSide = s.source === 'drag' ? s.targetX : s.angleX
-          gesture.current = {
-            mode: 'tilt',
-            startX: e.clientX,
-            startY: e.clientY,
-            start,
-            startSide,
-            moved: false,
-            // The watermark only takes clicks while it shows
-            watermarkOf: (e.target as HTMLElement).closest('[data-watermark]') ? note.id : undefined,
-          }
+          gesture.current = { mode: 'tilt', startX: e.clientX, startY: e.clientY, start, startSide, moved: false }
           setTilt({ source: 'drag', target: start, targetX: startSide })
         }
         setActiveMode(gesture.current.mode)
@@ -383,6 +382,15 @@ export function Canvas({
             const half = n.thread.widthMm / 2
             const positionMm = clamp(Math.round((g.startPosition + (horizontal ? dy : dx) / scale) * 2) / 2, half, across - half)
             return positionMm === n.thread.positionMm ? n : { ...n, thread: { ...n.thread, positionMm } }
+          })
+        } else if (g.mode === 'watermark') {
+          if (!g.moved && Math.hypot(dx, dy) < 3) return
+          g.moved = true
+          // From where the press found it, in 0.5 mm steps, kept on the banknote
+          updateNote(projectId, g.noteId, (n) => {
+            if (!n.watermark) return n
+            const next = moveWatermark({ ...n.watermark, xMm: g.original.xMm, yMm: g.original.yMm }, dx / scale, dy / scale, n)
+            return next.xMm === n.watermark.xMm && next.yMm === n.watermark.yMm ? n : { ...n, watermark: next }
           })
         } else if (g.mode === 'move') {
           const round = (mm: number) => Math.round(mm * 2) / 2
@@ -425,8 +433,6 @@ export function Canvas({
             : undefined
           if (note && section) onEditWindow?.(note.id, section.id)
         }
-        // A click on a watermark that shows, without dragging, places it
-        if (g?.mode === 'tilt' && !g.moved && g.watermarkOf) onSelectLayer(g.watermarkOf, 'watermark')
         // A click on empty canvas, without dragging, clears the selection
         if (g?.mode === 'pan' && g.onBackground && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) onSelect(undefined)
         endGesture()

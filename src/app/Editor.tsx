@@ -36,8 +36,8 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   // Window editing has no mode of its own: it starts when a window is picked (on the canvas or in the panel,
   // or by turning windows on) and ends on a click elsewhere on the banknote, on the canvas, or with Escape
   const editingWindows = editingNoteId !== undefined && editingNoteId === selectedId && shownLayer === 'thread'
-  // Placing the watermark works the same way: it starts when the watermark is picked (its layer, on the canvas
-  // while it shows clearly, adding it or uploading its image) and shows the banknote flat with it clear until it ends
+  // Placing the watermark works the same way: it starts when the watermark is picked (its layer, a press on it on
+  // the canvas, adding it or uploading its image) and shows the banknote flat with it clear until it ends
   const placingWatermark = placingNoteId !== undefined && placingNoteId === selectedId && shownLayer === 'watermark'
   const exitWindows = () => {
     setEditingNoteId(undefined)

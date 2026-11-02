@@ -110,8 +110,7 @@ function tiltStyle(angle: number, angleX: number, blend: number, depth: number, 
     'shade-left': { opacity: share(-tx) },
     sheen: { transform: `translateY(${t * 120}%)` },
     blend: { opacity: blend },
-    // Clicking the watermark picks it only while it shows clearly, not while it is faint
-    watermark: { opacity: watermarkOpacity(depth, reveal), pointerEvents: reveal >= 0.5 ? 'auto' : 'none' },
+    watermark: { opacity: watermarkOpacity(depth, reveal) },
   }
   return { rotate: angleX ? `rotateX(${angle}deg) rotateY(${angleX}deg)` : `rotateX(${angle}deg)`, parts }
 }
@@ -230,7 +229,8 @@ export function NoteView({
       {watermarkBox && watermark?.imageId && (
         // Thinner and thicker paper, hard-light blended over the design so it shows in the note's own colours: mid-grey
         // leaves them as they are, lighter lightens them and darker darkens them. The thread lies over it, unchanged.
-        <div data-watermark={note.id} className="absolute"
+        // On the canvas it takes a press, faint or clear, so it drags as the thread does; not with no depth to show.
+        <div data-watermark={note.id} className={cn('absolute', live && depth > 0 ? 'cursor-move' : 'pointer-events-none')}
           {...part('watermark', { ...watermarkBox, backgroundImage: relief && `url(${relief})`, backgroundSize: '100% 100%', mixBlendMode: 'hard-light' })} />
       )}
 

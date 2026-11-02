@@ -390,18 +390,39 @@ describe('username workspace editor', () => {
     await user.keyboard('l')
     expect(useTilt.getState().backlit).toBe(true)
 
-    // Once it has an image, held to the light, a click on the watermark places it again
+    // Once it has an image, the watermark drags on the banknote as the thread does: a press picks it, with its box and
+    // corners, and a drag moves it in 0.5 mm steps instead of tilting the banknote
     const demo = useProjects.getState().demoPreview!
     act(() => updateNote(demo.id, demo.notes[0].id, (n) => ({ ...n, watermark: { ...n.watermark!, imageId: 'fixture-watermark' } })))
-    act(() => setTilt({ light: 1 }))
-    const hit = document.querySelector('[data-note-body] [data-watermark]')!
-    fireEvent.pointerDown(hit, { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
-    fireEvent.pointerUp(hit, { button: 0, pointerId: 1, clientX: 100, clientY: 100 })
+    const hit = () => document.querySelector('[data-note-body] [data-watermark]')!
+    const tilt = () => ({ y: useTilt.getState().target, x: useTilt.getState().targetX })
+    const start = watermark()!
+    const tiltBefore = tilt()
+    fireEvent.pointerDown(hit(), { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
+    expect(placing()).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Resize watermark from its bottom-right corner' })).toBeDefined()
+    // A wobble doesn't move it
+    fireEvent.pointerMove(hit(), { buttons: 1, pointerId: 1, clientX: 101, clientY: 101 })
+    expect(watermark()).toEqual(start)
+    fireEvent.pointerMove(hit(), { buttons: 1, pointerId: 1, clientX: 140, clientY: 100 })
+    const moved = watermark()!
+    expect(moved.xMm).toBeGreaterThan(start.xMm)
+    expect(moved.xMm % 0.5).toBe(0)
+    expect(moved.yMm).toBe(start.yMm)
+    expect(moved.widthMm).toBe(start.widthMm)
+    fireEvent.pointerUp(hit(), { button: 0, pointerId: 1, clientX: 140, clientY: 100 })
+    expect(tilt()).toEqual(tiltBefore)
     expect(placing()).not.toBeNull()
     // A click elsewhere on the banknote ends placing
     fireEvent.pointerDown(document.querySelector('[data-note-body]')!, { button: 0, buttons: 1, pointerId: 1, clientX: 5, clientY: 5 })
     fireEvent.pointerUp(document.querySelector('[data-note-body]')!, { button: 0, pointerId: 1, clientX: 5, clientY: 5 })
     expect(placing()).toBeNull()
+    // A click on it picks it again without moving it
+    fireEvent.pointerDown(hit(), { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerUp(hit(), { button: 0, pointerId: 1, clientX: 100, clientY: 100 })
+    expect(placing()).not.toBeNull()
+    expect(watermark()).toEqual(moved)
+    fireEvent.keyDown(window, { key: 'Escape' })
 
     // The lamp on the pad switches it off again
     await user.click(screen.getByRole('button', { name: 'Hold up to the light' }))

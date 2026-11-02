@@ -97,15 +97,20 @@ describe("a NoteView's watermark", () => {
     expect(renders).toBe(before)
   })
 
-  it('can be clicked only while it shows clearly', () => {
-    const { container } = render(<NoteView note={withWatermark()} scale={2} live />)
-    expect(mark(container).style.pointerEvents).toBe('none')
+  it('takes a press on the canvas, faint or clear, but not in a thumbnail or with no depth', () => {
+    const grabbable = (container: HTMLElement) =>
+      !mark(container).classList.contains('pointer-events-none') && mark(container).style.pointerEvents === ''
+    const { container, rerender } = render(<NoteView note={withWatermark()} scale={2} live />)
+    expect(grabbable(container)).toBe(true)
+    expect(mark(container).classList.contains('cursor-move')).toBe(true)
     act(() => setTilt({ angle: 20 }))
-    expect(mark(container).style.pointerEvents).toBe('auto')
+    expect(grabbable(container)).toBe(true)
     act(() => setTilt({ angle: 0, light: 1 }))
-    expect(mark(container).style.pointerEvents).toBe('auto')
-    act(() => setTilt({ light: 0.3 }))
-    expect(mark(container).style.pointerEvents).toBe('none')
+    expect(grabbable(container)).toBe(true)
+    rerender(<NoteView note={withWatermark()} scale={2} />)
+    expect(grabbable(container)).toBe(false)
+    rerender(<NoteView note={{ ...withWatermark(), watermark: { ...withWatermark().watermark, depth: 0 } }} scale={2} live />)
+    expect(grabbable(container)).toBe(false)
   })
 
   it('takes a fixed reveal from its props; a still note shows it as at its own tilt in reflected light', () => {
