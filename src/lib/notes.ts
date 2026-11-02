@@ -1,3 +1,4 @@
+import { defaultPattern, migratePattern } from './pattern'
 import { DEFAULT_PLAYBACK, playbackSettings } from './playback'
 import { migrateWindows, threadLength } from './thread'
 import type { Frame, Note, Project, TiltSettings } from './types'
@@ -59,6 +60,7 @@ export function createNote({
     thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, imageGapMm: 0, windows: migrateWindows(undefined, heightMm) },
     frames: [colorFrame(0), colorFrame(1)],
     tilt: DEFAULT_TILT,
+    pattern: defaultPattern(),
   }
 }
 
@@ -139,6 +141,8 @@ export function migrateProject(raw: unknown): Project {
         imageGapMm: Math.max(0, raw.thread.imageGapMm ?? 0),
         windows: migrateWindows(raw.thread.windows, threadLength({ ...raw, thread: { direction: raw.thread.direction ?? 'vertical' } })),
       },
+      // Banknotes from before patterns are one section over the whole thread with their own lens, drawn as before
+      pattern: migratePattern(raw.pattern),
     }
     placed.push(Number.isFinite(n.x) && Number.isFinite(n.y) ? n : { ...n, ...nextNotePosition(placed) })
   }

@@ -2,6 +2,7 @@ import { recordEdit, historyStep, reconcileHistory, resetHistory } from './histo
 import { useWorkspace, putProject, editorProject } from '../cloud/workspace'
 import { copyImage, removeImage } from './images'
 import { nextNotePosition } from './notes'
+import { remapTracks } from './pattern'
 import type { Note, Project } from './types'
 
 const noteImageIds = (note: Note) => [note.faceImageId, ...note.frames.map((f) => f.imageId)].filter((i) => i !== undefined)
@@ -16,7 +17,9 @@ async function copyNote(note: Note): Promise<Note> {
     })),
   )
   const faceImageId = note.faceImageId ? await copyImage(note.faceImageId) : undefined
-  return { ...note, id: crypto.randomUUID(), faceImageId, frames }
+  // Section tracks name frames by id, so they follow the frames to their new ids
+  const pattern = remapTracks(note.pattern, new Map(note.frames.map((f, i) => [f.id, frames[i].id])))
+  return { ...note, id: crypto.randomUUID(), faceImageId, frames, ...(pattern ? { pattern } : {}) }
 }
 
 // Keep the editor's existing actions while the cloud workspace owns persistence.
