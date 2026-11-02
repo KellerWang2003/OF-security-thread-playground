@@ -420,20 +420,16 @@ function FramesRow({ axis, note, lens }: { axis: Axis; note: Note; lens: LensSta
 }
 
 const MAP_RES = 72
-/** A press that moves less than this (px) is a click, which flips between the tilt map and the print */
-const CLICK_SLOP = 3
 
 /**
  * Side tilt across, up/down tilt down (up at the top), each to the viewing range, coloured by the frame that
- * shows. The bands run along the ridges. Drag to tilt every banknote; click to flip to the print (the thread's
- * frames woven under the ridges, `PrintCanvas`) and back.
+ * shows, with a dot at the current tilt. The bands run along the ridges. Only a picture: clicking swaps it for the
+ * print (the thread's frames woven under the ridges, `PrintCanvas`) and back.
  */
 function TiltMap({ note, lens }: { note: Note; lens: LensState }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const box = useRef<HTMLDivElement>(null)
-  const press = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const range = lens.viewDeg
-  const [dragging, setDragging] = useState(false)
   const print = usePrintView((s) => s.on)
   const ridges = usePrintView((s) => s.ridges)
   const size = useElementSize(box)
@@ -457,53 +453,22 @@ function TiltMap({ note, lens }: { note: Note; lens: LensState }) {
     }
   }, [frames, tilt, range])
 
-  const tiltAt = (clientX: number, clientY: number) => {
-    const rect = box.current?.getBoundingClientRect()
-    if (!rect) return
-    const x = clamp(((clientX - rect.left) / rect.width) * 2 * range - range, -range, range)
-    const y = clamp(range - ((clientY - rect.top) / rect.height) * 2 * range, -range, range)
-    setTilt({ source: 'hold', target: respondsTo(lens, 'y') ? Math.round(y) : 0, targetX: respondsTo(lens, 'x') ? Math.round(x) : 0 })
-  }
   const flip = () => setPrintView({ on: !print })
-  const release = () => {
-    press.current = null
-    setDragging(false)
-  }
 
   return (
     <div className="flex flex-col gap-2">
       <Explain caption={print
         ? 'The print, magnified: every frame cut into strips under the ridges. The lit strips show at this tilt. Click for the tilt map.'
-        : 'Which frame shows at each tilt. Drag to tilt; click to see the print.'}>
+        : 'Which frame shows at each tilt. Click to see the print.'}>
         <div
           ref={box}
           role="button"
           tabIndex={0}
           aria-label={print ? 'Print' : 'Tilt map'}
           aria-pressed={print}
-          className={cn('relative aspect-square w-full touch-none overflow-hidden rounded-md border border-border/60 outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50',
-            print && 'bg-muted/60', dragging ? 'cursor-grabbing' : 'cursor-crosshair')}
-          onPointerDown={(e) => {
-            if (e.button !== 0) return
-            e.currentTarget.setPointerCapture(e.pointerId)
-            press.current = { x: e.clientX, y: e.clientY, moved: false }
-          }}
-          onPointerMove={(e) => {
-            const p = press.current
-            if (!p || !e.buttons) return
-            if (!p.moved) {
-              if (Math.hypot(e.clientX - p.x, e.clientY - p.y) < CLICK_SLOP) return
-              p.moved = true
-              setDragging(true)
-            }
-            tiltAt(e.clientX, e.clientY)
-          }}
-          onPointerUp={() => {
-            if (press.current && !press.current.moved) flip()
-            release()
-          }}
-          onPointerCancel={release}
-          onLostPointerCapture={release}
+          className={cn('relative aspect-square w-full cursor-pointer overflow-hidden rounded-md border border-border/60 outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50',
+            print && 'bg-muted/60')}
+          onClick={flip}
           onKeyDown={(e) => {
             if (e.key !== 'Enter' && e.key !== ' ') return
             e.preventDefault()
