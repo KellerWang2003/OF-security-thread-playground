@@ -103,6 +103,22 @@ export interface PlaybackMove {
   recordingId?: string
 }
 
+/**
+ * A watermark made in the paper: an image that shows only when the banknote is held to the light. Light parts of
+ * the image are thinner paper (brighter), dark parts thicker (darker); its background counts as plain paper.
+ * Placed by its top-left corner in mm from the banknote's top-left; its height follows the image's proportions.
+ */
+export interface Watermark {
+  /** Absent until an image is uploaded */
+  imageId?: string
+  xMm: number
+  yMm: number
+  widthMm: number
+  heightMm: number
+  /** How strongly the paper's thickness shows when backlit, 0 to 1 */
+  depth: number
+}
+
 /** One banknote in a project, with its own size, thread and frames */
 export interface Note {
   id: string
@@ -119,6 +135,8 @@ export interface Note {
   thread: ThreadSettings
   frames: Frame[]
   tilt: TiltSettings
+  /** A sibling of the thread; absent until one is added */
+  watermark?: Watermark
 }
 
 export interface Project {

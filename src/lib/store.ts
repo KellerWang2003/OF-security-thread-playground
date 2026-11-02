@@ -4,7 +4,8 @@ import { copyImage, removeImage } from './images'
 import { nextNotePosition } from './notes'
 import type { Note, Project } from './types'
 
-const noteImageIds = (note: Note) => [note.faceImageId, ...note.frames.map((f) => f.imageId)].filter((i) => i !== undefined)
+const noteImageIds = (note: Note) =>
+  [note.faceImageId, note.watermark?.imageId, ...note.frames.map((f) => f.imageId)].filter((i) => i !== undefined)
 
 /** A copy of a note with fresh ids and its own copies of the images, so deleting one never breaks the other */
 async function copyNote(note: Note): Promise<Note> {
@@ -16,7 +17,9 @@ async function copyNote(note: Note): Promise<Note> {
     })),
   )
   const faceImageId = note.faceImageId ? await copyImage(note.faceImageId) : undefined
-  return { ...note, id: crypto.randomUUID(), faceImageId, frames }
+  // The watermark is part of the banknote's design, so a copy keeps it, with its own image
+  const watermark = note.watermark?.imageId ? { ...note.watermark, imageId: await copyImage(note.watermark.imageId) } : note.watermark
+  return { ...note, id: crypto.randomUUID(), faceImageId, frames, ...(watermark ? { watermark } : {}) }
 }
 
 // Keep the editor's existing actions while the cloud workspace owns persistence.

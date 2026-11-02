@@ -69,6 +69,7 @@ describe('username workspace editor', () => {
     render(<TooltipProvider><App /></TooltipProvider>)
     await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
     await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
     const row = (n: number) => screen.getByRole('button', { name: new RegExp(`^Window ${n},`) })
     expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
     await user.click(row(2))
@@ -137,6 +138,8 @@ describe('username workspace editor', () => {
     await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
     await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
     await user.click(screen.getByRole('button', { name: 'Duplicate', exact: true }))
+    // The copy is selected, its layers open under it
+    await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
     const before = useProjects.getState().demoPreview!.notes.map((n) => n.tilt.cycleDeg)
     const cycle = screen.getByText('Cycle', { exact: true }).closest('label, div')!.querySelector('input')!
     fireEvent.change(cycle, { target: { value: '47' } })

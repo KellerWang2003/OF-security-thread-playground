@@ -7,13 +7,16 @@ import { IconButton } from '../components/controls'
 import { NoteView } from '../components/NoteView'
 import { clamp } from '../lib/frames'
 import { lensState } from '../lib/lens'
+import { BACKLIT, backlightAt } from '../lib/light'
 import { playbackPlan } from '../lib/moves'
 import { usePanelWidth } from '../lib/panelWidth'
 import { type Guide, snapBox } from '../lib/snap'
 import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
 import { setTilt, springToFlat, useTilt, useTiltLoop } from '../tilt/tilt'
-import { addImageFrames } from './frameActions'
+import { addImageFrames, type NoteRef } from './frameActions'
+import { WatermarkEditor } from './WatermarkEditor'
+import { updateWatermark, type Layer } from './watermarkActions'
 import { WindowEditor } from './WindowEditor'
 import { useElementSize } from './useElementSize'
 
@@ -40,8 +43,11 @@ interface View {
 type Gesture =
   | { mode: 'pan'; startX: number; startY: number; view: View; onBackground: boolean }
   | { mode: 'move'; noteId: string; startX: number; startY: number; noteX: number; noteY: number }
-  /** `moved` once the drag passes a few px: a plain click leaves the tilt where it is */
-  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; moved: boolean }
+  /**
+   * `moved` once the drag passes a few px: a plain click leaves the tilt where it is. A press on a watermark that
+   * shows (`watermarkOf`) places it if it ends as a click.
+   */
+  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; moved: boolean; watermarkOf?: string }
   | { mode: 'thread'; noteId: string; startX: number; startY: number; startPosition: number; alongMm: number }
 
 function fitView(notes: Note[], size: { width: number; height: number }): View {
@@ -76,24 +82,33 @@ export function Canvas({
   notes,
   selectedId,
   onSelect,
+  onSelectLayer,
   focus,
   editingWindows = false,
   selectedWindowId,
   onWindowSelect,
   onExitWindows,
+  placingWatermark = false,
+  onExitPlacing,
   onExport,
   onEditWindow,
 }: {
   projectId: string
   notes: Note[]
   selectedId: string | undefined
+  /** Selects a banknote, keeping the layer shown */
   onSelect: (noteId: string | undefined) => void
+  /** A click on a banknote's thread picks its thread, on its watermark (while it shows) its watermark */
+  onSelectLayer: (noteId: string, layer: Layer) => void
   /** Centres the canvas on a note whenever the token changes */
   focus?: { noteId: string; token: number }
   editingWindows?: boolean
   selectedWindowId?: string
   onWindowSelect: (id: string | undefined) => void
   onExitWindows?: () => void
+  /** The selected banknote shows flat and backlit, with its watermark's box to drag */
+  placingWatermark?: boolean
+  onExitPlacing?: () => void
   onExport: () => void
   /** A click on a thread window opens it for editing */
   onEditWindow?: (noteId: string, windowId: string) => void
@@ -251,12 +266,31 @@ export function Canvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus?.token])
 
-  // Editing windows pauses playback but leaves the view where it is, so you edit at the zoom you chose
+  // Editing windows or placing the watermark pauses playback but leaves the view where it is, so you edit at the zoom you chose
   useEffect(() => {
-    if (!editingWindows || !selected) return
+    if (!(editingWindows || placingWatermark) || !selected) return
     setTilt({ source: 'slider', target: useTilt.getState().angle, targetX: useTilt.getState().angleX })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingWindows, selectedId])
+  }, [editingWindows, placingWatermark, selectedId])
+
+  // Held to the light, the room around the banknotes darkens so the glow reads as light coming through. It follows
+  // the light and tilt every animation frame, written straight onto the element like the banknotes' shading. As the
+  // room darkens, light text starts to read better than dark: grey labels turn light once it is a third dark
+  // (data-dim), black ones once it is half dark (data-dark).
+  const scrim = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const dim = (s: { light: number; angle: number; angleX: number }) => {
+      if (!scrim.current) return
+      const opacity = BACKLIT.scrim * backlightAt(s.light, { x: s.angleX, y: s.angle })
+      scrim.current.style.opacity = String(opacity)
+      scrim.current.parentElement?.toggleAttribute('data-dim', opacity > 1 / 3)
+      scrim.current.parentElement?.toggleAttribute('data-dark', opacity > 0.5)
+    }
+    dim(useTilt.getState())
+    return useTilt.subscribe((s, previous) => {
+      if (s.light !== previous.light || s.angle !== previous.angle || s.angleX !== previous.angleX) dim(s)
+    })
+  }, [])
 
   // Every way a gesture can end comes through here, so a tilt drag always springs back the same way
   const endGesture = () => {
@@ -303,8 +337,9 @@ export function Canvas({
         const v = viewRef.current
         // Only the left and middle buttons drag; a right-click's menu would swallow the release
         if (!v || e.button > 1) return
-        // A click on the banknote outside the thread's windows ends window editing and tilts as usual
+        // A click on the banknote outside the thread's windows (or the watermark's box) ends editing and tilts as usual
         if (editingWindows && noteAt(e.target, 'data-note-body') === selectedId) onExitWindows?.()
+        if (placingWatermark && noteAt(e.target, 'data-note-body') === selectedId) onExitPlacing?.()
         // Freeze the fitted view, or moving a note would refit the canvas under the pointer. A live pan or
         // zoom is committed first, so drags measure in the scale on screen.
         if (live.current) commitView()
@@ -318,7 +353,7 @@ export function Canvas({
           gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, view: v, onBackground: !note }
         } else if (onThread && e.button === 0) {
           // The thread moves across the banknote, along the axis its position is measured on
-          onSelect(note.id)
+          onSelectLayer(note.id, 'thread')
           const rect = (e.target as HTMLElement).closest('[data-note-body]')?.firstElementChild?.getBoundingClientRect()
           const horizontal = note.thread.direction === 'horizontal'
           const alongMm = rect
@@ -342,6 +377,8 @@ export function Canvas({
             start,
             startSide,
             moved: false,
+            // The watermark only takes clicks while it shows
+            watermarkOf: (e.target as HTMLElement).closest('[data-watermark]') ? note.id : undefined,
           }
           setTilt({ source: 'drag', target: start, targetX: startSide })
         }
@@ -408,6 +445,8 @@ export function Canvas({
             : undefined
           if (note && section) onEditWindow?.(note.id, section.id)
         }
+        // A click on a watermark that shows, without dragging, places it
+        if (g?.mode === 'tilt' && !g.moved && g.watermarkOf) onSelectLayer(g.watermarkOf, 'watermark')
         // A click on empty canvas, without dragging, clears the selection
         if (g?.mode === 'pan' && g.onBackground && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) onSelect(undefined)
         endGesture()
@@ -424,15 +463,20 @@ export function Canvas({
         setDropping(false)
         const noteId = noteAt(e.target, 'data-note-body') ?? noteAt(e.target, 'data-note-label') ?? selectedId
         if (!noteId) return
-        onSelect(noteId)
+        // Dropped images become the thread's frames
+        onSelectLayer(noteId, 'thread')
         runAction(addImageFrames({ projectId, noteId }, Array.from(e.dataTransfer.files)))
       }}
     >
+      <div ref={scrim} aria-hidden="true" data-backlit-scrim="" className="pointer-events-none absolute inset-0 bg-black opacity-0" />
       {/* Everything drawn in canvas space, so a live pan or zoom can move it as one layer */}
       <div ref={content} className="absolute top-0 left-0 origin-top-left">
       {current &&
         notes.map((note) => {
           const isSelected = note.id === selectedId
+          const editingThis = isSelected && editingWindows
+          const placingThis = isSelected && placingWatermark && note.watermark !== undefined
+          const ref: NoteRef = { projectId, noteId: note.id }
           return (
             <div
               key={note.id}
@@ -446,8 +490,10 @@ export function Canvas({
                   'cursor-move',
                 )}
               >
-                <span className={cn('font-medium', isSelected ? 'text-foreground' : 'text-muted-foreground')}>{note.name}</span>
-                <span className="text-muted-foreground/70 tabular-nums">
+                <span className={cn('font-medium', isSelected ? 'text-foreground in-data-dark:text-white' : 'text-muted-foreground in-data-dim:text-white/80')}>
+                  {note.name}
+                </span>
+                <span className="text-muted-foreground/70 tabular-nums in-data-dim:text-white/65">
                   {note.widthMm} × {note.heightMm} mm
                 </span>
               </div>
@@ -459,10 +505,17 @@ export function Canvas({
                 className={cn(
                   'outline-offset-4 transition-[outline-color] duration-150 cursor-ns-resize',
                   isSelected ? 'outline-2' : 'outline-0',
-                  source === 'wobble' || activeMode === 'tilt' || activeMode === 'move' ? 'outline-primary/5' : 'outline-primary/25',
+                  source === 'wobble' || activeMode === 'tilt' || activeMode === 'move'
+                    ? 'outline-primary/5 in-data-dim:outline-white/10'
+                    : 'outline-primary/25 in-data-dim:outline-white/45',
                 )}
               >
-                <NoteView note={note} scale={scale} live perspective={perspective && !(isSelected && editingWindows)} sheen={sheen} showWindowCuts={isSelected && editingWindows} showFrameNumber={frameNumbers} />
+                {/* Editing windows shows the banknote flat in reflected light; placing the watermark, flat and backlit */}
+                <NoteView note={note} scale={scale} live perspective={perspective && !editingThis && !placingThis} sheen={sheen}
+                  backlight={editingThis ? 0 : placingThis ? 1 : undefined} showWindowCuts={editingThis} showFrameNumber={frameNumbers} />
+                {placingThis && (
+                  <WatermarkEditor note={note} watermark={note.watermark!} scale={scale} onChange={(next) => updateWatermark(ref, () => next)} />
+                )}
                 {isSelected && editingWindows && note.thread.windows.enabled && (
                   <WindowEditor note={note} scale={scale} selectedId={selectedWindowId} onSelect={onWindowSelect}
                     onChange={(sections) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, windows: { ...n.thread.windows, sections } } }))} />

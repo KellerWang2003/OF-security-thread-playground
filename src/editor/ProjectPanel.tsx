@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronLeft, Copy, Plus, Redo2, Trash2, Undo2 } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronDown, ChevronLeft, ChevronRight, Columns2, Copy, Droplet, Plus, Redo2, Rows2, Trash2, Undo2 } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,7 +11,9 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
@@ -21,23 +23,35 @@ import { NoteView } from '../components/NoteView'
 import { duplicateNote, removeNote, updateNote, updateProject, undoProject, redoProject } from '../lib/store'
 import { useHistory } from '../lib/history'
 import type { Note, Project } from '../lib/types'
+import type { Layer } from './watermarkActions'
 
 const THUMB = 28
 
-/** Top-left: back to the projects, the project's name, and its notes as a collapsible list */
+/**
+ * Top-left: back to the projects, the project's name, and its banknotes as a collapsible list. Each banknote opens
+ * to its layers (Security thread, Watermark once added); the selected one opens by itself.
+ */
 export function ProjectPanel({
   project,
   isDemo = false,
   selectedId,
+  layer,
   onSelect,
   onAdd,
+  onAddWatermark,
+  onRemoveWatermark,
   aboveTilt = false,
 }: {
   project: Project
   isDemo?: boolean
   selectedId: string | undefined
-  onSelect: (noteId: string) => void
+  /** The selected banknote's layer the right panel shows */
+  layer: Layer
+  /** A banknote row picks the banknote itself ('note'), a layer row that layer; no layer keeps the one shown */
+  onSelect: (noteId: string, layer?: Layer) => void
   onAdd: () => void
+  onAddWatermark: (noteId: string) => void
+  onRemoveWatermark: (noteId: string) => void
   /** The tilt pad sits under the panel, bottom left, so the list stops short of it */
   aboveTilt?: boolean
 }) {
@@ -45,6 +59,10 @@ export function ProjectPanel({
   const [open, setOpen] = useState(true)
   const [renaming, setRenaming] = useState<string>()
   const [deleting, setDeleting] = useState<Note>()
+  // Banknotes opened or closed by their chevron; picking another banknote goes back to only the selected one open
+  const [toggled, setToggled] = useState<{ selection?: string; open: Record<string, boolean> }>({ open: {} })
+  const overrides = toggled.selection === selectedId ? toggled.open : {}
+  const isOpen = (id: string) => overrides[id] ?? id === selectedId
 
   return (
     <Panel className={cn('absolute top-3 left-3 flex w-[248px]', aboveTilt ? 'max-h-[calc(100%-312px)] min-h-12' : 'max-h-[calc(100%-120px)]', 'flex-col rounded-[calc(var(--radius)+0.375rem+1px)]')}>
@@ -88,15 +106,22 @@ export function ProjectPanel({
         </div>
         <CollapsibleContent className="min-h-0 overflow-y-auto">
           <ul className="flex flex-col gap-0.5 px-1.5 pb-1.5">
-            {project.notes.map((note) => (
-              <li key={note.id} className="group relative">
+            {project.notes.map((note) => {
+              const selected = note.id === selectedId
+              const expanded = isOpen(note.id)
+              // Nothing more to add once a banknote has every kind of layer
+              const canAdd = !note.watermark
+              return (
+              <li key={note.id}>
+                <div className="group relative">
                 <button
                   type="button"
-                  onClick={() => onSelect(note.id)}
+                  onClick={() => onSelect(note.id, 'note')}
                   onDoubleClick={() => setRenaming(note.id)}
                   className={cn(
-                    'flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors group-hover:pr-14',
-                    note.id === selectedId ? 'bg-muted' : 'hover:bg-muted/50',
+                    'flex w-full items-center gap-2 rounded-lg py-1 pr-1.5 pl-6 text-left transition-colors group-has-[[data-popup-open]]:pr-20',
+                    canAdd ? 'group-hover:pr-20' : 'group-hover:pr-14',
+                    selected && layer === 'note' ? 'bg-muted' : 'hover:bg-muted/50',
                   )}
                 >
                   <span className="flex size-7 shrink-0 items-center justify-center">
@@ -120,11 +145,36 @@ export function ProjectPanel({
                       }}
                     />
                   ) : (
-                    <span className="min-w-0 flex-1 truncate text-sm">{note.name}</span>
+                    <span className={cn('min-w-0 flex-1 truncate text-sm', selected && 'font-medium')}>{note.name}</span>
                   )}
                 </button>
+                <button
+                  type="button"
+                  aria-label={expanded ? `Hide layers of ${note.name}` : `Show layers of ${note.name}`}
+                  aria-expanded={expanded}
+                  onClick={() => setToggled({ selection: selectedId, open: { ...overrides, [note.id]: !expanded } })}
+                  className="absolute top-1/2 left-1 flex size-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronRight className={cn('size-3.5 transition-transform', expanded && 'rotate-90')} />
+                </button>
                 {renaming !== note.id && (
-                  <div className="absolute inset-y-0 right-1 hidden items-center group-hover:flex">
+                  <div className="absolute inset-y-0 right-1 hidden items-center group-hover:flex has-[[data-popup-open]]:flex">
+                    {canAdd && (
+                      <DropdownMenu>
+                        <Tooltip>
+                          <TooltipTrigger render={<DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Add layer" />} />}>
+                            <Plus />
+                          </TooltipTrigger>
+                          <TooltipContent>Add layer</TooltipContent>
+                        </Tooltip>
+                        <DropdownMenuContent className="w-40" align="start">
+                          <DropdownMenuItem onClick={() => onAddWatermark(note.id)}>
+                            <Droplet />
+                            Watermark
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                     <IconButton
                       label="Duplicate"
                       size="icon-xs"
@@ -142,8 +192,29 @@ export function ProjectPanel({
                     </IconButton>
                   </div>
                 )}
+                </div>
+                {expanded && (
+                  <ul aria-label={`Layers of ${note.name}`} className="flex flex-col gap-0.5 pt-0.5">
+                    <LayerRow
+                      icon={note.thread.direction === 'vertical' ? <Columns2 /> : <Rows2 />}
+                      name="Security thread"
+                      selected={selected && layer === 'thread'}
+                      onSelect={() => onSelect(note.id, 'thread')}
+                    />
+                    {note.watermark && (
+                      <LayerRow
+                        icon={<Droplet />}
+                        name="Watermark"
+                        selected={selected && layer === 'watermark'}
+                        onSelect={() => onSelect(note.id, 'watermark')}
+                        onRemove={() => onRemoveWatermark(note.id)}
+                      />
+                    )}
+                  </ul>
+                )}
               </li>
-            ))}
+              )
+            })}
           </ul>
         </CollapsibleContent>
       </Collapsible>
@@ -168,5 +239,38 @@ export function ProjectPanel({
         </AlertDialogContent>
       </AlertDialog>
     </Panel>
+  )
+}
+
+/** One part of a banknote, under it in the list */
+function LayerRow({ icon, name, selected, onSelect, onRemove }: {
+  icon: ReactNode
+  name: string
+  selected: boolean
+  onSelect: () => void
+  onRemove?: () => void
+}) {
+  return (
+    <li className="group/layer relative">
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          'flex h-7 w-full items-center gap-2 rounded-lg pr-1.5 pl-[42px] text-left text-xs transition-colors [&_svg]:size-3.5 [&_svg]:shrink-0',
+          onRemove && 'group-hover/layer:pr-8',
+          selected ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+        )}
+      >
+        {icon}
+        <span className="min-w-0 flex-1 truncate">{name}</span>
+      </button>
+      {onRemove && (
+        <div className="absolute inset-y-0 right-1 hidden items-center group-hover/layer:flex">
+          <IconButton label={`Remove ${name.toLowerCase()}`} size="icon-xs" onClick={onRemove}>
+            <Trash2 />
+          </IconButton>
+        </div>
+      )}
+    </li>
   )
 }

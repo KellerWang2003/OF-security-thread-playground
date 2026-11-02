@@ -1,6 +1,7 @@
 import { DEFAULT_PLAYBACK, playbackSettings } from './playback'
 import { migrateWindows, threadLength } from './thread'
 import type { Frame, Note, Project, TiltSettings } from './types'
+import { fitWatermark } from './watermark'
 
 export const MIN_FRAMES = 2
 export const MAX_FRAMES = 5
@@ -110,10 +111,12 @@ export function migrateProject(raw: unknown): Project {
       : []
   // Notes saved before the canvas had no position: lay them out in a row
   const placed: Note[] = []
-  for (const raw of notes) {
+  for (const { watermark, ...raw } of notes) {
     // Older notes had no background mode; an uploaded face meant an image background
     const n: Note = {
       ...raw,
+      // Only notes with a watermark have one; a damaged one is put back on its banknote
+      ...(watermark && typeof watermark === 'object' ? { watermark: fitWatermark(watermark, raw) } : {}),
       background: raw.background ?? (raw.faceImageId ? 'image' : 'solid'),
       // Older frames had degree spans, or split one shared range equally: keep their proportions and cycle
       frames: raw.frames.map((f) => ({ ...f, length: f.length ?? oldLength(raw.frames, f) })),

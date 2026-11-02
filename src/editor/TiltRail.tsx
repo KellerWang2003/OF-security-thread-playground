@@ -1,10 +1,11 @@
-import { Lock, LockOpen, RotateCcw } from 'lucide-react'
+import { Lamp, Lock, LockOpen, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { IconButton, Panel, ScrubField } from '../components/controls'
 import { TILT_LIMIT, clamp } from '../lib/frames'
+import { LIGHT_CONE_DEG, LIGHT_FULL_DEG } from '../lib/light'
 import { padToTilt, tiltToPad } from '../lib/pad'
 import type { LensState } from '../lib/lens'
 import { moveFromRecording, nextRecordingName, planPath, playbackPlan, recordingFromSamples } from '../lib/moves'
@@ -37,7 +38,7 @@ function holdAt(next: { x?: number; y?: number }, limit: number, respectLocks = 
 /**
  * Left edge of the canvas: a pad you press and drag in any direction to tilt every banknote (up/down
  * vertically, side to side horizontally), held where you let go. Each axis has a field for an exact angle
- * and a lock that keeps the pad and canvas drag off it.
+ * and a lock that keeps the pad and canvas drag off it. The lamp in its corner holds every banknote up to the light.
  */
 export function TiltRail({ limit = TILT_LIMIT, playback }: {
   limit?: number
@@ -139,6 +140,11 @@ function Pad({ limit, playback, recording, onRecorded }: {
     // toPx only depends on limit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playback, limit])
+  // The light coming through, and how far the lamp reaches: full near flat, gone past LIGHT_CONE_DEG
+  const light = useTilt((s) => Math.round(s.light * 50) / 50)
+  const backlit = useTilt((s) => s.backlit)
+  const coneFull = toPx(LIGHT_FULL_DEG) - half
+  const coneEdge = toPx(LIGHT_CONE_DEG) - half
 
   // While recording a drag, sample the held tilt every animation frame, so pauses are kept too
   const samples = useRef<{ t: number; x: number; y: number }[] | null>(null)
@@ -218,6 +224,11 @@ function Pad({ limit, playback, recording, onRecorded }: {
         e.preventDefault()
       }}
     >
+      {light > 0 && (
+        // Warm while held to the light, brightest where the lamp is fully behind the banknote
+        <div aria-hidden className="pointer-events-none absolute inset-0" data-light-cone=""
+          style={{ opacity: light, background: `radial-gradient(circle at ${half}px ${half}px, rgb(251 191 36 / 0.55) ${coneFull}px, rgb(251 191 36 / 0) ${coneEdge}px)` }} />
+      )}
       {path && (
         <svg className="pointer-events-none absolute inset-0" width={PAD_PX} height={PAD_PX} aria-hidden>
           <path d={path} fill="none" stroke="var(--primary)" strokeOpacity={playing ? 0.55 : 0.3} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
@@ -231,6 +242,26 @@ function Pad({ limit, playback, recording, onRecorded }: {
         className="pointer-events-none absolute size-3 -translate-1/2 rounded-full border-2 border-background bg-primary shadow"
         style={{ left: toPx(x), top: toPx(-y) }}
       />
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Toggle
+              aria-label="Backlit"
+              variant="outline"
+              size="sm"
+              pressed={backlit}
+              onPressedChange={(on) => setTilt({ backlit: on })}
+              // A press here is not a drag on the pad
+              onPointerDown={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+              className="absolute top-1 left-1 size-6 min-w-6 rounded-[min(var(--radius-md),10px)] bg-background/95 p-0 aria-pressed:border-amber-400 aria-pressed:bg-amber-300 aria-pressed:text-amber-950 aria-pressed:hover:bg-amber-200"
+            />
+          }
+        >
+          <Lamp className="size-3" />
+        </TooltipTrigger>
+        <TooltipContent>{backlit ? 'Back to reflected light (tap L, or hold to peek)' : 'Hold up to the light (tap L, or hold to peek)'}</TooltipContent>
+      </Tooltip>
       {offFlat && (
         <IconButton
           label="Back to flat"

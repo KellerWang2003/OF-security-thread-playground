@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { create } from 'zustand'
 import { TILT_LIMIT, clamp } from '../lib/frames'
+import { LIGHT_RAMP_SECONDS } from '../lib/light'
 import { tiltAt, type PlaybackPlan } from '../lib/moves'
 
 /** drag springs back on release, slider scrubs within one cycle, hold stays at a set angle */
@@ -25,6 +26,12 @@ interface TiltState {
   sheen: boolean
   /** Shows the visible frame's number on each banknote's thread, as a teaching and debugging aid */
   frameNumbers: boolean
+  /** The lamp switch: every banknote held up to the light, until switched off */
+  backlit: boolean
+  /** Holding L: the switch's opposite for as long as the key is down */
+  peek: boolean
+  /** How far the banknotes are held to the light, 0 to 1, as everything renders it: the switch, faded in and out over LIGHT_RAMP_SECONDS */
+  light: number
 }
 
 // Preview state only: it is not part of a project and is not saved
@@ -41,6 +48,9 @@ export const useTilt = create<TiltState>()(() => ({
   sheen: true,
   recording: false,
   frameNumbers: false,
+  backlit: false,
+  peek: false,
+  light: 0,
 }))
 
 export const setTilt = (patch: Partial<TiltState>) => useTilt.setState(patch)
@@ -57,6 +67,29 @@ export function setRecording(on: boolean) {
   setTilt(on ? { recording: true, source: 'hold', target: angle, targetX: angleX } : { recording: false })
 }
 
+/** Where the switch wants the light: on while backlit, the opposite while L is held */
+export const lightTarget = (s: Pick<TiltState, 'backlit' | 'peek'>) => (s.backlit !== s.peek ? 1 : 0)
+
+/** A press of L shorter than this flips the switch; held longer, it only peeks */
+export const LIGHT_TAP_MS = 250
+let pressedAt: number | undefined
+
+/** L goes down: peek at the other light straight away */
+export function pressLight(now = performance.now()) {
+  if (pressedAt !== undefined) return
+  pressedAt = now
+  setTilt({ peek: true })
+}
+
+/** L comes up: a tap flips the switch, a hold just ends the peek. `tap: false` when the release was lost (window blur). */
+export function releaseLight(now = performance.now(), tap = true) {
+  if (pressedAt === undefined) return
+  const flip = tap && now - pressedAt < LIGHT_TAP_MS
+  pressedAt = undefined
+  const { backlit } = useTilt.getState()
+  setTilt({ peek: false, backlit: flip ? !backlit : backlit })
+}
+
 /** Shared by the keyboard shortcut and the playback button. Pause holds the rendered angle. */
 export function togglePlayback() {
   const { source, angle, target, angleX, targetX } = useTilt.getState()
@@ -64,9 +97,13 @@ export function togglePlayback() {
   setTilt({ source: pausing ? 'slider' : 'wobble', target: pausing ? angle : target, targetX: pausing ? angleX : targetX })
 }
 
+/** `value` moved towards `target` by at most `step` */
+const approach = (value: number, target: number, step: number) => (value < target ? Math.min(target, value + step) : Math.max(target, value - step))
+
 /**
  * Manual tilt uses a critically damped spring. Playback follows the project's moves exactly (no spring), from
  * the start each time it begins; a change to the plan while playing keeps the same share of the way through.
+ * The light fades towards the switch at a steady rate.
  */
 export function useTiltLoop(plan: PlaybackPlan, limit = TILT_LIMIT) {
   const current = useRef({ plan, limit })
@@ -86,16 +123,19 @@ export function useTiltLoop(plan: PlaybackPlan, limit = TILT_LIMIT) {
       last = now
       const s = useTilt.getState()
       const { plan, limit } = current.current
+      const fade = dt / LIGHT_RAMP_SECONDS
       if (s.source === 'wobble') {
         if (lastSource === 'wobble' && plan.seconds > 0) share = (share + dt / plan.seconds) % 1
         else share = 0
         const { x: targetX, y: target } = tiltAt(plan, share * plan.seconds)
+        const light = approach(s.light, lightTarget(s), fade)
         velocity = 0
         velocityX = 0
-        if (target !== s.angle || targetX !== s.angleX || target !== s.target || targetX !== s.targetX) {
-          useTilt.setState({ angle: target, target, angleX: targetX, targetX })
+        if (target !== s.angle || targetX !== s.angleX || target !== s.target || targetX !== s.targetX || light !== s.light) {
+          useTilt.setState({ angle: target, target, angleX: targetX, targetX, light })
         }
       } else {
+        const light = approach(s.light, lightTarget(s), fade)
         const range = s.source === 'slider' ? Math.max(limit, Math.abs(s.target), Math.abs(s.targetX)) : limit
         const target = clamp(s.target, -range, range)
         const targetX = clamp(s.targetX, -range, range)
@@ -111,7 +151,7 @@ export function useTiltLoop(plan: PlaybackPlan, limit = TILT_LIMIT) {
           angleX = targetX
           velocityX = 0
         }
-        if (angle !== s.angle || angleX !== s.angleX) useTilt.setState({ angle, angleX })
+        if (angle !== s.angle || angleX !== s.angleX || light !== s.light) useTilt.setState({ angle, angleX, light })
       }
       lastSource = s.source
       raf = requestAnimationFrame(tick)

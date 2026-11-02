@@ -10,20 +10,29 @@ import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
 import { PANEL_WIDTH, savePanelWidth, setPanelWidth, usePanelWidth } from '../lib/panelWidth'
+import { fitWatermark, moveWatermarkTo } from '../lib/watermark'
 import { EffectSection, LensMenu } from './EffectSection'
+import { WatermarkPanel } from './WatermarkPanel'
 import { WindowsCard } from './WindowsCard'
 import { setFaceImage, type NoteRef } from './frameActions'
+import type { Layer } from './watermarkActions'
 
 type Change = (note: Note) => Note
 
-/** Right: the selected note's properties, Figma style */
-export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onExport }: {
+/**
+ * Right: the selected layer of the selected banknote, Figma style: the banknote itself (size, background), its
+ * security thread with the lens effect, or its watermark. One at a time, so the panel never grows with features.
+ */
+export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSelect, onExport, onPlaceWatermark, onRemoveWatermark }: {
   note: Note
   onExport: () => void
   noteRef: NoteRef
+  layer: Layer
   selectedWindowId?: string
   /** Selecting a window edits it on the canvas; undefined leaves window editing */
   onWindowSelect: (id: string | undefined) => void
+  onPlaceWatermark: () => void
+  onRemoveWatermark: () => void
 }) {
   const update = (change: Change) => updateNote(noteRef.projectId, noteRef.noteId, change)
   const { thread } = note
@@ -38,6 +47,7 @@ export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onE
       heightMm,
       thread: { ...n.thread, positionMm: clamp(n.thread.positionMm, 0, acrossOf({ widthMm, heightMm }, n.thread.direction)),
         windows: { ...n.thread.windows, sections: fitSections(n.thread.windows.sections, n.thread.direction === 'vertical' ? heightMm : widthMm) } },
+      ...(n.watermark ? { watermark: fitWatermark(n.watermark, { widthMm, heightMm }) } : {}),
     }))
   // Turning the thread keeps it at the same relative position across the note
   const setDirection = (direction: Note['thread']['direction']) =>
@@ -56,7 +66,8 @@ export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onE
       const flipped = { widthMm: n.heightMm, heightMm: n.widthMm }
       const across = acrossOf(n, n.thread.direction)
       const positionMm = Math.round((n.thread.positionMm / across) * acrossOf(flipped, n.thread.direction) * 2) / 2
-      return { ...n, ...flipped, thread: { ...n.thread, positionMm, windows: { ...n.thread.windows, sections: fitSections(n.thread.windows.sections, n.thread.direction === 'vertical' ? flipped.heightMm : flipped.widthMm) } } }
+      return { ...n, ...flipped, thread: { ...n.thread, positionMm, windows: { ...n.thread.windows, sections: fitSections(n.thread.windows.sections, n.thread.direction === 'vertical' ? flipped.heightMm : flipped.widthMm) } },
+        ...(n.watermark ? { watermark: moveWatermarkTo(n.watermark, n, flipped) } : {}) }
     })
   const portrait = note.heightMm >= note.widthMm
   const background = useImageUrl(note.faceImageId)
@@ -70,6 +81,7 @@ export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onE
         <Button variant="outline" size="sm" onClick={onExport}><Download />Export</Button>
       </div>
 
+      {layer === 'note' && (
       <Group title="Banknote">
       <Section nested>
         <Segmented
@@ -130,7 +142,10 @@ export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onE
         )}
       </Section>
       </Group>
+      )}
 
+      {layer === 'thread' && (
+      <>
       <Group title="Security thread">
       <Section nested>
         <Segmented
@@ -192,6 +207,12 @@ export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onE
       <Group title="Lens effect" action={<LensMenu projectId={noteRef.projectId} note={note} />}>
         <EffectSection projectId={noteRef.projectId} note={note} />
       </Group>
+      </>
+      )}
+
+      {layer === 'watermark' && note.watermark && (
+        <WatermarkPanel note={note} watermark={note.watermark} noteRef={noteRef} onPlace={onPlaceWatermark} onRemove={onRemoveWatermark} />
+      )}
     </Panel>
     </>
   )

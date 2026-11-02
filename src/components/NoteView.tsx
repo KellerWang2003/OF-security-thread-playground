@@ -2,9 +2,11 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 import { cn } from '@/lib/utils'
 import { SHADE_DEG, TILT_LIMIT } from '../lib/frames'
 import { lensMix } from '../lib/lens'
+import { BACKLIT, backlightAt } from '../lib/light'
 import { useImageUrl } from '../lib/images'
 import { imageTiles, threadWindowMask, windowEdges } from '../lib/thread'
 import type { Frame, Note } from '../lib/types'
+import { useRelief } from '../lib/relief'
 import { useTilt } from '../tilt/tilt'
 
 // Height ÷ width of each image, once loaded
@@ -88,15 +90,15 @@ export function FrameThumb({ frame, backgroundColor }: { frame: Frame; backgroun
 /** Light and shade reach full strength at SHADE_DEG; past it (up to TILT_LIMIT) they keep growing */
 const SHADE_MAX = TILT_LIMIT / SHADE_DEG
 
-type TiltPart = 'shade-up' | 'shade-down' | 'shade-left' | 'shade-right' | 'sheen' | 'blend'
+type TiltPart = 'shade-up' | 'shade-down' | 'shade-left' | 'shade-right' | 'sheen' | 'blend' | 'backlit' | 'unlit' | 'watermark-hit'
 
 /**
  * Everything about a tilt that changes continuously: the 3D turn, the light and shade overlays' opacity,
- * where the sheen sits and the fade between two frames. All of it is transform or opacity, which the GPU
- * animates without repainting. Live notes write these straight onto their elements every animation frame
- * instead of re-rendering React.
+ * where the sheen sits, the fade between two frames and how much light comes through from behind (`glow`). All
+ * of it is transform or opacity, which the GPU animates without repainting. Live notes write these straight onto
+ * their elements every animation frame instead of re-rendering React.
  */
-function tiltStyle(angle: number, angleX: number, blend: number) {
+function tiltStyle(angle: number, angleX: number, blend: number, glow: number) {
   const t = angle / SHADE_DEG
   const tx = angleX / SHADE_DEG
   const share = (v: number) => Math.min(Math.max(v, 0) / SHADE_MAX, 1)
@@ -107,6 +109,10 @@ function tiltStyle(angle: number, angleX: number, blend: number) {
     'shade-left': { opacity: share(-tx) },
     sheen: { transform: `translateY(${t * 120}%)` },
     blend: { opacity: blend },
+    backlit: { opacity: glow },
+    unlit: { opacity: 1 - glow },
+    // The watermark can be clicked only while it shows
+    'watermark-hit': { pointerEvents: glow >= 0.5 ? 'auto' : 'none' },
   }
   return { rotate: angleX ? `rotateX(${angle}deg) rotateY(${angleX}deg)` : `rotateX(${angle}deg)`, parts }
 }
@@ -120,10 +126,14 @@ const shownKey = (note: Pick<Note, 'frames' | 'tilt'>, angle: number, angleX: nu
 const SIDE_LIGHT = `rgba(255,255,255,${0.12 * SHADE_MAX})`
 const SIDE_DARK = `rgba(0,0,0,${0.08 * SHADE_MAX})`
 
+/** The tilt and light a live note follows */
+type LiveState = { angle: number; angleX: number; light: number }
+
 /**
  * The note with its thread, drawn at `scale` px per mm. The frame shown comes from the tilt (up/down `angle`,
  * side `angleX`) through the note's lens, or with `live` from the shared tilt as it moves; with `perspective`
- * the note also turns in 3D, and `sheen` adds a highlight that travels along the thread.
+ * the note also turns in 3D, and `sheen` adds a highlight that travels along the thread. Held to the light, the
+ * paper glows, its watermark shows, the print turns into soft shadow and the thread into one dark stripe.
  */
 export function NoteView({
   note,
@@ -133,6 +143,7 @@ export function NoteView({
   live = false,
   perspective = false,
   sheen = false,
+  backlight,
   showWindowCuts = false,
   showFrameNumber = false,
 }: {
@@ -144,11 +155,16 @@ export function NoteView({
   live?: boolean
   perspective?: boolean
   sheen?: boolean
+  /**
+   * How backlit the note looks, 0 to 1, fixed (the light cone already applied). Without it a live note follows
+   * the shared light through the light cone at its tilt, and a still note is in reflected light.
+   */
+  backlight?: number
   showWindowCuts?: boolean
   /** Labels the thread with the number of the frame it shows; exports draw it too when the toggle is on */
   showFrameNumber?: boolean
 }) {
-  const { thread, frames } = note
+  const { thread, frames, watermark } = note
   const root = useRef<HTMLDivElement>(null)
   const mm = (value: number) => value * scale
   const face = useImageUrl(note.background === 'image' ? note.faceImageId : undefined)
@@ -157,26 +173,31 @@ export function NoteView({
   const [base, next, current] = (live ? liveShown : shownKey(note, angle, angleX)).split('|').map(Number)
   const baseFrame = frames.at(base)
   const nextFrame = next !== base ? frames.at(next) : undefined
+  // The backlit layers exist only while there is light; how much of it shows is opacity, like the shading
+  const sharedLight = useTilt((s) => live && backlight === undefined && s.light > 0)
+  const lit = backlight === undefined ? sharedLight : backlight > 0
+  const relief = useRelief(live || lit ? watermark?.imageId : undefined)
+  const glowOf = (state: LiveState) => backlight ?? backlightAt(state.light, { x: state.angleX, y: state.angle })
 
   // Live: write the continuous parts straight onto the elements, after every render and on every tilt change
-  const apply = useRef((_angle: number, _angleX: number) => {})
+  const apply = useRef((_state: LiveState) => {})
   useLayoutEffect(() => {
-    apply.current = (angle: number, angleX: number) => {
+    apply.current = (state: LiveState) => {
       const element = root.current
       if (!live || !element) return
-      const style = tiltStyle(angle, angleX, lensMix(note, { x: angleX, y: angle }).blend)
+      const { angle, angleX } = state
+      const style = tiltStyle(angle, angleX, lensMix(note, { x: angleX, y: angle }).blend, glowOf(state))
       element.style.transform = perspective ? style.rotate : ''
       for (const part of element.querySelectorAll<HTMLElement>('[data-tilt]')) {
         Object.assign(part.style, style.parts[part.dataset.tilt as TiltPart])
       }
     }
-    const { angle, angleX } = useTilt.getState()
-    apply.current(angle, angleX)
+    apply.current(useTilt.getState())
   })
   useLayoutEffect(() => {
     if (!live) return
     return useTilt.subscribe((state, previous) => {
-      if (state.angle !== previous.angle || state.angleX !== previous.angleX) apply.current(state.angle, state.angleX)
+      if (state.angle !== previous.angle || state.angleX !== previous.angleX || state.light !== previous.light) apply.current(state)
     })
   }, [live])
 
@@ -190,8 +211,12 @@ export function NoteView({
 
   const windowMask = threadWindowMask(thread, scale)
   // Static notes (thumbnails, tests) are drawn from props; live ones leave these to apply()
-  const still = live ? undefined : tiltStyle(angle, angleX, lensMix(note, { x: angleX, y: angle }).blend)
+  const still = live ? undefined : tiltStyle(angle, angleX, lensMix(note, { x: angleX, y: angle }).blend, backlight ?? 0)
   const part = (name: TiltPart, style: CSSProperties = {}) => ({ 'data-tilt': name, style: { ...style, ...still?.parts[name] } })
+  const watermarkBox: CSSProperties | undefined = watermark && { left: mm(watermark.xMm), top: mm(watermark.yMm), width: mm(watermark.widthMm), height: mm(watermark.heightMm) }
+  // Print seen through lit paper is soft; the ink layer reaches past the edges so its blur never leaves a light rim
+  const inkBlur = mm(BACKLIT.inkBlurMm) >= 0.3 ? mm(BACKLIT.inkBlurMm) : 0
+  const inkPad = Math.ceil(inkBlur * 2)
 
   return (
     <div
@@ -234,6 +259,26 @@ export function NoteView({
         )}
       </div>
 
+      {lit && (
+        // Held to the light: lit paper, the watermark's thinner and thicker paper hard-light blended on it, the print
+        // as a soft shadow over both, and the thread blocking the light along its whole length. Isolated, so the
+        // blends stay inside and the whole picture fades over the note in reflected light.
+        <div aria-hidden="true" data-backlit="" className="pointer-events-none absolute inset-0"
+          {...part('backlit', { isolation: 'isolate', willChange: live ? 'opacity' : undefined })}>
+          <div className="absolute inset-0" style={{ backgroundColor: BACKLIT.paper }} />
+          {watermarkBox && relief && (
+            <div data-watermark-relief="" className="absolute"
+              style={{ ...watermarkBox, backgroundImage: `url(${relief})`, backgroundSize: '100% 100%', mixBlendMode: 'hard-light', opacity: watermark!.depth }} />
+          )}
+          <div className="absolute"
+            style={{ inset: -inkPad, backgroundColor: note.color, mixBlendMode: 'multiply', opacity: BACKLIT.ink, filter: inkBlur ? `blur(${inkBlur}px)` : undefined }}>
+            {face && <img src={face} alt="" draggable={false} className="absolute object-cover" style={{ left: inkPad, top: inkPad, width: mm(note.widthMm), height: mm(note.heightMm) }} />}
+          </div>
+          <div className="absolute" style={{ ...strip, backgroundColor: BACKLIT.thread }} />
+          {watermarkBox && <div data-watermark={note.id} className="absolute" {...part('watermark-hit', watermarkBox)} />}
+        </div>
+      )}
+
       {showWindowCuts && thread.windows.enabled && (
         <div aria-hidden="true" data-window-cuts className="pointer-events-none absolute" style={strip}>
           {windowEdges(thread, lengthMm).map((edge) => (
@@ -245,7 +290,7 @@ export function NoteView({
       )}
 
       {showFrameNumber && frames.length > 0 && (
-        <div aria-hidden="true" data-frame-number className="pointer-events-none absolute flex items-center justify-center" style={strip}>
+        <div aria-hidden="true" data-frame-number className="pointer-events-none absolute flex items-center justify-center" {...part('unlit', strip)}>
           <span
             className="rounded-full bg-foreground/85 px-1.5 font-semibold leading-none text-background tabular-nums shadow-sm"
             style={{ fontSize: Math.max(10, Math.min(mm(thread.widthMm) * 0.6, 18)), paddingBlock: 3 }}
