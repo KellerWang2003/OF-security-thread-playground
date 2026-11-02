@@ -88,7 +88,7 @@ export function tiltedBounds(width: number, height: number, tilt: Tilt2 | number
 export interface NoteAssets {
   face?: HTMLImageElement
   frames: Map<string, HTMLImageElement>
-  /** The watermark worked out as light through the paper, drawn over the design (relief.ts) */
+  /** The watermark worked out as light through thinner paper, colour-dodged over the design (relief.ts) */
   relief?: Relief
 }
 
@@ -151,14 +151,11 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     ctx.drawImage(face, (width - w) / 2, (height - h) / 2, w, h)
   }
   if (watermark && assets.relief) {
-    // As NoteView: light through the paper, thicker parts multiplied and thinner ones colour-dodged over the design,
-    // so it keeps the note's own colours and dark print stays dark, under the thread
-    const box = [mm(watermark.xMm), mm(watermark.yMm), mm(watermark.widthMm), mm(watermark.heightMm)] as const
-    ctx.globalAlpha = watermarkOpacity(watermark.depth, options.reveal ?? watermarkReveal(0, { x: angleX, y: angle }))
-    ctx.globalCompositeOperation = 'multiply'
-    ctx.drawImage(assets.relief.thicker.canvas, ...box)
+    // As NoteView: light through thinner paper, colour-dodged over the design so it only brightens it and keeps the
+    // note's own colours, at how much of that light comes through, under the thread
     ctx.globalCompositeOperation = 'color-dodge'
-    ctx.drawImage(assets.relief.thinner.canvas, ...box)
+    ctx.globalAlpha = watermarkOpacity(watermark.depth, options.reveal ?? watermarkReveal(0, { x: angleX, y: angle }))
+    ctx.drawImage(assets.relief.canvas, mm(watermark.xMm), mm(watermark.yMm), mm(watermark.widthMm), mm(watermark.heightMm))
     ctx.globalAlpha = 1
     ctx.globalCompositeOperation = 'source-over'
   }

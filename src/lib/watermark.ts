@@ -1,7 +1,7 @@
 import { clamp } from './frames'
 import type { Note, Watermark } from './types'
 
-/** Where a watermark sits on its banknote, how big it is and which way its image reads; drawing it is in relief.ts */
+/** Where a watermark sits on its banknote, how big it is and which parts of its image are thinner; drawing it is in relief.ts */
 
 /** Default depth of a new watermark, 0 to 1 */
 export const WATERMARK_DEPTH = 0.6

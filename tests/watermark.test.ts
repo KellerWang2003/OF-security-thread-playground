@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { projectImageIds } from '../src/cloud/repository'
 import { createNote, migrateProject } from '../src/lib/notes'
-import { THINNEST_GAIN, lightLayers, paperLevel, reliefPixels } from '../src/lib/relief'
+import { THINNEST_GAIN, lightPixels, paperOf, thinnessPixels } from '../src/lib/relief'
 import type { Watermark } from '../src/lib/types'
 import {
   WATERMARK_DEPTH, dragWatermarkCorner, fitWatermark, maxWatermarkWidth, moveWatermark, moveWatermarkTo, newWatermark, resizeWatermark, withWatermarkImage,
@@ -108,58 +108,56 @@ describe('the watermark relief', () => {
   const greys = (pixels: Uint8ClampedArray) => Array.from({ length: pixels.length / 4 }, (_, i) => pixels[i * 4])
 
   it("reads the plain paper from the image's edges", () => {
-    expect(paperLevel(image(WHITE, BLACK, BLACK), 4, 3)).toBe(1)
-    expect(paperLevel(image(GREY, WHITE, BLACK), 4, 3)).toBeCloseTo(128 / 255)
-    // A transparent background is plain paper at mid-grey
-    expect(paperLevel(image(CLEAR, WHITE, BLACK), 4, 3)).toBe(0.5)
+    expect(paperOf(image(WHITE, BLACK, BLACK), 4, 3)).toEqual({ clear: false, level: 1 })
+    expect(paperOf(image(GREY, WHITE, BLACK), 4, 3).level).toBeCloseTo(128 / 255)
+    // A transparent background is plain paper
+    expect(paperOf(image(CLEAR, WHITE, BLACK), 4, 3)).toEqual({ clear: true, level: 0.5 })
   })
 
-  it('turns plain paper into mid-grey, which hard light leaves as it is, keeping white white and black black', () => {
-    const relief = reliefPixels(image(GREY, WHITE, BLACK), 4, 3)
-    expect(greys(relief)).toEqual([128, 128, 128, 128, 128, 255, 0, 128, 128, 128, 128, 128])
-    // Opaque, so the blend never shows through to the paper unchanged
-    expect(relief.filter((_, i) => i % 4 === 3).every((alpha) => alpha === 255)).toBe(true)
+  it('reads the dark parts as thinner paper, as far as they are darker than the background, which stays plain', () => {
+    const thin = thinnessPixels(image(WHITE, BLACK, GREY), 4, 3)
+    expect(greys(thin)).toEqual([0, 0, 0, 0, 0, 255, 127, 0, 0, 0, 0, 0])
+    expect(thin.filter((_, i) => i % 4 === 3).every((alpha) => alpha === 255)).toBe(true)
+    // Lighter than the background is plain paper too: a watermark is never thicker
+    expect(greys(thinnessPixels(image(GREY, WHITE, BLACK), 4, 3)).slice(5, 7)).toEqual([0, 255])
   })
 
-  it('reads a design drawn dark on white as thicker paper, and a transparent background as plain', () => {
-    expect(greys(reliefPixels(image(WHITE, BLACK, GREY), 4, 3)).slice(5, 7)).toEqual([0, 64])
-    expect(greys(reliefPixels(image(CLEAR, WHITE, CLEAR), 4, 3)).slice(5, 7)).toEqual([255, 128])
+  it('reads every shape on transparency as thinner, as far as it is dark and opaque', () => {
+    expect(greys(thinnessPixels(image(CLEAR, BLACK, GREY), 4, 3)).slice(5, 7)).toEqual([255, 127])
+    expect(greys(thinnessPixels(image(CLEAR, [0, 0, 0, 128], WHITE), 4, 3)).slice(5, 7)).toEqual([128, 0])
   })
 
-  it('reads only brightness, as paper has no colour: a red and a green as bright are the same grey thickness', () => {
-    const relief = reliefPixels(image(CLEAR, [255, 0, 0, 255], [0, 76, 0, 255]), 4, 3)
-    expect(greys(relief).slice(5, 7)).toEqual([54, 54])
-    expect(Array.from(relief.slice(20, 24))).toEqual([54, 54, 54, 255])
+  it('reads the light parts as thinner instead when inverted, the background staying plain', () => {
+    expect(greys(thinnessPixels(image(GREY, WHITE, BLACK), 4, 3, true)).slice(5, 7)).toEqual([255, 0])
+    expect(greys(thinnessPixels(image(CLEAR, WHITE, GREY), 4, 3, true)).slice(5, 7)).toEqual([255, 128])
+    expect(greys(thinnessPixels(image(WHITE, BLACK, GREY), 4, 3, true))).toEqual(Array(12).fill(0))
   })
 
-  it('reads dark parts as thinner and light parts as thicker when inverted, plain paper staying plain', () => {
-    expect(greys(reliefPixels(image(GREY, WHITE, BLACK), 4, 3, true))).toEqual([128, 128, 128, 128, 128, 0, 255, 128, 128, 128, 128, 128])
-    expect(greys(reliefPixels(image(CLEAR, BLACK, CLEAR), 4, 3, true)).slice(5, 7)).toEqual([255, 128])
+  it('reads only brightness, as paper has no colour: a red and a green as bright are equally thin', () => {
+    const thin = thinnessPixels(image(CLEAR, [255, 0, 0, 255], [0, 76, 0, 255]), 4, 3)
+    expect(greys(thin).slice(5, 7)).toEqual([201, 201])
+    expect(Array.from(thin.slice(20, 24))).toEqual([201, 201, 201, 255])
   })
 
-  it('splits into a layer for thicker paper to multiply and one for thinner paper to colour-dodge, plain paper neutral in both', () => {
-    const relief = new Uint8ClampedArray([128, 0, 255, 64, 192].flatMap((grey) => [grey, grey, grey, 255]))
-    const { thicker, thinner } = lightLayers(relief)
-    expect(greys(thicker)).toEqual([255, 0, 255, 128, 255])
-    expect(greys(thinner)).toEqual([0, 0, 128, 0, 85])
-    expect([...thicker, ...thinner].filter((_, i) => i % 4 === 3).every((alpha) => alpha === 255)).toBe(true)
+  it('turns thinness into light to colour-dodge: none for plain paper, up to THINNEST_GAIN times the light', () => {
+    const thin = new Uint8ClampedArray([0, 255, 128].flatMap((grey) => [grey, grey, grey, 255]))
+    const light = lightPixels(thin)
+    expect(greys(light)).toEqual([0, 128, 85])
+    expect(light.filter((_, i) => i % 4 === 3).every((alpha) => alpha === 255)).toBe(true)
   })
 
-  it('works like light through paper: thinner lets more through and thicker less, so black print stays black', () => {
-    // The browser's own multiply and colour dodge, design brightness 0 to 1 under a layer value 0 to 255
-    const through = (design: number, grey: number) => {
-      const { thicker, thinner } = lightLayers(new Uint8ClampedArray([grey, grey, grey, 255]))
-      const multiplied = design * (thicker[0] / 255)
-      const dodge = thinner[0] / 255
-      return multiplied === 0 ? 0 : dodge >= 1 ? 1 : Math.min(1, multiplied / (1 - dodge))
+  it('only ever brightens, in proportion, so plain paper stays as it is and black print stays black', () => {
+    // The browser's colour dodge at a strength (opacity), over a design brightness 0 to 1, for a thinness 0 to 255
+    const through = (design: number, thin: number, strength = 1) => {
+      const dodge = lightPixels(new Uint8ClampedArray([thin, thin, thin, 255]))[0] / 255
+      const dodged = design === 0 ? 0 : dodge >= 1 ? 1 : Math.min(1, design / (1 - dodge))
+      return design + strength * (dodged - design)
     }
-    for (const design of [0, 0.2, 0.5, 1]) expect(through(design, 128)).toBeCloseTo(design)
-    expect(through(0.25, 255)).toBeCloseTo(0.25 * THINNEST_GAIN, 2)
+    for (const design of [0, 0.2, 0.5, 1]) expect(through(design, 0)).toBeCloseTo(design)
+    for (const design of [0.1, 0.3, 0.5]) for (const thin of [64, 128, 255]) expect(through(design, thin)).toBeGreaterThan(design)
     expect(through(0, 255)).toBe(0)
-    expect(through(0.8, 0)).toBe(0)
-    expect(through(0.5, 64)).toBeCloseTo(0.25, 2)
-    // On a mid-grey design, thinner paper shows as hard light would
-    const hardLight = (design: number, grey: number) => design + (2 * grey / 255 - 1) * (1 - design)
-    expect(through(0.5, 192)).toBeCloseTo(hardLight(0.5, 192), 1)
+    expect(through(0.25, 255)).toBeCloseTo(0.25 * THINNEST_GAIN, 2)
+    // Fading it in is more light coming through: at half strength, half the extra light
+    expect(through(0.25, 255, 0.5)).toBeCloseTo(0.25 * (1 + (THINNEST_GAIN - 1) / 2), 2)
   })
 })

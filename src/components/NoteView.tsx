@@ -227,17 +227,12 @@ export function NoteView({
       {face && <img src={face} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />}
 
       {watermarkBox && watermark?.imageId && (
-        // Light through thinner and thicker paper (relief.ts): thicker parts multiply the design darker and thinner ones
-        // colour-dodge it brighter, so it keeps its own colours and dark print stays dark. The layers blend with the
-        // design because nothing between them makes a group of its own, so each carries its own opacity. The thread
-        // lies over it, unchanged. On the canvas it takes a press, faint or clear, so it drags as the thread does; not
-        // with no depth to show.
-        <div data-watermark={note.id} className={cn('absolute', live && depth > 0 ? 'cursor-move' : 'pointer-events-none')} style={watermarkBox}>
-          <div data-watermark-layer="thicker" className="absolute inset-0"
-            {...part('watermark', { backgroundImage: relief && `url(${relief.thicker.url})`, backgroundSize: '100% 100%', mixBlendMode: 'multiply' })} />
-          <div data-watermark-layer="thinner" className="absolute inset-0"
-            {...part('watermark', { backgroundImage: relief && `url(${relief.thinner.url})`, backgroundSize: '100% 100%', mixBlendMode: 'color-dodge' })} />
-        </div>
+        // Light through thinner paper (relief.ts), colour-dodged over the design: it only ever brightens it, in
+        // proportion, so it keeps the note's own colours and dark print stays dark. Its opacity is how much of that
+        // light comes through. The thread lies over it, unchanged. On the canvas it takes a press, faint or clear, so it
+        // drags as the thread does; not with no depth to show.
+        <div data-watermark={note.id} className={cn('absolute', live && depth > 0 ? 'cursor-move' : 'pointer-events-none')}
+          {...part('watermark', { ...watermarkBox, backgroundImage: relief && `url(${relief.url})`, backgroundSize: '100% 100%', mixBlendMode: 'color-dodge' })} />
       )}
 
       {showWindowCuts && thread.windows.enabled && (

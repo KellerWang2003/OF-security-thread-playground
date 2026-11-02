@@ -8,10 +8,8 @@ import { setTilt } from '../src/tilt/tilt'
 
 // The watermark's relief is worked out from its image on a canvas, which jsdom lacks
 vi.mock('../src/lib/relief', () => ({
-  useRelief: (watermark?: { imageId?: string; invert?: boolean }) => {
-    const look = watermark?.imageId && `${watermark.imageId}${watermark.invert ? '-inverted' : ''}`
-    return look ? { thicker: { url: `blob:thicker-${look}` }, thinner: { url: `blob:thinner-${look}` } } : undefined
-  },
+  useRelief: (watermark?: { imageId?: string; invert?: boolean }) =>
+    watermark?.imageId ? { url: `blob:light-${watermark.imageId}${watermark.invert ? '-inverted' : ''}` } : undefined,
 }))
 
 afterEach(() => {
@@ -62,25 +60,14 @@ describe("a NoteView's watermark", () => {
     ({ ...makeNote(), watermark: { imageId: 'mark', xMm: 10, yMm: 10, widthMm: 30, heightMm: 30, depth: 0.6 } })
   const withoutImage = () => ({ ...makeNote(), watermark: { xMm: 10, yMm: 10, widthMm: 30, heightMm: 30, depth: 0.6 } })
   const mark = (container: HTMLElement) => container.querySelector<HTMLElement>('[data-watermark]')!
-  const layer = (container: HTMLElement, name: 'thicker' | 'thinner') => mark(container).querySelector<HTMLElement>(`[data-watermark-layer="${name}"]`)!
-  /** Both layers' opacity, which is always the same */
-  const opacity = (container: HTMLElement) => {
-    const [thicker, thinner] = [layer(container, 'thicker'), layer(container, 'thinner')].map((l) => Number(l.style.opacity))
-    expect(thinner).toBe(thicker)
-    return thicker
-  }
+  const opacity = (container: HTMLElement) => Number(mark(container).style.opacity)
 
   it("shows in the note's own colours under the thread, faint flat, and held to the light nothing else changes", () => {
     const { container } = render(<NoteView note={withWatermark()} scale={2} live perspective showFrameNumber />)
     const watermark = mark(container)
-    // Light through the paper: thicker parts multiplied over the design, thinner ones colour-dodged
-    expect(layer(container, 'thicker').style.mixBlendMode).toBe('multiply')
-    expect(layer(container, 'thicker').style.backgroundImage).toContain('blob:thicker-mark')
-    expect(layer(container, 'thinner').style.mixBlendMode).toBe('color-dodge')
-    expect(layer(container, 'thinner').style.backgroundImage).toContain('blob:thinner-mark')
-    // Its box makes no group of its own (no opacity or blend), so both layers blend with the design under it
-    expect(watermark.style.opacity).toBe('')
-    expect(watermark.style.mixBlendMode).toBe('')
+    // Light through thinner paper, colour-dodged over the design so it only ever brightens it
+    expect(watermark.style.mixBlendMode).toBe('color-dodge')
+    expect(watermark.style.backgroundImage).toContain('blob:light-mark')
     expect(watermark.style.left).toBe('20px')
     expect(watermark.style.width).toBe('60px')
     expect(watermark.compareDocumentPosition(container.querySelector('[data-thread]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -144,12 +131,12 @@ describe("a NoteView's watermark", () => {
     expect(opacity(container)).toBeCloseTo(0.6)
   })
 
-  it('reads its image the other way round when inverted', () => {
+  it('lets the light parts of its image through instead when inverted', () => {
     const { container, rerender } = render(<NoteView note={withWatermark()} scale={1} live />)
-    expect(layer(container, 'thicker').style.backgroundImage).not.toContain('inverted')
+    expect(mark(container).style.backgroundImage).not.toContain('inverted')
     rerender(<NoteView note={{ ...withWatermark(), watermark: { ...withWatermark().watermark, invert: true } }} scale={1} live />)
-    expect(layer(container, 'thicker').style.backgroundImage).toContain('blob:thicker-mark-inverted')
-    expect(layer(container, 'thinner').style.backgroundImage).toContain('blob:thinner-mark-inverted')
+    expect(mark(container).style.backgroundImage).toContain('blob:light-mark-inverted')
+    expect(mark(container).style.mixBlendMode).toBe('color-dodge')
   })
 
   it('draws nothing until it has an image', () => {

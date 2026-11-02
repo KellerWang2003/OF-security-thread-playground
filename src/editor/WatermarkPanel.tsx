@@ -1,6 +1,5 @@
 import { ImageUp, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 import { Group, IconButton, ScrubField, Section, SwitchField } from '../components/controls'
 import { reportError } from '../cloud/notices'
 import { pickFiles, useImageUrl } from '../lib/images'
@@ -10,8 +9,8 @@ import type { NoteRef } from './frameActions'
 import { setWatermarkImage, updateWatermark } from './watermarkActions'
 
 /**
- * Right: the selected banknote's watermark. One image, read only by brightness, as paper has no colour (lighter than
- * the paper is thinner, darker is thicker, or the other way round inverted); where it sits and how strongly it shows.
+ * Right: the selected banknote's watermark. One image, read only by brightness, as paper has no colour: its dark parts
+ * are thinner paper that lets more light through, or its light parts with Invert. Where it sits and how strongly it shows.
  */
 export function WatermarkPanel({ note, watermark, noteRef, onPlace, onRemove }: {
   note: Note
@@ -42,10 +41,8 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace, onRemove }: 
             }}
           >
             {image ? (
-              // In greyscale, inverted with Invert, as the paper reads it
-              <span className="size-11 shrink-0 overflow-hidden rounded bg-muted">
-                <img src={image} alt="" className={cn('size-full object-contain grayscale', watermark.invert && 'invert')} />
-              </span>
+              // In greyscale, as only its brightness counts
+              <img src={image} alt="" className="h-11 w-11 shrink-0 rounded bg-muted object-contain grayscale" />
             ) : (
               <span className="flex size-11 shrink-0 items-center justify-center rounded bg-muted">
                 <ImageUp />
