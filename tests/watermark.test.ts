@@ -114,29 +114,31 @@ describe('the watermark relief', () => {
     expect(paperOf(image(CLEAR, WHITE, BLACK), 4, 3)).toEqual({ clear: true, level: 0.5 })
   })
 
-  it('reads the dark parts as thinner paper, as far as they are darker than the background, which stays plain', () => {
-    const thin = thinnessPixels(image(WHITE, BLACK, GREY), 4, 3)
-    expect(greys(thin)).toEqual([0, 0, 0, 0, 0, 255, 127, 0, 0, 0, 0, 0])
+  it('reads the light parts as thinner paper, as far as they are lighter than the background, which stays plain', () => {
+    const thin = thinnessPixels(image(BLACK, WHITE, GREY), 4, 3)
+    expect(greys(thin)).toEqual([0, 0, 0, 0, 0, 255, 128, 0, 0, 0, 0, 0])
     expect(thin.filter((_, i) => i % 4 === 3).every((alpha) => alpha === 255)).toBe(true)
-    // Lighter than the background is plain paper too: a watermark is never thicker
-    expect(greys(thinnessPixels(image(GREY, WHITE, BLACK), 4, 3)).slice(5, 7)).toEqual([0, 255])
+    // Darker than the background is plain paper too: a watermark is never thicker
+    expect(greys(thinnessPixels(image(GREY, WHITE, BLACK), 4, 3)).slice(5, 7)).toEqual([255, 0])
+    expect(greys(thinnessPixels(image(WHITE, BLACK, GREY), 4, 3))).toEqual(Array(12).fill(0))
   })
 
-  it('reads every shape on transparency as thinner, as far as it is dark and opaque', () => {
-    expect(greys(thinnessPixels(image(CLEAR, BLACK, GREY), 4, 3)).slice(5, 7)).toEqual([255, 127])
-    expect(greys(thinnessPixels(image(CLEAR, [0, 0, 0, 128], WHITE), 4, 3)).slice(5, 7)).toEqual([128, 0])
+  it('reads every shape on transparency as thinner, as far as it is light and opaque', () => {
+    expect(greys(thinnessPixels(image(CLEAR, WHITE, GREY), 4, 3)).slice(5, 7)).toEqual([255, 128])
+    expect(greys(thinnessPixels(image(CLEAR, [255, 255, 255, 128], BLACK), 4, 3)).slice(5, 7)).toEqual([128, 0])
   })
 
-  it('reads the light parts as thinner instead when inverted, the background staying plain', () => {
-    expect(greys(thinnessPixels(image(GREY, WHITE, BLACK), 4, 3, true)).slice(5, 7)).toEqual([255, 0])
-    expect(greys(thinnessPixels(image(CLEAR, WHITE, GREY), 4, 3, true)).slice(5, 7)).toEqual([255, 128])
-    expect(greys(thinnessPixels(image(WHITE, BLACK, GREY), 4, 3, true))).toEqual(Array(12).fill(0))
+  it('reads the dark parts as thinner instead when inverted, the background staying plain', () => {
+    expect(greys(thinnessPixels(image(WHITE, BLACK, GREY), 4, 3, true))).toEqual([0, 0, 0, 0, 0, 255, 127, 0, 0, 0, 0, 0])
+    expect(greys(thinnessPixels(image(GREY, WHITE, BLACK), 4, 3, true)).slice(5, 7)).toEqual([0, 255])
+    expect(greys(thinnessPixels(image(CLEAR, BLACK, GREY), 4, 3, true)).slice(5, 7)).toEqual([255, 127])
+    expect(greys(thinnessPixels(image(CLEAR, [0, 0, 0, 128], WHITE), 4, 3, true)).slice(5, 7)).toEqual([128, 0])
   })
 
   it('reads only brightness, as paper has no colour: a red and a green as bright are equally thin', () => {
     const thin = thinnessPixels(image(CLEAR, [255, 0, 0, 255], [0, 76, 0, 255]), 4, 3)
-    expect(greys(thin).slice(5, 7)).toEqual([201, 201])
-    expect(Array.from(thin.slice(20, 24))).toEqual([201, 201, 201, 255])
+    expect(greys(thin).slice(5, 7)).toEqual([54, 54])
+    expect(Array.from(thin.slice(20, 24))).toEqual([54, 54, 54, 255])
   })
 
   it('turns thinness into light to colour-dodge: none for plain paper, up to THINNEST_GAIN times the light', () => {

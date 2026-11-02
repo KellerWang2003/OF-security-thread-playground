@@ -9,8 +9,8 @@ import type { NoteRef } from './frameActions'
 import { setWatermarkImage, updateWatermark } from './watermarkActions'
 
 /**
- * Right: the selected banknote's watermark. One image, read only by brightness, as paper has no colour: its dark parts
- * are thinner paper that lets more light through, or its light parts with Invert. Where it sits and how strongly it shows.
+ * Right: the selected banknote's watermark. One image, read only by brightness, as paper has no colour: its light parts
+ * are thinner paper that lets more light through, or its dark parts with Invert. Where it sits and how strongly it shows.
  */
 export function WatermarkPanel({ note, watermark, noteRef, onPlace, onRemove }: {
   note: Note

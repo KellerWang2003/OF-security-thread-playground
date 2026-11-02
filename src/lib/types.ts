@@ -115,8 +115,8 @@ export interface PlaybackMove {
 
 /**
  * A watermark made in the paper: an image that is faint flat and shows clearly tilted or held to the light. Paper has
- * no colour of its own, so only each pixel's brightness counts: the dark parts of the image are thinner paper, which
- * lets more light through, or the light parts when inverted; its background counts as plain paper. It only ever gets
+ * no colour of its own, so only each pixel's brightness counts: the light parts of the image are thinner paper, which
+ * lets more light through, or the dark parts when inverted; its background counts as plain paper. It only ever gets
  * lighter.
  * Placed by its top-left corner in mm from the banknote's top-left; its height follows the image's proportions.
  */
@@ -129,7 +129,7 @@ export interface Watermark {
   heightMm: number
   /** How strongly the paper's thickness shows at its clearest (tilted or held to the light), 0 to 1 */
   depth: number
-  /** The light parts of the image are the thinner paper instead of the dark ones */
+  /** The dark parts of the image are the thinner paper instead of the light ones */
   invert?: boolean
 }
 

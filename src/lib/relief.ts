@@ -41,8 +41,8 @@ export function paperOf(data: Uint8ClampedArray, width: number, height: number) 
 /**
  * How much thinner the paper is at each pixel, as grey from black (plain paper) to white (the thinnest). Only
  * brightness counts, so a red and a green of the same brightness are equally thin. On transparency every shape is
- * thinner as far as it is dark (black the thinnest); on an opaque background, as far as it is darker than the
- * background. Inverted, it is the light parts: as far as they are light, or lighter than the background. The
+ * thinner as far as it is light (white the thinnest); on an opaque background, as far as it is lighter than the
+ * background. Inverted, it is the dark parts: as far as they are dark, or darker than the background. The
  * background, and on an opaque one whatever lies the other side of it, stays plain paper. Returns opaque RGBA pixels
  * the same size as the input.
  */
@@ -52,9 +52,9 @@ export function thinnessPixels(data: Uint8ClampedArray, width: number, height: n
   for (let i = 0; i < data.length; i += 4) {
     const level = luma(data[i], data[i + 1], data[i + 2])
     let thin = 0
-    if (paper.clear) thin = invert ? level : 1 - level
-    else if (invert && level > paper.level) thin = (level - paper.level) / (1 - paper.level)
-    else if (!invert && level < paper.level) thin = (paper.level - level) / paper.level
+    if (paper.clear) thin = invert ? 1 - level : level
+    else if (!invert && level > paper.level) thin = (level - paper.level) / (1 - paper.level)
+    else if (invert && level < paper.level) thin = (paper.level - level) / paper.level
     const grey = Math.round(thin * (data[i + 3] / 255) * 255)
     out[i] = out[i + 1] = out[i + 2] = grey
     out[i + 3] = 255

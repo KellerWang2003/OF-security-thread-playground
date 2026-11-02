@@ -131,7 +131,7 @@ describe("a NoteView's watermark", () => {
     expect(opacity(container)).toBeCloseTo(0.6)
   })
 
-  it('lets the light parts of its image through instead when inverted', () => {
+  it('lets the dark parts of its image through instead when inverted', () => {
     const { container, rerender } = render(<NoteView note={withWatermark()} scale={1} live />)
     expect(mark(container).style.backgroundImage).not.toContain('inverted')
     rerender(<NoteView note={{ ...withWatermark(), watermark: { ...withWatermark().watermark, invert: true } }} scale={1} live />)
