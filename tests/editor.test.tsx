@@ -320,4 +320,107 @@ describe('username workspace editor', () => {
     fireEvent.pointerUp(body(), { button: 0, pointerId: 1, clientX: 101, clientY: 101 })
     expect(target()).toEqual({ y: 12, x: -5 })
   })
+
+  it('adds a watermark as a layer, places it on the canvas flat and backlit, and holds every banknote to the light with L', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      callback: ResizeObserverCallback
+      constructor(callback: ResizeObserverCallback) { this.callback = callback }
+      observe() { this.callback([{ contentRect: { width: 1280, height: 720 } } as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      unobserve() {} disconnect() {}
+    })
+    for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
+    }
+    setTilt({ backlit: false, peek: false, light: 0 })
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'watermark-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const heading = (name: string) => screen.queryByRole('heading', { name, exact: true })
+    const placing = () => screen.queryByRole('group', { name: 'Place watermark' })
+    const watermark = () => useProjects.getState().demoPreview!.notes[0].watermark
+
+    // The banknote's own row shows only the banknote; each layer under it shows its own panel
+    expect(heading('Banknote')).not.toBeNull()
+    expect(heading('Security thread')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
+    expect(heading('Security thread')).not.toBeNull()
+    expect(heading('Banknote')).toBeNull()
+
+    // Adding the watermark selects it and shows it flat and backlit, with its box to place; the tilt pad steps aside
+    await user.click(screen.getByRole('button', { name: 'Add layer' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Watermark' }))
+    expect(watermark()).toBeDefined()
+    expect(heading('Watermark')).not.toBeNull()
+    expect(placing()).not.toBeNull()
+    expect(document.querySelector('[data-backlit]')).not.toBeNull()
+    expect(screen.queryByRole('group', { name: 'Tilt' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add layer' })).toBeNull()
+    const { xMm } = watermark()!
+    fireEvent.keyDown(placing()!, { key: 'ArrowRight' })
+    expect(watermark()!.xMm).toBe(xMm + 0.5)
+    fireEvent.change(screen.getByTitle("How strongly the paper's thickness shows held to the light").querySelector('input')!, { target: { value: '30' } })
+    expect(watermark()!.depth).toBe(0.3)
+
+    // Escape ends placing and keeps the watermark selected
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(placing()).toBeNull()
+    expect(heading('Watermark')).not.toBeNull()
+    expect(screen.getByRole('group', { name: 'Tilt' })).toBeDefined()
+
+    // A tap of L holds every banknote to the light, as the lamp on the pad shows; typing an L doesn't
+    fireEvent.keyDown(window, { key: 'l' })
+    fireEvent.keyUp(window, { key: 'l' })
+    expect(useTilt.getState().backlit).toBe(true)
+    expect(screen.getByRole('button', { name: 'Backlit' }).getAttribute('aria-pressed')).toBe('true')
+    await user.click(screen.getByRole('textbox', { name: 'Project name' }))
+    await user.keyboard('l')
+    expect(useTilt.getState().backlit).toBe(true)
+
+    // Held to the light, a click on the watermark places it again
+    act(() => setTilt({ light: 1 }))
+    const hit = document.querySelector('[data-watermark]')!
+    fireEvent.pointerDown(hit, { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerUp(hit, { button: 0, pointerId: 1, clientX: 100, clientY: 100 })
+    expect(placing()).not.toBeNull()
+    // A click elsewhere on the banknote ends placing
+    fireEvent.pointerDown(document.querySelector('[data-note-body]')!, { button: 0, buttons: 1, pointerId: 1, clientX: 5, clientY: 5 })
+    fireEvent.pointerUp(document.querySelector('[data-note-body]')!, { button: 0, pointerId: 1, clientX: 5, clientY: 5 })
+    expect(placing()).toBeNull()
+
+    // The lamp on the pad switches it off again
+    await user.click(screen.getByRole('button', { name: 'Backlit' }))
+    expect(useTilt.getState().backlit).toBe(false)
+    expect(saves).not.toHaveBeenCalled()
+  })
+
+  it('keeps the watermark when a banknote is duplicated, removes it from its layer, and undoes the removal', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'watermark-remove-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Add layer' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Watermark' }))
+    const notes = () => useProjects.getState().demoPreview!.notes
+    const original = notes()[0].watermark
+
+    await user.click(screen.getByRole('button', { name: 'Duplicate', exact: true }))
+    await waitFor(() => expect(notes()).toHaveLength(2))
+    expect(notes()[1].watermark).toEqual(original)
+
+    // The copy is selected with its watermark showing; removing it leaves the original alone
+    expect(screen.getByRole('heading', { name: 'Watermark', exact: true })).toBeDefined()
+    const [fromList] = screen.getAllByRole('button', { name: 'Remove watermark' })
+    await user.click(fromList)
+    expect(notes()[1].watermark).toBeUndefined()
+    expect(notes()[0].watermark).toEqual(original)
+    expect(screen.queryByRole('button', { name: 'Watermark', exact: true })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Security thread', exact: true })).toBeDefined()
+
+    await user.click(screen.getByRole('button', { name: 'Undo', exact: true }))
+    expect(notes()[1].watermark).toEqual(original)
+    expect(saves).not.toHaveBeenCalled()
+  })
 })

@@ -5,10 +5,12 @@ import { IconButton, ScrubField } from '../components/controls'
 import { cn } from '@/lib/utils'
 import { SWEEP_MAX, type LensState } from '../lib/lens'
 import {
+  LIGHT_HOLD_LIMITS,
   MOVES_MAX,
   MOVE_KINDS,
   editableMoves,
   gestureSeconds,
+  lightHoldSeconds,
   moveFromRecording,
   moveReach,
   swingEnds,
@@ -192,6 +194,11 @@ function PlaylistRow({ index, count, move, lens, recordings, shift, dragging, on
           title={move.kind === 'y' ? 'Up/down tilt the move starts from; negative tilts down' : 'Side tilt the move starts from; negative tilts left'}
           value={Math.round(move.kind === 'y' ? ends.start.y : ends.start.x)} min={-SWEEP_MAX} max={SWEEP_MAX} unit="°"
           onChange={(from) => onChange((m) => ({ ...m, from, [m.kind]: m.kind === 'y' ? ends.end.y : ends.end.x }))} />
+      )}
+      {move.kind === 'light' && (
+        <ScrubField className="w-[70px] shrink-0" label="☀" title="Seconds held up to the light, at 1× speed"
+          value={lightHoldSeconds(move)} {...LIGHT_HOLD_LIMITS} unit="s"
+          onChange={(seconds) => onChange((m) => ({ ...m, seconds }))} />
       )}
       {axes.includes('y') && (
         <ScrubField className="w-[70px] shrink-0" label={move.kind === 'y' ? '→' : '↕'} title="Up/down tilt this move reaches; negative tilts down"

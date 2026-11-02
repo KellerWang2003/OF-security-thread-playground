@@ -1,8 +1,7 @@
 import { zipSync } from 'fflate'
 import { GIFEncoder, applyPalette, quantize } from 'gifenc'
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, QUALITY_HIGH, WebMOutputFormat, getFirstEncodableVideoCodec } from 'mediabunny'
-import { drawExportFrame, exportGroups, exportLayout, loadNoteAssets, playbackTilts, scaleForHeight, type NoteAssets } from './exportRender'
-import type { Tilt2 } from './lens'
+import { drawBacklitFace, drawExportFrame, exportGroups, exportLayout, loadNoteAssets, playbackLights, playbackTilts, scaleForHeight, type NoteAssets } from './exportRender'
 import type { Note } from './types'
 
 export type ExportFormat = 'mp4' | 'gif'
@@ -23,27 +22,34 @@ export interface ExportOptions {
   perspective: boolean
   /** Draws the visible frame's number on each thread, as the # toggle does on the canvas */
   frameNumbers?: boolean
+  /** The whole video held up to the light, as the lamp switch on the canvas; otherwise only Hold to light moves are */
+  backlit?: boolean
 }
 
 const safeName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Banknote'
 
 async function renderFile(notes: Note[], assets: Map<string, NoteAssets>, options: ExportOptions, onFrame: () => void, signal: AbortSignal) {
   // Every banknote shares the project-wide cycle and playback settings
-  const angles = playbackTilts(notes[0], options.fps, options.format === 'gif' ? 1 : options.loops)
+  const loops = options.format === 'gif' ? 1 : options.loops
+  const angles = playbackTilts(notes[0], options.fps, loops)
+  const lights = playbackLights(notes[0], options.fps, loops)
   const scale = scaleForHeight(notes, angles, options.perspective, options.height)
   const layout = exportLayout(notes, scale, angles, options.perspective)
   const canvas = new OffscreenCanvas(layout.width, layout.height)
   const ctx = canvas.getContext('2d', { willReadFrequently: options.format === 'gif' })!
   const faces = new Map(notes.map((n) => [n.id, new OffscreenCanvas(Math.ceil(n.widthMm * scale), Math.ceil(n.heightMm * scale))]))
-  const draw = (angle: Tilt2) => drawExportFrame(ctx, layout, assets, faces, scale, angle, options)
+  // Held to the light, each banknote's backlit face is the same at every tilt: work it out once
+  const lit = options.backlit || lights.some((light) => light > 0)
+  const backlitFaces = lit ? new Map(notes.map((n) => [n.id, drawBacklitFace(n, assets.get(n.id) ?? { frames: new Map() }, scale)])) : undefined
+  const draw = (i: number) => drawExportFrame(ctx, layout, assets, faces, scale, angles[i], options, lights[i] ?? 0, backlitFaces)
 
   if (options.format === 'gif') {
     const gif = GIFEncoder()
     const delay = Math.round(1000 / options.fps)
     const transparent = !options.background
-    for (const angle of angles) {
+    for (const i of angles.keys()) {
       signal.throwIfAborted()
-      draw(angle)
+      draw(i)
       const { data } = ctx.getImageData(0, 0, layout.width, layout.height)
       const format = transparent ? 'rgba4444' : 'rgb565'
       const palette = quantize(data, 256, { format, oneBitAlpha: transparent })
@@ -71,9 +77,9 @@ async function renderFile(notes: Note[], assets: Map<string, NoteAssets>, option
   output.addVideoTrack(source, { frameRate: options.fps })
   await output.start()
   try {
-    for (const [i, angle] of angles.entries()) {
+    for (const i of angles.keys()) {
       signal.throwIfAborted()
-      draw(angle)
+      draw(i)
       await source.add(i / options.fps, 1 / options.fps)
       onFrame()
     }

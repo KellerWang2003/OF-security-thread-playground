@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { playbackTilts } from '../src/lib/exportRender'
 import { lensState } from '../src/lib/lens'
-import { moveFromRecording, recordingFromSamples, movesOf, playbackPlan, tiltAt } from '../src/lib/moves'
+import {
+  LIGHT_FADE_SECONDS, LIGHT_HOLD_SECONDS, lightAt, lightHoldSeconds, moveFromRecording, movesOf, planLitPaths, playbackPlan, recordingFromSamples, tiltAt,
+} from '../src/lib/moves'
 import { migrateProject } from '../src/lib/notes'
 import type { TiltSettings } from '../src/lib/types'
 
@@ -77,5 +79,89 @@ describe('swing moves', () => {
     expect(tiltAt(plan, first).x).toBeCloseTo(0)
     expect(tiltAt(plan, first).y).toBeCloseTo(0)
     expect(tiltAt(plan, first + 1).x).toBeCloseTo(20)
+  })
+})
+
+describe('hold to light', () => {
+  const planOf = (moves: TiltSettings['moves'], settings: Partial<TiltSettings> = {}) => {
+    const tilt = { ...base, ...settings, moves } as TiltSettings
+    return playbackPlan(tilt, lensState(tilt, frames))
+  }
+
+  it('stays flat while the light fades in, holds and fades out', () => {
+    const plan = planOf([{ id: 'l', kind: 'light' }])
+    expect(plan.seconds).toBeCloseTo(2 * LIGHT_FADE_SECONDS + LIGHT_HOLD_SECONDS)
+    for (const t of [0, 0.25, 1, 2.25]) expect(tiltAt(plan, t)).toEqual({ x: 0, y: 0 })
+    expect(lightAt(plan, 0)).toBe(0)
+    expect(lightAt(plan, 0.25)).toBeCloseTo(0.5)
+    expect(lightAt(plan, 0.5)).toBe(1)
+    expect(lightAt(plan, 1.9)).toBe(1)
+    expect(lightAt(plan, 2.25)).toBeCloseTo(0.5)
+    expect(lightAt(plan, plan.seconds - 1e-6)).toBeCloseTo(0, 4)
+  })
+
+  it('holds for the seconds set, scaled by speed, then pauses at flat in reflected light', () => {
+    expect(planOf([{ id: 'l', kind: 'light', seconds: 3 }]).seconds).toBeCloseTo(4)
+    expect(planOf([{ id: 'l', kind: 'light', seconds: 3 }], { speed: 2 }).seconds).toBeCloseTo(2)
+    const held = planOf([{ id: 'l', kind: 'light' }], { holdSeconds: 0.5 })
+    expect(held.seconds).toBeCloseTo(3)
+    expect(lightAt(held, 2.75)).toBe(0)
+    expect(lightHoldSeconds({ seconds: 99 })).toBe(10)
+    expect(lightHoldSeconds({ seconds: Number.NaN })).toBe(LIGHT_HOLD_SECONDS)
+  })
+
+  it('plays in reflected light between the other moves, which still start and end flat', () => {
+    const plan = planOf([{ id: 'a', kind: 'y', from: -10, y: 10 }, { id: 'l', kind: 'light' }])
+    const swing = 1 + 2 * (10 / 60)
+    expect(plan.seconds).toBeCloseTo(swing + 2.5)
+    expect(lightAt(plan, swing / 2)).toBe(0)
+    expect(tiltAt(plan, swing)).toEqual({ x: 0, y: 0 })
+    expect(lightAt(plan, swing + 1)).toBe(1)
+  })
+
+  it('fades a lit gesture in and out on its way to and from flat', () => {
+    const recording = { id: 'r', name: 'R', points: [{ t: 0, x: 10, y: 0, light: 1 }, { t: 1, x: 20, y: 0, light: 1 }] }
+    const plan = planOf([moveFromRecording(recording)])
+    // Each join takes at least the light's fade
+    expect(plan.seconds).toBeCloseTo(2 * LIGHT_FADE_SECONDS + 1)
+    expect(tiltAt(plan, 0.25).x).toBeCloseTo(5)
+    expect(lightAt(plan, 0.25)).toBeCloseTo(0.5)
+    expect(lightAt(plan, 1)).toBe(1)
+    expect(tiltAt(plan, 1.75).x).toBeCloseTo(10)
+    expect(lightAt(plan, 1.75)).toBeCloseTo(0.5)
+  })
+
+  it('marks the stretches played up to the light, for the pad to draw warm', () => {
+    expect(planLitPaths(planOf([{ id: 'a', kind: 'y', from: -10, y: 10 }]))).toEqual([])
+    const still = planLitPaths(planOf([{ id: 'a', kind: 'x', x: 20 }, { id: 'l', kind: 'light' }]))
+    expect(still).toHaveLength(1)
+    expect(still[0].every((p) => p.x === 0 && p.y === 0)).toBe(true)
+    const recording = { id: 'r', name: 'R', points: [{ t: 0, x: 10, y: 0, light: 1 }, { t: 1, x: 20, y: 0, light: 1 }] }
+    expect(planLitPaths(planOf([moveFromRecording(recording)]))).toEqual([[{ x: 10, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 0 }]])
+  })
+
+  it('records the light with the tilt, keeping a point when either changes', () => {
+    const recording = recordingFromSamples([
+      { t: 0, x: 0, y: 0, light: 0 },
+      { t: 0.1, x: 0, y: 0, light: 0.333 },
+      // Too little change in tilt or light: the point before just lasts longer
+      { t: 0.2, x: 0.1, y: 0, light: 0.35 },
+      { t: 0.3, x: 0, y: 0, light: 1 },
+      { t: 0.4, x: 0, y: 0, light: 0.97 },
+      // Back in reflected light, however small the step
+      { t: 0.5, x: 0, y: 0, light: 0.02 },
+      { t: 0.6, x: 0, y: 0, light: 0 },
+    ], 60, 'R')!
+    expect(recording.points).toEqual([
+      { t: 0, x: 0, y: 0 },
+      { t: 0.2, x: 0, y: 0, light: 0.33 },
+      { t: 0.4, x: 0, y: 0, light: 1 },
+      { t: 0.5, x: 0, y: 0, light: 0.02 },
+      { t: 0.6, x: 0, y: 0 },
+    ])
+    // Played back, the recorded light comes back with it
+    const plan = planOf([moveFromRecording(recording)])
+    expect(lightAt(plan, 0.4)).toBeCloseTo(1)
+    expect(lightAt(plan, 0.6)).toBe(0)
   })
 })

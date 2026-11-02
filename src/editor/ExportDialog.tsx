@@ -61,12 +61,16 @@ export function ExportDialog({ project, selectedId, open, onOpenChange }: {
   const [transparent, setTransparent] = useState(false)
   const [progress, setProgress] = useState<number>()
   const abort = useRef<AbortController>(null)
-  const { sheen, perspective, frameNumbers } = useTilt()
+  const sheen = useTilt((s) => s.sheen)
+  const perspective = useTilt((s) => s.perspective)
+  const frameNumbers = useTilt((s) => s.frameNumbers)
+  // The lamp switch left on makes the whole video backlit, as # carries frame numbers into it
+  const backlit = useTilt((s) => s.backlit)
 
   const notes = project.notes.filter((n) => chosen.has(n.id))
   const several = notes.length > 1
   const allChosen = notes.length === project.notes.length
-  const options = { format, notes, separate: several && separate, height, fps, loops: format === 'gif' ? 1 : loops, sheen, perspective, frameNumbers,
+  const options = { format, notes, separate: several && separate, height, fps, loops: format === 'gif' ? 1 : loops, sheen, perspective, frameNumbers, backlit,
     background: format === 'gif' && transparent ? undefined : background }
   const size = exportSize(notes, options)
   const busy = progress !== undefined
@@ -161,7 +165,7 @@ export function ExportDialog({ project, selectedId, open, onOpenChange }: {
             <Progress className="flex-1" value={Math.round(progress * 100)} />
           ) : (
             <span className="text-xs text-muted-foreground tabular-nums">
-              {notes.length > 0 && `${size.width} × ${size.height} · ${size.seconds.toFixed(1)} s${files > 1 ? ` · ${files} files` : ''}`}
+              {notes.length > 0 && `${size.width} × ${size.height} · ${size.seconds.toFixed(1)} s${files > 1 ? ` · ${files} files` : ''}${backlit ? ' · backlit' : ''}`}
             </span>
           )}
           <div className="flex shrink-0 gap-2">

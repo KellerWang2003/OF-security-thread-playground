@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { create } from 'zustand'
 import { TILT_LIMIT, clamp } from '../lib/frames'
 import { LIGHT_RAMP_SECONDS } from '../lib/light'
-import { tiltAt, type PlaybackPlan } from '../lib/moves'
+import { lightAt, tiltAt, type PlaybackPlan } from '../lib/moves'
 
 /** drag springs back on release, slider scrubs within one cycle, hold stays at a set angle */
 export type TiltSource = 'drag' | 'wobble' | 'slider' | 'hold'
@@ -30,7 +30,10 @@ interface TiltState {
   backlit: boolean
   /** Holding L: the switch's opposite for as long as the key is down */
   peek: boolean
-  /** How far the banknotes are held to the light, 0 to 1, as everything renders it: the switch, faded in and out over LIGHT_RAMP_SECONDS */
+  /**
+   * How far the banknotes are held to the light, 0 to 1, as everything renders it: the switch, faded in and out
+   * over LIGHT_RAMP_SECONDS, or what playback's moves say while playing (whichever is more)
+   */
   light: number
 }
 
@@ -103,7 +106,8 @@ const approach = (value: number, target: number, step: number) => (value < targe
 /**
  * Manual tilt uses a critically damped spring. Playback follows the project's moves exactly (no spring), from
  * the start each time it begins; a change to the plan while playing keeps the same share of the way through.
- * The light fades towards the switch at a steady rate.
+ * The light fades towards the switch at a steady rate; while playing it is also at least what the moves say, and
+ * on pausing it fades from there back to the switch.
  */
 export function useTiltLoop(plan: PlaybackPlan, limit = TILT_LIMIT) {
   const current = useRef({ plan, limit })
@@ -114,6 +118,8 @@ export function useTiltLoop(plan: PlaybackPlan, limit = TILT_LIMIT) {
     let velocity = 0
     let velocityX = 0
     let share = 0
+    // The switch's light, faded; while playing, the moves can only add to it
+    let ramp = useTilt.getState().light
     let lastSource: TiltSource | undefined
     const stiffness = 140
     const damping = 2 * Math.sqrt(stiffness)
@@ -128,7 +134,8 @@ export function useTiltLoop(plan: PlaybackPlan, limit = TILT_LIMIT) {
         if (lastSource === 'wobble' && plan.seconds > 0) share = (share + dt / plan.seconds) % 1
         else share = 0
         const { x: targetX, y: target } = tiltAt(plan, share * plan.seconds)
-        const light = approach(s.light, lightTarget(s), fade)
+        ramp = approach(ramp, lightTarget(s), fade)
+        const light = Math.max(ramp, lightAt(plan, share * plan.seconds))
         velocity = 0
         velocityX = 0
         if (target !== s.angle || targetX !== s.angleX || target !== s.target || targetX !== s.targetX || light !== s.light) {
@@ -136,6 +143,7 @@ export function useTiltLoop(plan: PlaybackPlan, limit = TILT_LIMIT) {
         }
       } else {
         const light = approach(s.light, lightTarget(s), fade)
+        ramp = light
         const range = s.source === 'slider' ? Math.max(limit, Math.abs(s.target), Math.abs(s.targetX)) : limit
         const target = clamp(s.target, -range, range)
         const targetX = clamp(s.targetX, -range, range)

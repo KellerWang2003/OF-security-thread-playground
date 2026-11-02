@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { setTilt, useTilt, useTiltLoop } from '../src/tilt/tilt'
+import { LIGHT_TAP_MS, lightTarget, pressLight, releaseLight, setTilt, togglePlayback, useTilt, useTiltLoop } from '../src/tilt/tilt'
+import { LIGHT_RAMP_SECONDS } from '../src/lib/light'
 import { cyclePhase, frameMix, frameSpans, sliceRange } from '../src/lib/frames'
 import { lensState } from '../src/lib/lens'
 import { playbackPlan } from '../src/lib/moves'
@@ -143,5 +144,77 @@ describe('frame and timeline alignment', () => {
     expect(flat.base).toBe(end.base)
     expect(flat.next).toBe(end.next)
     expect(flat.blend).toBeCloseTo(end.blend, 8)
+  })
+})
+
+describe('the light behind the banknotes', () => {
+  const light = () => useTilt.getState().light
+  const RAMP_MS = LIGHT_RAMP_SECONDS * 1000
+  beforeEach(() => setTilt({ backlit: false, peek: false, light: 0 }))
+
+  it('flips the lamp switch on a tap of L, and only peeks at the other light while L is held', () => {
+    pressLight(0)
+    expect(useTilt.getState()).toMatchObject({ peek: true, backlit: false })
+    expect(lightTarget(useTilt.getState())).toBe(1)
+    releaseLight(LIGHT_TAP_MS - 50)
+    expect(useTilt.getState()).toMatchObject({ peek: false, backlit: true })
+    // Held, with key repeats: reflected light until it is let go, then backlit again as before
+    pressLight(1000)
+    pressLight(1100)
+    expect(lightTarget(useTilt.getState())).toBe(0)
+    releaseLight(1000 + LIGHT_TAP_MS + 100)
+    expect(useTilt.getState()).toMatchObject({ peek: false, backlit: true })
+    // A release lost to another window ends the peek without flipping the switch
+    pressLight(3000)
+    releaseLight(3010, false)
+    expect(useTilt.getState()).toMatchObject({ peek: false, backlit: true })
+    // A release with no press does nothing
+    releaseLight(4000)
+    expect(useTilt.getState().backlit).toBe(true)
+  })
+
+  it('fades the light in and out over the ramp time, turning round from wherever it is', () => {
+    renderHook(() => useTiltLoop(planFor(30)))
+    setTilt({ source: 'hold', backlit: true })
+    tick(20)
+    expect(light()).toBeCloseTo(20 / RAMP_MS)
+    advance(RAMP_MS)
+    expect(light()).toBe(1)
+    setTilt({ backlit: false })
+    advance(100)
+    expect(light()).toBeCloseTo(1 - 100 / RAMP_MS)
+    setTilt({ backlit: true })
+    advance(100)
+    expect(light()).toBeCloseTo(1)
+    setTilt({ backlit: false })
+    advance(RAMP_MS)
+    expect(light()).toBe(0)
+  })
+
+  it('holds the banknotes to the light while playback says so, and fades back to the switch on pause', () => {
+    renderHook(() => useTiltLoop(planFor(30, { moves: [{ id: 'l', kind: 'light' }], curve: 'linear', holdSeconds: 0 })))
+    setTilt({ source: 'wobble' })
+    tick(20)
+    expect(light()).toBe(0)
+    advance(240)
+    expect(light()).toBeCloseTo(0.48)
+    advance(760)
+    expect(light()).toBe(1)
+    expect(useTilt.getState().angle).toBe(0)
+    togglePlayback()
+    advance(100)
+    expect(light()).toBeCloseTo(1 - 100 / RAMP_MS)
+    advance(RAMP_MS)
+    expect(light()).toBe(0)
+  })
+
+  it('keeps the lamp switch on through moves played in reflected light', () => {
+    renderHook(() => useTiltLoop(planFor(30)))
+    setTilt({ source: 'hold', backlit: true })
+    advance(RAMP_MS + 20)
+    setTilt({ source: 'wobble' })
+    advance(500)
+    expect(light()).toBe(1)
+    expect(useTilt.getState().angle).toBeGreaterThan(0)
   })
 })

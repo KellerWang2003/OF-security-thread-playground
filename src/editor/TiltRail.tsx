@@ -8,8 +8,8 @@ import { TILT_LIMIT, clamp } from '../lib/frames'
 import { LIGHT_CONE_DEG, LIGHT_FULL_DEG } from '../lib/light'
 import { padToTilt, tiltToPad } from '../lib/pad'
 import type { LensState } from '../lib/lens'
-import { moveFromRecording, nextRecordingName, planPath, playbackPlan, recordingFromSamples } from '../lib/moves'
-import type { TiltSettings } from '../lib/types'
+import { moveFromRecording, nextRecordingName, planLitPaths, planPath, playbackPlan, recordingFromSamples } from '../lib/moves'
+import type { RecordedPoint, TiltSettings } from '../lib/types'
 import { setRecording, setTilt, useTilt } from '../tilt/tilt'
 import { saveTilt } from './playbackActions'
 
@@ -120,7 +120,7 @@ function Pad({ limit, playback, recording, onRecorded }: {
   limit: number
   playback?: { tilt: TiltSettings; lens: LensState }
   recording: boolean
-  onRecorded: (samples: { t: number; x: number; y: number }[]) => void
+  onRecorded: (samples: RecordedPoint[]) => void
 }) {
   const x = useShown('x')
   const y = useShown('y')
@@ -133,10 +133,17 @@ function Pad({ limit, playback, recording, onRecorded }: {
   const [dragging, setDragging] = useState(false)
   const half = PAD_PX / 2
   const toPx = (deg: number) => half + tiltToPad(clamp(deg, -limit, limit) / limit) * (half - 6)
-  const path = useMemo(() => {
-    if (!playback) return ''
-    const points = planPath(playbackPlan(playback.tilt, playback.lens))
-    return points.map((p, i) => `${i ? 'L' : 'M'}${toPx(p.x).toFixed(1)},${toPx(-p.y).toFixed(1)}`).join(' ')
+  const { path, lit } = useMemo(() => {
+    if (!playback) return { path: '', lit: [] }
+    const plan = playbackPlan(playback.tilt, playback.lens)
+    const line = (points: { x: number; y: number }[]) => points.map((p, i) => `${i ? 'L' : 'M'}${toPx(p.x).toFixed(1)},${toPx(-p.y).toFixed(1)}`).join(' ')
+    // Stretches played up to the light are drawn warm; one that stays in place (Hold to light, at flat) is a ring
+    // round the tilt dot, wide enough to show while the dot sits on it
+    const lit = planLitPaths(plan).map((points) => {
+      const still = points.every((p) => Math.abs(toPx(p.x) - toPx(points[0].x)) < 1 && Math.abs(toPx(-p.y) - toPx(-points[0].y)) < 1)
+      return still ? { dot: { x: toPx(points[0].x), y: toPx(-points[0].y) } } : { d: line(points) }
+    })
+    return { path: line(planPath(plan)), lit }
     // toPx only depends on limit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playback, limit])
@@ -146,15 +153,15 @@ function Pad({ limit, playback, recording, onRecorded }: {
   const coneFull = toPx(LIGHT_FULL_DEG) - half
   const coneEdge = toPx(LIGHT_CONE_DEG) - half
 
-  // While recording a drag, sample the held tilt every animation frame, so pauses are kept too
-  const samples = useRef<{ t: number; x: number; y: number }[] | null>(null)
+  // While recording a drag, sample the held tilt and the light every animation frame, so pauses are kept too
+  const samples = useRef<RecordedPoint[] | null>(null)
   useEffect(() => {
     if (!recording || !dragging) return
     samples.current = []
     let raf = 0
     const sample = () => {
       const s = useTilt.getState()
-      samples.current?.push({ t: performance.now() / 1000, x: s.targetX, y: s.target })
+      samples.current?.push({ t: performance.now() / 1000, x: s.targetX, y: s.target, light: s.light })
       raf = requestAnimationFrame(sample)
     }
     raf = requestAnimationFrame(sample)
@@ -232,6 +239,9 @@ function Pad({ limit, playback, recording, onRecorded }: {
       {path && (
         <svg className="pointer-events-none absolute inset-0" width={PAD_PX} height={PAD_PX} aria-hidden>
           <path d={path} fill="none" stroke="var(--primary)" strokeOpacity={playing ? 0.55 : 0.3} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+          {lit.map((stretch, i) => stretch.dot
+            ? <circle key={i} cx={stretch.dot.x} cy={stretch.dot.y} r={8.5} fill="none" stroke="rgb(245 158 11)" strokeOpacity={playing ? 0.9 : 0.6} strokeWidth={2} />
+            : <path key={i} d={stretch.d} fill="none" stroke="rgb(245 158 11)" strokeOpacity={playing ? 0.9 : 0.6} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />)}
         </svg>
       )}
       {/* Flat crosshair; a locked axis's line turns solid to show the dot stays on it */}

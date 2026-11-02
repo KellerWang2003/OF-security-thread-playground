@@ -78,27 +78,37 @@ export interface TiltSettings {
   recordings?: Recording[]
 }
 
+/** A moment of a recording: seconds from the start, the tilt then, and how far it was held to the light (0 to 1, absent = 0) */
+export interface RecordedPoint {
+  t: number
+  x: number
+  y: number
+  light?: number
+}
+
 export interface Recording {
   id: string
   name: string
-  /** Seconds from the start, and the tilt then */
-  points: { t: number; x: number; y: number }[]
+  points: RecordedPoint[]
 }
 
 /**
  * One step of playback. Preset moves go out from flat and back: up/down, side to side, both at once
  * (diagonal), or once round an ellipse (circle). `x`/`y` are the signed angles reached; absent means one full
- * cycle of that tilt. A gesture is a recording of the tilt pad.
+ * cycle of that tilt. Hold to light (`light`) stays flat, fades the light behind the banknote in, holds and fades
+ * it out. A gesture is a recording of the tilt pad.
  */
 export interface PlaybackMove {
   id: string
-  kind: 'y' | 'x' | 'diagonal' | 'circle' | 'gesture'
+  kind: 'y' | 'x' | 'diagonal' | 'circle' | 'light' | 'gesture'
   x?: number
   y?: number
   /** Up/down and side only: the signed angle the move starts and returns to (flat when absent), so it can swing −12° to +12° */
   from?: number
-  /** Gesture only: seconds from the start, and the tilt then (a copy of the recording's) */
-  points?: { t: number; x: number; y: number }[]
+  /** Hold to light only: seconds held up to the light at 1× (default LIGHT_HOLD_SECONDS) */
+  seconds?: number
+  /** Gesture only: seconds from the start, the tilt then and the light (a copy of the recording's) */
+  points?: RecordedPoint[]
   /** Gesture only: the recording it came from; deleting that recording removes the move */
   recordingId?: string
 }
