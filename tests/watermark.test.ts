@@ -86,7 +86,7 @@ describe('a saved watermark', () => {
   })
 })
 
-describe('the watermark held to the light', () => {
+describe('the watermark relief', () => {
   const WHITE = [255, 255, 255, 255]
   const BLACK = [0, 0, 0, 255]
   const GREY = [128, 128, 128, 255]

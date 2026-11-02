@@ -5,7 +5,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { IconButton, Panel, ScrubField } from '../components/controls'
 import { TILT_LIMIT, clamp } from '../lib/frames'
-import { LIGHT_CONE_DEG, LIGHT_FULL_DEG } from '../lib/light'
 import { padToTilt, tiltToPad } from '../lib/pad'
 import type { LensState } from '../lib/lens'
 import { moveFromRecording, nextRecordingName, planLitPaths, planPath, playbackPlan, recordingFromSamples } from '../lib/moves'
@@ -137,7 +136,7 @@ function Pad({ limit, playback, recording, onRecorded }: {
     if (!playback) return { path: '', lit: [] }
     const plan = playbackPlan(playback.tilt, playback.lens)
     const line = (points: { x: number; y: number }[]) => points.map((p, i) => `${i ? 'L' : 'M'}${toPx(p.x).toFixed(1)},${toPx(-p.y).toFixed(1)}`).join(' ')
-    // Stretches played up to the light are drawn warm; one that stays in place (Hold to light, at flat) is a ring
+    // Stretches played up to the light are drawn bold; one that stays in place (Hold to light, at flat) is a ring
     // round the tilt dot, wide enough to show while the dot sits on it
     const lit = planLitPaths(plan).map((points) => {
       const still = points.every((p) => Math.abs(toPx(p.x) - toPx(points[0].x)) < 1 && Math.abs(toPx(-p.y) - toPx(-points[0].y)) < 1)
@@ -147,11 +146,7 @@ function Pad({ limit, playback, recording, onRecorded }: {
     // toPx only depends on limit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playback, limit])
-  // The light coming through, and how far the lamp reaches: full near flat, gone past LIGHT_CONE_DEG
-  const light = useTilt((s) => Math.round(s.light * 50) / 50)
   const backlit = useTilt((s) => s.backlit)
-  const coneFull = toPx(LIGHT_FULL_DEG) - half
-  const coneEdge = toPx(LIGHT_CONE_DEG) - half
 
   // While recording a drag, sample the held tilt and the light every animation frame, so pauses are kept too
   const samples = useRef<RecordedPoint[] | null>(null)
@@ -231,17 +226,12 @@ function Pad({ limit, playback, recording, onRecorded }: {
         e.preventDefault()
       }}
     >
-      {light > 0 && (
-        // Warm while held to the light, brightest where the lamp is fully behind the banknote
-        <div aria-hidden className="pointer-events-none absolute inset-0" data-light-cone=""
-          style={{ opacity: light, background: `radial-gradient(circle at ${half}px ${half}px, rgb(251 191 36 / 0.55) ${coneFull}px, rgb(251 191 36 / 0) ${coneEdge}px)` }} />
-      )}
       {path && (
         <svg className="pointer-events-none absolute inset-0" width={PAD_PX} height={PAD_PX} aria-hidden>
           <path d={path} fill="none" stroke="var(--primary)" strokeOpacity={playing ? 0.55 : 0.3} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
           {lit.map((stretch, i) => stretch.dot
-            ? <circle key={i} cx={stretch.dot.x} cy={stretch.dot.y} r={8.5} fill="none" stroke="rgb(245 158 11)" strokeOpacity={playing ? 0.9 : 0.6} strokeWidth={2} />
-            : <path key={i} d={stretch.d} fill="none" stroke="rgb(245 158 11)" strokeOpacity={playing ? 0.9 : 0.6} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />)}
+            ? <circle key={i} cx={stretch.dot.x} cy={stretch.dot.y} r={8.5} fill="none" stroke="var(--primary)" strokeOpacity={playing ? 0.9 : 0.6} strokeWidth={2} />
+            : <path key={i} d={stretch.d} fill="none" stroke="var(--primary)" strokeOpacity={playing ? 0.9 : 0.6} strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />)}
         </svg>
       )}
       {/* Flat crosshair; a locked axis's line turns solid to show the dot stays on it */}
@@ -256,7 +246,7 @@ function Pad({ limit, playback, recording, onRecorded }: {
         <TooltipTrigger
           render={
             <Toggle
-              aria-label="Backlit"
+              aria-label="Hold up to the light"
               variant="outline"
               size="sm"
               pressed={backlit}
@@ -264,7 +254,7 @@ function Pad({ limit, playback, recording, onRecorded }: {
               // A press here is not a drag on the pad
               onPointerDown={(e) => e.stopPropagation()}
               onDoubleClick={(e) => e.stopPropagation()}
-              className="absolute top-1 left-1 size-6 min-w-6 rounded-[min(var(--radius-md),10px)] bg-background/95 p-0 aria-pressed:border-amber-400 aria-pressed:bg-amber-300 aria-pressed:text-amber-950 aria-pressed:hover:bg-amber-200"
+              className="absolute top-1 left-1 size-6 min-w-6 rounded-[min(var(--radius-md),10px)] bg-background/95 p-0 aria-pressed:bg-primary aria-pressed:text-primary-foreground"
             />
           }
         >

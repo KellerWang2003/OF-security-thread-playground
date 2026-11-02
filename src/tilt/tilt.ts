@@ -70,7 +70,7 @@ export function setRecording(on: boolean) {
   setTilt(on ? { recording: true, source: 'hold', target: angle, targetX: angleX } : { recording: false })
 }
 
-/** Where the switch wants the light: on while backlit, the opposite while L is held */
+/** Where the switch wants the light: on while it is on, the opposite while L is held */
 export const lightTarget = (s: Pick<TiltState, 'backlit' | 'peek'>) => (s.backlit !== s.peek ? 1 : 0)
 
 /** A press of L shorter than this flips the switch; held longer, it only peeks */

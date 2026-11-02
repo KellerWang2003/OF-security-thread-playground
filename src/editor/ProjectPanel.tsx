@@ -242,7 +242,10 @@ export function ProjectPanel({
   )
 }
 
-/** One part of a banknote, under it in the list */
+/**
+ * One part of a banknote, under it in the list, built like the banknote's own row: its icon sits under the banknote's
+ * thumbnail and its name under the banknote's name, so its highlight starts under the thumbnail.
+ */
 function LayerRow({ icon, name, selected, onSelect, onRemove }: {
   icon: ReactNode
   name: string
@@ -251,18 +254,20 @@ function LayerRow({ icon, name, selected, onSelect, onRemove }: {
   onRemove?: () => void
 }) {
   return (
-    <li className="group/layer relative">
+    <li className="group/layer relative ml-6">
       <button
         type="button"
         onClick={onSelect}
         className={cn(
-          'flex h-7 w-full items-center gap-2 rounded-lg pr-1.5 pl-[42px] text-left text-xs transition-colors [&_svg]:size-3.5 [&_svg]:shrink-0',
+          'flex w-full items-center gap-2 rounded-lg py-1 pr-1.5 text-left transition-colors',
           onRemove && 'group-hover/layer:pr-8',
-          selected ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+          selected ? 'bg-muted' : 'hover:bg-muted/50',
         )}
       >
-        {icon}
-        <span className="min-w-0 flex-1 truncate">{name}</span>
+        <span className={cn('flex size-7 shrink-0 items-center justify-center [&_svg]:size-4', selected ? 'text-foreground' : 'text-muted-foreground')}>
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm">{name}</span>
       </button>
       {onRemove && (
         <div className="absolute inset-y-0 right-1 hidden items-center group-hover/layer:flex">

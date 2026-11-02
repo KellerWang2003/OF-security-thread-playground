@@ -1,6 +1,6 @@
 import { SHADE_DEG } from './frames'
 import { lensMix, lensState, type Tilt2 } from './lens'
-import { BACKLIT, backlightAt } from './light'
+import { watermarkOpacity, watermarkReveal } from './light'
 import { lightAt, playbackPlan, tiltAt } from './moves'
 import { loadImageUrl } from './images'
 import { advancePlayback, playbackEase, playbackSettings } from './playback'
@@ -88,7 +88,7 @@ export function tiltedBounds(width: number, height: number, tilt: Tilt2 | number
 export interface NoteAssets {
   face?: HTMLImageElement
   frames: Map<string, HTMLImageElement>
-  /** The watermark worked out for drawing over backlit paper */
+  /** The watermark worked out for hard-light drawing over the design (relief.ts) */
   relief?: HTMLCanvasElement
 }
 
@@ -127,71 +127,13 @@ function roundedRect(ctx: Ctx, width: number, height: number, radius: number) {
   ctx.roundRect(0, 0, width, height, radius)
 }
 
-/** The design as NoteView shows it: object-fit cover in the `width` × `height` box at (x, y) */
-function drawCover(ctx: Ctx, image: HTMLImageElement | undefined, x: number, y: number, width: number, height: number) {
-  if (!image || image.naturalWidth <= 0) return
-  const k = Math.max(width / image.naturalWidth, height / image.naturalHeight)
-  const w = image.naturalWidth * k, h = image.naturalHeight * k
-  ctx.drawImage(image, x + (width - w) / 2, y + (height - h) / 2, w, h)
-}
-
-/** The thread's box on the flat note, in px, along its whole length */
-function threadStrip(note: Note, scale: number) {
-  const { thread } = note
-  const lengthMm = threadLength(note)
-  return thread.direction === 'horizontal'
-    ? { x: 0, y: (thread.positionMm - thread.widthMm / 2) * scale, w: lengthMm * scale, h: thread.widthMm * scale }
-    : { x: (thread.positionMm - thread.widthMm / 2) * scale, y: 0, w: thread.widthMm * scale, h: lengthMm * scale }
-}
-
-type Face = CanvasImageSource & { width: number; height: number }
-
 /**
- * The flat note held up to the light, at `scale` px per mm, as NoteView's backlit layers draw it: lit paper, the
- * watermark hard-light blended at its depth, the print as a soft multiplied shadow, and the thread as one dark
- * stripe. It doesn't change with the tilt, so an export works it out once and fades it in at each frame's glow.
- */
-export function drawBacklitFace(note: Note, assets: NoteAssets, scale: number): OffscreenCanvas {
-  const mm = (value: number) => value * scale
-  const width = Math.max(1, Math.ceil(mm(note.widthMm))), height = Math.max(1, Math.ceil(mm(note.heightMm)))
-  const canvas = new OffscreenCanvas(width, height)
-  const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = BACKLIT.paper
-  ctx.fillRect(0, 0, width, height)
-  const { watermark } = note
-  if (watermark && assets.relief) {
-    ctx.globalCompositeOperation = 'hard-light'
-    ctx.globalAlpha = watermark.depth
-    ctx.drawImage(assets.relief, mm(watermark.xMm), mm(watermark.yMm), mm(watermark.widthMm), mm(watermark.heightMm))
-  }
-  // The face as it is in reflected light (colour, then the design), reaching past the edges so its blur leaves no rim
-  const blur = mm(BACKLIT.inkBlurMm) >= 0.3 ? mm(BACKLIT.inkBlurMm) : 0
-  const pad = Math.ceil(blur * 2)
-  const ink = new OffscreenCanvas(width + 2 * pad, height + 2 * pad)
-  const inkCtx = ink.getContext('2d')!
-  inkCtx.fillStyle = note.color
-  inkCtx.fillRect(0, 0, ink.width, ink.height)
-  drawCover(inkCtx, assets.face, pad, pad, mm(note.widthMm), mm(note.heightMm))
-  ctx.globalCompositeOperation = 'multiply'
-  ctx.globalAlpha = BACKLIT.ink
-  if (blur) ctx.filter = `blur(${blur}px)`
-  ctx.drawImage(ink, -pad, -pad)
-  ctx.filter = 'none'
-  ctx.globalAlpha = 1
-  ctx.globalCompositeOperation = 'source-over'
-  const strip = threadStrip(note, scale)
-  ctx.fillStyle = BACKLIT.thread
-  ctx.fillRect(strip.x, strip.y, strip.w, strip.h)
-  return canvas
-}
-
-/**
- * The flat note at `scale` px per mm, as NoteView draws it before it is turned in 3D. With `backlight` above 0,
- * `backlitFace` (drawBacklitFace) fades in over it and the frame number fades out, as on the canvas.
+ * The flat note at `scale` px per mm, as NoteView draws it before it is turned in 3D. `reveal` is how clearly its
+ * watermark shows, 0 (faint) to 1; without it, as at this tilt in reflected light.
  */
 export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number, tiltAt: Tilt2 | number,
-  options: { sheen: boolean; perspective: boolean; frameNumbers?: boolean; backlight?: number; backlitFace?: Face }) {
-  const { thread, frames } = note
+  options: { sheen: boolean; perspective: boolean; frameNumbers?: boolean; reveal?: number }) {
+  const { thread, frames, watermark } = note
   const { x: angleX, y: angle } = asTilt(tiltAt)
   const mm = (value: number) => value * scale
   const width = mm(note.widthMm), height = mm(note.heightMm)
@@ -200,11 +142,28 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
   ctx.clip()
   ctx.fillStyle = note.color
   ctx.fillRect(0, 0, width, height)
-  drawCover(ctx, assets.face, 0, 0, width, height)
+
+  const face = assets.face
+  if (face && face.naturalWidth > 0) {
+    // object-fit: cover
+    const k = Math.max(width / face.naturalWidth, height / face.naturalHeight)
+    const w = face.naturalWidth * k, h = face.naturalHeight * k
+    ctx.drawImage(face, (width - w) / 2, (height - h) / 2, w, h)
+  }
+  if (watermark && assets.relief) {
+    // As NoteView: hard-light blended over the design, so it shows in the note's own colours, under the thread
+    ctx.globalCompositeOperation = 'hard-light'
+    ctx.globalAlpha = watermarkOpacity(watermark.depth, options.reveal ?? watermarkReveal(0, { x: angleX, y: angle }))
+    ctx.drawImage(assets.relief, mm(watermark.xMm), mm(watermark.yMm), mm(watermark.widthMm), mm(watermark.heightMm))
+    ctx.globalAlpha = 1
+    ctx.globalCompositeOperation = 'source-over'
+  }
 
   const horizontal = thread.direction === 'horizontal'
   const lengthMm = threadLength(note)
-  const strip = threadStrip(note, scale)
+  const strip = horizontal
+    ? { x: 0, y: mm(thread.positionMm - thread.widthMm / 2), w: mm(lengthMm), h: mm(thread.widthMm) }
+    : { x: mm(thread.positionMm - thread.widthMm / 2), y: 0, w: mm(thread.widthMm), h: mm(lengthMm) }
 
   ctx.save()
   ctx.beginPath()
@@ -271,13 +230,6 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
   }
   ctx.restore()
 
-  const backlight = options.backlitFace ? Math.min(1, Math.max(0, options.backlight ?? 0)) : 0
-  if (backlight > 0) {
-    ctx.globalAlpha = backlight
-    ctx.drawImage(options.backlitFace!, 0, 0)
-    ctx.globalAlpha = 1
-  }
-
   if (options.perspective && t !== 0) {
     // The note catches a little light or shade as it turns away from flat
     const gradient = ctx.createLinearGradient(0, 0, 0, height)
@@ -305,11 +257,7 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, width, height)
   }
-  if (options.frameNumbers && frames.length > 0 && backlight < 1) {
-    ctx.globalAlpha = 1 - backlight
-    drawFrameNumber(ctx, String(mix.current + 1), strip, mm)
-    ctx.globalAlpha = 1
-  }
+  if (options.frameNumbers && frames.length > 0) drawFrameNumber(ctx, String(mix.current + 1), strip, mm)
   ctx.restore()
 }
 
@@ -336,6 +284,8 @@ function drawFrameNumber(ctx: Ctx, label: string, strip: { x: number; y: number;
   ctx.fillText(label, cx, cy + size * 0.04)
   ctx.restore()
 }
+
+type Face = CanvasImageSource & { width: number; height: number }
 
 /**
  * Draws a flat face centred on (cx, cy), turned by rotateX(y) and rotateY(x) under `perspective`. Each screen
@@ -423,13 +373,13 @@ export function exportLayout(notes: Note[], scale: number, angles: (Tilt2 | numb
   return { width: even(x), height: even(height), exactWidth: x, exactHeight: height, cells: placed }
 }
 
-/** How backlit an export frame looks: its light (or full, with the lamp switch on) through the light cone at its tilt */
-export const exportGlow = (light: number, angle: Tilt2 | number, backlit = false) => backlightAt(Math.max(light, backlit ? 1 : 0), asTilt(angle))
-
 /**
- * Renders one export frame: the background, dimmed as the canvas is while backlit, then every banknote at tilt
- * `angle`, held to the light by `light` (0 to 1). `backlitFaces` holds each banknote's drawBacklitFace.
+ * How clearly the watermark shows in an export frame: as far as it is held to the light (all the way with the lamp
+ * switch on) or tilted, whichever shows it more
  */
+export const exportReveal = (light: number, angle: Tilt2 | number, backlit = false) => watermarkReveal(Math.max(light, backlit ? 1 : 0), asTilt(angle))
+
+/** Renders one export frame: the background, then every banknote at tilt `angle`, held to the light by `light` (0 to 1) */
 export function drawExportFrame(
   ctx: Ctx,
   layout: ReturnType<typeof exportLayout>,
@@ -439,17 +389,12 @@ export function drawExportFrame(
   angle: Tilt2 | number,
   options: { sheen: boolean; perspective: boolean; frameNumbers?: boolean; background?: string; backlit?: boolean },
   light = 0,
-  backlitFaces?: Map<string, OffscreenCanvas>,
 ) {
-  const glow = backlitFaces ? exportGlow(light, angle, options.backlit) : 0
+  const reveal = exportReveal(light, angle, options.backlit)
   ctx.clearRect(0, 0, layout.width, layout.height)
   if (options.background) {
     ctx.fillStyle = options.background
     ctx.fillRect(0, 0, layout.width, layout.height)
-    if (glow > 0) {
-      ctx.fillStyle = `rgba(0, 0, 0, ${BACKLIT.scrim * glow})`
-      ctx.fillRect(0, 0, layout.width, layout.height)
-    }
   }
   ctx.imageSmoothingQuality = 'high'
   for (const cell of layout.cells) {
@@ -458,7 +403,7 @@ export function drawExportFrame(
     if (!face || !noteAssets) continue
     const faceCtx = face.getContext('2d')!
     faceCtx.clearRect(0, 0, face.width, face.height)
-    drawFace(faceCtx, cell.note, noteAssets, scale, angle, { ...options, backlight: glow, backlitFace: backlitFaces?.get(cell.note.id) })
+    drawFace(faceCtx, cell.note, noteAssets, scale, angle, { ...options, reveal })
     drawTilted(ctx, face, cell.cx, cell.cy, options.perspective ? angle : 0, perspectiveFor(cell.note, scale))
   }
 }

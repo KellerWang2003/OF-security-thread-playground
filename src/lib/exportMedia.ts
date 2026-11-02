@@ -1,7 +1,7 @@
 import { zipSync } from 'fflate'
 import { GIFEncoder, applyPalette, quantize } from 'gifenc'
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, QUALITY_HIGH, WebMOutputFormat, getFirstEncodableVideoCodec } from 'mediabunny'
-import { drawBacklitFace, drawExportFrame, exportGroups, exportLayout, loadNoteAssets, playbackLights, playbackTilts, scaleForHeight, type NoteAssets } from './exportRender'
+import { drawExportFrame, exportGroups, exportLayout, loadNoteAssets, playbackLights, playbackTilts, scaleForHeight, type NoteAssets } from './exportRender'
 import type { Note } from './types'
 
 export type ExportFormat = 'mp4' | 'gif'
@@ -22,7 +22,7 @@ export interface ExportOptions {
   perspective: boolean
   /** Draws the visible frame's number on each thread, as the # toggle does on the canvas */
   frameNumbers?: boolean
-  /** The whole video held up to the light, as the lamp switch on the canvas; otherwise only Hold to light moves are */
+  /** The whole video held up to the light (the watermark clear throughout), as the lamp switch on the canvas; otherwise only Hold to light moves are */
   backlit?: boolean
 }
 
@@ -38,10 +38,7 @@ async function renderFile(notes: Note[], assets: Map<string, NoteAssets>, option
   const canvas = new OffscreenCanvas(layout.width, layout.height)
   const ctx = canvas.getContext('2d', { willReadFrequently: options.format === 'gif' })!
   const faces = new Map(notes.map((n) => [n.id, new OffscreenCanvas(Math.ceil(n.widthMm * scale), Math.ceil(n.heightMm * scale))]))
-  // Held to the light, each banknote's backlit face is the same at every tilt: work it out once
-  const lit = options.backlit || lights.some((light) => light > 0)
-  const backlitFaces = lit ? new Map(notes.map((n) => [n.id, drawBacklitFace(n, assets.get(n.id) ?? { frames: new Map() }, scale)])) : undefined
-  const draw = (i: number) => drawExportFrame(ctx, layout, assets, faces, scale, angles[i], options, lights[i] ?? 0, backlitFaces)
+  const draw = (i: number) => drawExportFrame(ctx, layout, assets, faces, scale, angles[i], options, lights[i] ?? 0)
 
   if (options.format === 'gif') {
     const gif = GIFEncoder()

@@ -64,7 +64,7 @@ export function ExportDialog({ project, selectedId, open, onOpenChange }: {
   const sheen = useTilt((s) => s.sheen)
   const perspective = useTilt((s) => s.perspective)
   const frameNumbers = useTilt((s) => s.frameNumbers)
-  // The lamp switch left on makes the whole video backlit, as # carries frame numbers into it
+  // The lamp switch left on holds the whole video up to the light, as # carries frame numbers into it
   const backlit = useTilt((s) => s.backlit)
 
   const notes = project.notes.filter((n) => chosen.has(n.id))
@@ -165,7 +165,7 @@ export function ExportDialog({ project, selectedId, open, onOpenChange }: {
             <Progress className="flex-1" value={Math.round(progress * 100)} />
           ) : (
             <span className="text-xs text-muted-foreground tabular-nums">
-              {notes.length > 0 && `${size.width} × ${size.height} · ${size.seconds.toFixed(1)} s${files > 1 ? ` · ${files} files` : ''}${backlit ? ' · backlit' : ''}`}
+              {notes.length > 0 && `${size.width} × ${size.height} · ${size.seconds.toFixed(1)} s${files > 1 ? ` · ${files} files` : ''}${backlit ? ' · held to the light' : ''}`}
             </span>
           )}
           <div className="flex shrink-0 gap-2">

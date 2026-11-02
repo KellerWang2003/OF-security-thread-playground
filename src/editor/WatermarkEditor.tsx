@@ -13,9 +13,9 @@ type Gesture = { mode: 'move' | Corner; startX: number; startY: number; original
 const NUDGE: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
 
 /**
- * Canvas-only placing surface over a flat, backlit banknote: drag the dashed box to move the watermark, a corner to
- * resize it with its proportions kept, in 0.5 mm steps; arrow keys nudge it. It takes its gestures before the
- * banknote can tilt or pan.
+ * Canvas-only placing surface over a flat banknote with its watermark clear: drag the box to move the watermark, a
+ * corner to resize it with its proportions kept, in 0.5 mm steps; arrow keys nudge it. It takes its gestures before
+ * the banknote can tilt or pan.
  */
 export function WatermarkEditor({ note, watermark, scale, onChange }: {
   note: Note
@@ -39,7 +39,7 @@ export function WatermarkEditor({ note, watermark, scale, onChange }: {
       tabIndex={0}
       aria-label="Place watermark"
       data-watermark-editor=""
-      className="absolute touch-none cursor-move outline-1 outline-fuchsia-500 outline-dashed focus-visible:outline-2"
+      className="absolute touch-none cursor-move border border-fuchsia-500 ring-2 ring-fuchsia-500/40 outline-none focus-visible:ring-fuchsia-500/70"
       style={{ left: watermark.xMm * scale, top: watermark.yMm * scale, width: watermark.widthMm * scale, height: watermark.heightMm * scale }}
       onPointerDown={(event) => {
         if (event.button !== 0) return
@@ -82,7 +82,7 @@ export function WatermarkEditor({ note, watermark, scale, onChange }: {
           data-corner={corner}
           aria-label={`Resize watermark from its ${CORNER_NAMES[corner]} corner`}
           className={cn(
-            'absolute z-10 size-2.5 min-w-0 rounded-[2px] border-fuchsia-500 p-0 active:translate-y-0',
+            'absolute z-10 size-2.5 min-w-0 rounded-sm border-fuchsia-500 p-0 active:translate-y-0',
             corner === 'nw' || corner === 'se' ? 'cursor-nwse-resize' : 'cursor-nesw-resize',
           )}
           style={{

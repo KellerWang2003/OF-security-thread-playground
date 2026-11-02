@@ -63,20 +63,21 @@ export async function removeImage(_id: string) {}
 
 export function useImageUrl(id: string | undefined) {
   const [loaded, setLoaded] = useState<{ id: string; url?: string }>()
+  const url = id ? urls.get(id) ?? (loaded?.id === id ? loaded.url : undefined) : undefined
 
+  // Rendered without it: fetch it, or pick it up if another view loaded it since this one rendered
   useEffect(() => {
-    if (!id || urls.has(id)) return
+    if (!id || url) return
     let live = true
-    void resolveUrl(id).then((url) => {
-      if (live) setLoaded({ id, url })
+    void resolveUrl(id).then((next) => {
+      if (live) setLoaded({ id, url: next })
     }).catch((error: unknown) => { if (live) reportError(error) })
     return () => {
       live = false
     }
-  }, [id])
+  }, [id, url])
 
-  if (!id) return undefined
-  return urls.get(id) ?? (loaded?.id === id ? loaded.url : undefined)
+  return url
 }
 
 /** Height ÷ width of an image file, read from the image itself (works for SVG too) */

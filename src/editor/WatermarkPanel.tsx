@@ -9,14 +9,14 @@ import type { NoteRef } from './frameActions'
 import { setWatermarkImage, updateWatermark } from './watermarkActions'
 
 /**
- * Right: the selected banknote's watermark. One image, read as it looks held to the light (lighter than the paper
- * is thinner, darker is thicker), where it sits, and how strongly the paper's thickness shows.
+ * Right: the selected banknote's watermark. One image, read as it looks at its clearest (lighter than the paper is
+ * thinner, darker is thicker), where it sits, and how strongly it shows.
  */
 export function WatermarkPanel({ note, watermark, noteRef, onPlace, onRemove }: {
   note: Note
   watermark: Watermark
   noteRef: NoteRef
-  /** Shows it on the canvas, flat and backlit, to place it */
+  /** Shows it on the canvas, flat and clear, to place it */
   onPlace: () => void
   onRemove: () => void
 }) {
@@ -65,7 +65,7 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace, onRemove }: 
             step={WATERMARK_STEP} unit="mm" onChange={(yMm) => change((w) => ({ ...w, yMm }))} />
           <ScrubField label="W" title="Watermark width; its height follows the image" value={Math.round(watermark.widthMm * 100) / 100} min={WATERMARK_MIN_MM}
             max={maxWatermarkWidth(watermark, note)} step={WATERMARK_STEP} unit="mm" onChange={(widthMm) => change((w, n) => resizeWatermark(w, widthMm, n))} />
-          <ScrubField label="Depth" title="How strongly the paper's thickness shows held to the light" value={Math.round(watermark.depth * 100)} min={0} max={100}
+          <ScrubField label="Depth" title="How strongly the watermark shows at its clearest, tilted or held to the light" value={Math.round(watermark.depth * 100)} min={0} max={100}
             step={5} unit="%" onChange={(depth) => change((w) => ({ ...w, depth: depth / 100 }))} />
         </div>
       </Section>

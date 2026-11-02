@@ -37,7 +37,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   // or by turning windows on) and ends on a click elsewhere on the banknote, on the canvas, or with Escape
   const editingWindows = editingNoteId !== undefined && editingNoteId === selectedId && shownLayer === 'thread'
   // Placing the watermark works the same way: it starts when the watermark is picked (its layer, on the canvas
-  // while backlit, adding it or uploading its image) and shows the banknote flat and backlit until it ends
+  // while it shows clearly, adding it or uploading its image) and shows the banknote flat with it clear until it ends
   const placingWatermark = placingNoteId !== undefined && placingNoteId === selectedId && shownLayer === 'watermark'
   const exitWindows = () => {
     setEditingNoteId(undefined)

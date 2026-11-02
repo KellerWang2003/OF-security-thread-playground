@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { loadImageUrl } from './images'
 
 /**
- * A watermark image as it is drawn over backlit paper: a grey layer, hard-light blended, where mid-grey leaves the
- * paper as it is. Worked out once per image and shared by the canvas (as an object URL) and the export (a canvas).
+ * A watermark image as it is drawn over the banknote: a grey layer, hard-light blended, where mid-grey leaves the
+ * design as it is. Worked out once per image and shared by the canvas (as an object URL) and the export (a canvas).
  */
 
 /** Brightness 0 to 1 of an sRGB pixel, in whole numbers until the end so white comes out exactly 1 */
@@ -35,8 +35,8 @@ export function paperLevel(data: Uint8ClampedArray, width: number, height: numbe
 }
 
 /**
- * The watermark as a grey layer for hard-light blending over the backlit paper: mid-grey leaves the paper as it is,
- * lighter brightens it (thinner paper) and darker darkens it (thicker). The paper level becomes mid-grey, white stays
+ * The watermark as a grey layer for hard-light blending over the banknote: mid-grey leaves it as it is, lighter
+ * brightens it (thinner paper) and darker darkens it (thicker). The paper level becomes mid-grey, white stays
  * white (the brightest highlight) and black stays black, whatever the paper level; transparent pixels are plain paper.
  * Returns opaque RGBA pixels the same size as the input.
  */
@@ -101,7 +101,7 @@ async function buildRelief(imageId: string): Promise<Relief | undefined> {
   return relief
 }
 
-/** The watermark image worked out for drawing over backlit paper, once per image */
+/** The watermark image worked out for drawing over the banknote, once per image */
 export function loadRelief(imageId: string): Promise<Relief | undefined> {
   let relief = reliefs.get(imageId)
   if (!relief) {
@@ -114,8 +114,10 @@ export function loadRelief(imageId: string): Promise<Relief | undefined> {
 /** The relief's object URL for CSS, once worked out */
 export function useRelief(imageId: string | undefined) {
   const [loaded, setLoaded] = useState<{ id: string; url?: string }>()
+  const url = imageId ? ready.get(imageId)?.url ?? (loaded?.id === imageId ? loaded.url : undefined) : undefined
+  // Rendered without it: work it out, or pick it up if another view did since this one rendered
   useEffect(() => {
-    if (!imageId || ready.has(imageId)) return
+    if (!imageId || url) return
     let live = true
     void loadRelief(imageId).then((relief) => {
       if (live) setLoaded({ id: imageId, url: relief?.url })
@@ -123,7 +125,6 @@ export function useRelief(imageId: string | undefined) {
     return () => {
       live = false
     }
-  }, [imageId])
-  if (!imageId) return undefined
-  return ready.get(imageId)?.url ?? (loaded?.id === imageId ? loaded.url : undefined)
+  }, [imageId, url])
+  return url
 }
