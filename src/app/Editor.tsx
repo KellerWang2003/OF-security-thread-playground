@@ -154,7 +154,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
       )}
 
       {!isEmpty && !editingWindows && <TiltRail limit={lens?.viewDeg} playback={reference && lens ? { projectId: project.id, tilt: reference.tilt, lens } : undefined} />}
-      <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} />
+      <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} aboveTilt={!isEmpty && !editingWindows} />
       {!isEmpty && (
         <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
       )}
