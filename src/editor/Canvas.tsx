@@ -1,5 +1,5 @@
 import { runAction } from '../cloud/notices'
-import { Download, Maximize, Minus, Plus } from 'lucide-react'
+import { Maximize, Minus, Plus, Share } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -547,7 +547,7 @@ export function Canvas({
         </div>
         {!selected && (
           <Button variant="outline" className="bg-background/95 shadow-panel backdrop-blur" onClick={onExport}>
-            <Download />
+            <Share />
             Export
           </Button>
         )}

@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { reportError } from '../cloud/notices'
-import { Download, ImageUp, RectangleHorizontal, RectangleVertical, X } from 'lucide-react'
+import { ImageUp, RectangleHorizontal, RectangleVertical, Share, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ColorField, Group, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
@@ -78,7 +78,7 @@ export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSele
     <Panel className="absolute top-3 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-y-auto">
       <div className="flex items-center justify-between gap-2 border-b border-border/60 py-2 pr-2 pl-4">
         <span className="truncate text-sm font-medium">{note.name}</span>
-        <Button variant="outline" size="sm" onClick={onExport}><Download />Export</Button>
+        <Button variant="outline" size="sm" onClick={onExport}><Share />Export</Button>
       </div>
 
       {layer === 'note' && (
