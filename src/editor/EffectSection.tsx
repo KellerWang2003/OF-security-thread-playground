@@ -38,8 +38,11 @@ import {
   type LensState,
 } from '../lib/lens'
 import { CYCLE_LIMITS } from '../lib/notes'
+import { PRINT_RIDGES, setPrintView, usePrintView } from '../lib/printView'
 import { switchEffect } from '../lib/switchEffect'
 import { CycleBar, Explain, MiniNote, RidgeIcon, swatch, useClock } from './LensVisuals'
+import { PrintCanvas } from './PrintView'
+import { useElementSize } from './useElementSize'
 import { updateNote } from '../lib/store'
 import type { Note, TiltSettings } from '../lib/types'
 import { setTilt, useTilt } from '../tilt/tilt'
@@ -417,16 +420,23 @@ function FramesRow({ axis, note, lens }: { axis: Axis; note: Note; lens: LensSta
 }
 
 const MAP_RES = 72
+/** A press that moves less than this (px) is a click, which flips between the tilt map and the print */
+const CLICK_SLOP = 3
 
 /**
  * Side tilt across, up/down tilt down (up at the top), each to the viewing range, coloured by the frame that
- * shows. The bands run along the ridges. Drag the dot to tilt every banknote.
+ * shows. The bands run along the ridges. Drag to tilt every banknote; click to flip to the print (the thread's
+ * frames woven under the ridges, `PrintCanvas`) and back.
  */
 function TiltMap({ note, lens }: { note: Note; lens: LensState }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const box = useRef<HTMLDivElement>(null)
+  const press = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const range = lens.viewDeg
   const [dragging, setDragging] = useState(false)
+  const print = usePrintView((s) => s.on)
+  const ridges = usePrintView((s) => s.ridges)
+  const size = useElementSize(box)
   const { frames, tilt } = note
 
   // Redrawn only when the lens or frames change: moving or renaming the banknote used to redraw it on
@@ -454,27 +464,70 @@ function TiltMap({ note, lens }: { note: Note; lens: LensState }) {
     const y = clamp(range - ((clientY - rect.top) / rect.height) * 2 * range, -range, range)
     setTilt({ source: 'hold', target: respondsTo(lens, 'y') ? Math.round(y) : 0, targetX: respondsTo(lens, 'x') ? Math.round(x) : 0 })
   }
+  const flip = () => setPrintView({ on: !print })
+  const release = () => {
+    press.current = null
+    setDragging(false)
+  }
 
   return (
-    <div
-      ref={box}
-      className={cn('relative aspect-square w-full touch-none overflow-hidden rounded-md border border-border/60 select-none', dragging ? 'cursor-grabbing' : 'cursor-crosshair')}
-      title="Tilt map: side tilt across, up/down tilt down"
-      onPointerDown={(e) => {
-        if (e.button !== 0) return
-        e.currentTarget.setPointerCapture(e.pointerId)
-        setDragging(true)
-        tiltAt(e.clientX, e.clientY)
-      }}
-      onPointerMove={(e) => { if (dragging && e.buttons) tiltAt(e.clientX, e.clientY) }}
-      onPointerUp={() => setDragging(false)}
-      onPointerCancel={() => setDragging(false)}
-      onLostPointerCapture={() => setDragging(false)}
-    >
-      <canvas ref={canvas} width={MAP_RES} height={MAP_RES} className="absolute inset-0 size-full [image-rendering:pixelated] opacity-80" />
-      <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-foreground/20" />
-      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-foreground/20" />
-      <TiltMapDot range={range} />
+    <div className="flex flex-col gap-2">
+      <Explain caption={print
+        ? 'The print, magnified: every frame cut into strips under the ridges. The lit strips show at this tilt. Click for the tilt map.'
+        : 'Which frame shows at each tilt. Drag to tilt; click to see the print.'}>
+        <div
+          ref={box}
+          role="button"
+          tabIndex={0}
+          aria-label={print ? 'Print' : 'Tilt map'}
+          aria-pressed={print}
+          className={cn('relative aspect-square w-full touch-none overflow-hidden rounded-md border border-border/60 outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50',
+            print && 'bg-muted/60', dragging ? 'cursor-grabbing' : 'cursor-crosshair')}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return
+            e.currentTarget.setPointerCapture(e.pointerId)
+            press.current = { x: e.clientX, y: e.clientY, moved: false }
+          }}
+          onPointerMove={(e) => {
+            const p = press.current
+            if (!p || !e.buttons) return
+            if (!p.moved) {
+              if (Math.hypot(e.clientX - p.x, e.clientY - p.y) < CLICK_SLOP) return
+              p.moved = true
+              setDragging(true)
+            }
+            tiltAt(e.clientX, e.clientY)
+          }}
+          onPointerUp={() => {
+            if (press.current && !press.current.moved) flip()
+            release()
+          }}
+          onPointerCancel={release}
+          onLostPointerCapture={release}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return
+            e.preventDefault()
+            flip()
+          }}
+        >
+          <canvas ref={canvas} width={MAP_RES} height={MAP_RES} className={cn('absolute inset-0 size-full [image-rendering:pixelated] opacity-80', print && 'invisible')} />
+          {print ? (
+            size && <PrintCanvas note={note} lens={lens} ridges={ridges} sizePx={size.width} />
+          ) : (
+            <>
+              <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-foreground/20" />
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-foreground/20" />
+              <TiltMapDot range={range} />
+            </>
+          )}
+        </div>
+      </Explain>
+      {print && (
+        <div className="grid grid-cols-2 gap-2">
+          <ScrubField label="Ridges" title="Ridges drawn across the thread, magnified: real ones are far finer" value={ridges}
+            min={PRINT_RIDGES.min} max={PRINT_RIDGES.max} onChange={(v) => setPrintView({ ridges: v })} />
+        </div>
+      )}
     </div>
   )
 }

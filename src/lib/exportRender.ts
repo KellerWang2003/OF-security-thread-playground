@@ -90,7 +90,7 @@ function loadImage(url: string) {
   })
 }
 
-async function loadArtwork(id: string) {
+export async function loadArtwork(id: string) {
   const url = await loadImageUrl(id)
   return url ? loadImage(url) : undefined
 }
