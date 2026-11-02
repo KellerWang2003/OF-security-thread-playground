@@ -4,19 +4,15 @@ import { downloadArtwork } from '../cloud/repository'
 import { reportError } from '../cloud/notices'
 
 export const IMAGE_ACCEPT = 'image/png,image/jpeg,image/svg+xml,image/webp'
-export const SVG_TYPE = 'image/svg+xml'
 
 // Object URLs are kept for the whole session so switching projects never flickers
 const urls = new Map<string, string>()
-/** Each loaded artwork's file type, known whenever its URL is */
-const types = new Map<string, string>()
 const pending = new Map<string, Promise<string | undefined>>()
 let workspace: string | undefined
 export function setImageWorkspace(id: string | undefined) {
   workspace = id
   for (const url of urls.values()) URL.revokeObjectURL(url)
   urls.clear()
-  types.clear()
   pending.clear()
 }
 export function imageWorkspace() {
@@ -34,7 +30,6 @@ async function resolveUrl(id: string) {
     if (workspace !== original) return undefined
     const url = URL.createObjectURL(blob)
     urls.set(id, url)
-    types.set(id, blob.type)
     return url
   }).finally(() => { if (workspace === original) pending.delete(id) })
   pending.set(id, request)
@@ -52,7 +47,6 @@ export async function storeImage(blob: Blob) {
   await writeArtwork(original, id, blob)
   if (workspace !== original) throw new Error('The workspace changed. Try again.')
   urls.set(id, URL.createObjectURL(blob))
-  types.set(id, blob.type)
   return id
 }
 
@@ -84,12 +78,6 @@ export function useImageUrl(id: string | undefined) {
   }, [id, url])
 
   return url
-}
-
-/** The artwork's file type (SVG_TYPE for an SVG), once it has loaded */
-export function useImageType(id: string | undefined) {
-  const url = useImageUrl(id)
-  return id && url ? types.get(id) : undefined
 }
 
 /** Height ÷ width of an image file, read from the image itself (works for SVG too) */

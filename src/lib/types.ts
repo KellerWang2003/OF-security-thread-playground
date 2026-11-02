@@ -114,8 +114,9 @@ export interface PlaybackMove {
 }
 
 /**
- * A watermark made in the paper: an image that is faint flat and shows clearly tilted or held to the light. Light
- * parts of the image are thinner paper (brighter), dark parts thicker (darker); its background counts as plain paper.
+ * A watermark made in the paper: an image that is faint flat and shows clearly tilted or held to the light. Paper has
+ * no colour of its own, so only each pixel's brightness counts: light parts of the image are thinner paper (brighter),
+ * dark parts thicker (darker), unless inverted; its background counts as plain paper.
  * Placed by its top-left corner in mm from the banknote's top-left; its height follows the image's proportions.
  */
 export interface Watermark {
@@ -127,17 +128,9 @@ export interface Watermark {
   heightMm: number
   /** How strongly the paper's thickness shows at its clearest (tilted or held to the light), 0 to 1 */
   depth: number
-  /** How it mixes with the design under it; absent is Hard light */
-  blend?: WatermarkBlend
-  /** SVG only: one colour (#rrggbb) every shape takes before it is read as paper; absent keeps the SVG's own */
-  fill?: string
+  /** Reads the image the other way round: dark parts thinner paper (brighter), light parts thicker */
+  invert?: boolean
 }
-
-/**
- * Hard light shows thinner and thicker paper; Soft light the same, gentler; Multiply only the thicker (darker) parts;
- * Screen only the thinner (lighter) parts
- */
-export type WatermarkBlend = 'hard-light' | 'soft-light' | 'multiply' | 'screen'
 
 /** One banknote in a project, with its own size, thread and frames */
 export interface Note {

@@ -1,7 +1,7 @@
 import { clamp } from './frames'
-import type { Note, Watermark, WatermarkBlend } from './types'
+import type { Note, Watermark } from './types'
 
-/** Where a watermark sits on its banknote, how big it is and how it blends; drawing it is in relief.ts */
+/** Where a watermark sits on its banknote, how big it is and which way its image reads; drawing it is in relief.ts */
 
 /** Default depth of a new watermark, 0 to 1 */
 export const WATERMARK_DEPTH = 0.6
@@ -9,21 +9,6 @@ export const WATERMARK_DEPTH = 0.6
 export const WATERMARK_STEP = 0.5
 /** Smallest width or height, in mm */
 export const WATERMARK_MIN_MM = 2
-
-/** The blend modes a watermark can use, each named for what it shows; anything else no paper could do */
-export const WATERMARK_BLENDS: { value: WatermarkBlend; label: string; description: string }[] = [
-  { value: 'hard-light', label: 'Hard light', description: 'Thinner and thicker paper both show' },
-  { value: 'soft-light', label: 'Soft light', description: 'Both show, more gently' },
-  { value: 'multiply', label: 'Multiply', description: 'Only the thicker, darker parts show' },
-  { value: 'screen', label: 'Screen', description: 'Only the thinner, lighter parts show' },
-]
-/** What a watermark uses without a blend of its own */
-export const DEFAULT_BLEND: WatermarkBlend = 'hard-light'
-/** The fill an SVG starts with: white, so dark shapes become the thinnest, brightest paper */
-export const DEFAULT_FILL = '#ffffff'
-
-const isBlend = (value: unknown): value is WatermarkBlend => WATERMARK_BLENDS.some((b) => b.value === value)
-const isColour = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
 
 type Size = Pick<Note, 'widthMm' | 'heightMm'>
 
@@ -34,7 +19,7 @@ const positive = (value: unknown, fallback: number) => (typeof value === 'number
 /**
  * Keeps a watermark on its banknote: both sides at least WATERMARK_MIN_MM and no bigger than the banknote (its
  * proportions kept either way), wholly inside it, with position snapped to WATERMARK_STEP and depth between 0
- * and 1. Also repairs a damaged save: an unknown blend or fill is dropped, and Hard light is left implicit.
+ * and 1. Also repairs a damaged save: Invert is kept only when it is on, and anything unknown is dropped.
  */
 export function fitWatermark(watermark: Watermark, note: Size): Watermark {
   let widthMm = positive(watermark.widthMm, 20)
@@ -46,8 +31,7 @@ export function fitWatermark(watermark: Watermark, note: Size): Watermark {
   const xMm = clamp(snap(finite(watermark.xMm, 0)), 0, Math.max(0, note.widthMm - widthMm))
   const yMm = clamp(snap(finite(watermark.yMm, 0)), 0, Math.max(0, note.heightMm - heightMm))
   const fitted: Watermark = { xMm, yMm, widthMm, heightMm, depth: clamp(finite(watermark.depth, WATERMARK_DEPTH), 0, 1) }
-  if (isBlend(watermark.blend) && watermark.blend !== DEFAULT_BLEND) fitted.blend = watermark.blend
-  if (isColour(watermark.fill)) fitted.fill = watermark.fill.toLowerCase()
+  if (watermark.invert === true) fitted.invert = true
   return typeof watermark.imageId === 'string' ? { imageId: watermark.imageId, ...fitted } : fitted
 }
 
@@ -99,15 +83,11 @@ export function dragWatermarkCorner(watermark: Watermark, corner: Corner, dx: nu
 export const moveWatermark = (watermark: Watermark, dx: number, dy: number, note: Size): Watermark =>
   fitWatermark({ ...watermark, xMm: watermark.xMm + dx, yMm: watermark.yMm + dy }, note)
 
-/**
- * A new image: its proportions set the height, keeping the width and the centre where they are. Only an SVG keeps
- * the fill, since only an SVG offers one.
- */
-export function withWatermarkImage(watermark: Watermark, imageId: string, aspect: number | undefined, note: Size, svg = false): Watermark {
+/** A new image: its proportions set the height, keeping the width and the centre where they are */
+export function withWatermarkImage(watermark: Watermark, imageId: string, aspect: number | undefined, note: Size): Watermark {
   const heightMm = watermark.widthMm * (aspect && Number.isFinite(aspect) && aspect > 0 ? aspect : watermark.heightMm / watermark.widthMm || 1)
   const yMm = watermark.yMm + (watermark.heightMm - heightMm) / 2
-  const { fill, ...rest } = watermark
-  return fitWatermark({ ...rest, ...(svg && fill ? { fill } : {}), imageId, heightMm, yMm }, note)
+  return fitWatermark({ ...watermark, imageId, heightMm, yMm }, note)
 }
 
 /** The same place on a banknote of a new size: relative position kept, then fitted */

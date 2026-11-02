@@ -1,23 +1,24 @@
 import { useEffect, useState } from 'react'
 import { loadImageUrl } from './images'
-import type { Watermark, WatermarkBlend } from './types'
-import { DEFAULT_BLEND } from './watermark'
+import type { Watermark } from './types'
 
 /**
- * A watermark image as it is drawn over the banknote: a layer blended in the watermark's blend mode, where the mode's
- * neutral leaves the design as it is (mid-grey for Hard and Soft light, white for Multiply, black for Screen), so
- * plain paper never shows. Worked out per image, blend and fill, and shared by the canvas (as an object URL) and
- * the export (a canvas).
+ * A watermark image as it is drawn over the banknote, like light through paper of varying thickness. Paper has no
+ * colour of its own, so only each pixel's brightness counts. Thicker paper lets less light through: its layer is
+ * multiplied over the design, darkening it. Thinner paper lets more through: its layer is colour-dodged, brightening
+ * the design in proportion. Both scale the design's own brightness, so it keeps its colours, plain paper leaves it as
+ * it is, and dark print stays dark over either, as ink blocks the light. Worked out per image and Invert, and shared
+ * by the canvas (as object URLs) and the export (as canvases).
  */
 
 /** Brightness 0 to 1 of an sRGB pixel, in whole numbers until the end so white comes out exactly 1 */
 const luma = (r: number, g: number, b: number) => (2126 * r + 7152 * g + 722 * b) / 2_550_000
 
 /**
- * The plain paper of a watermark image, from its edge pixels: mostly transparent edges mean transparency is plain
- * paper (`clear`, at mid-grey); otherwise it is the median brightness of the opaque edge pixels.
+ * The plain-paper level of a watermark image: its edge pixels count as plain paper. Mostly transparent edges mean
+ * mid-grey is plain paper; otherwise it is the median brightness of the opaque edge pixels.
  */
-export function paperOf(data: Uint8ClampedArray, width: number, height: number) {
+export function paperLevel(data: Uint8ClampedArray, width: number, height: number) {
   const levels: number[] = []
   let clear = 0
   const visit = (x: number, y: number) => {
@@ -33,21 +34,19 @@ export function paperOf(data: Uint8ClampedArray, width: number, height: number) 
     visit(0, y)
     if (width > 1) visit(width - 1, y)
   }
-  if (levels.length === 0 || clear > levels.length) return { clear: true, level: 0.5 }
+  if (levels.length === 0 || clear > levels.length) return 0.5
   levels.sort((a, b) => a - b)
-  return { clear: false, level: levels[Math.floor(levels.length / 2)] }
+  return levels[Math.floor(levels.length / 2)]
 }
 
-/** The plain-paper level of a watermark image, 0 to 1 (mid-grey when transparency is plain paper) */
-export const paperLevel = (data: Uint8ClampedArray, width: number, height: number) => paperOf(data, width, height).level
-
 /**
- * The watermark as a grey layer for hard-light blending over the banknote: mid-grey leaves it as it is, lighter
- * brightens it (thinner paper) and darker darkens it (thicker). The paper level becomes mid-grey, white stays
- * white (the brightest highlight) and black stays black, whatever the paper level; transparent pixels are plain paper.
- * Returns opaque RGBA pixels the same size as the input.
+ * How thick the paper is at each pixel, as grey: mid-grey is plain paper, lighter is thinner and darker is thicker.
+ * Only brightness counts, so a red and a green of the same brightness are the same thickness. The paper level
+ * becomes mid-grey, white stays white (the thinnest) and black stays black (the thickest), whatever the paper level;
+ * transparent pixels are plain paper. Inverted, dark parts are thinner and light parts thicker. Returns opaque RGBA
+ * pixels the same size as the input.
  */
-export function reliefPixels(data: Uint8ClampedArray, width: number, height: number) {
+export function reliefPixels(data: Uint8ClampedArray, width: number, height: number, invert = false) {
   const paper = paperLevel(data, width, height)
   const out = new Uint8ClampedArray(data.length)
   for (let i = 0; i < data.length; i += 4) {
@@ -55,6 +54,7 @@ export function reliefPixels(data: Uint8ClampedArray, width: number, height: num
     let relief = 0.5
     if (level > paper && paper < 1) relief = 0.5 + (0.5 * (level - paper)) / (1 - paper)
     else if (level < paper && paper > 0) relief = 0.5 - (0.5 * (paper - level)) / paper
+    if (invert) relief = 1 - relief
     const grey = Math.round((0.5 + (relief - 0.5) * (data[i + 3] / 255)) * 255)
     out[i] = out[i + 1] = out[i + 2] = grey
     out[i + 3] = 255
@@ -62,62 +62,48 @@ export function reliefPixels(data: Uint8ClampedArray, width: number, height: num
   return out
 }
 
-/**
- * An SVG with every shape recoloured to `fill` (#rrggbb), as a layer for hard-light blending: the fill's lightness
- * is how thin (white) or thick (black) the paper is under every shape, whatever colour it was drawn in, and its hue
- * tints the design, which no paper can (so it is there to explore). Plain paper stays mid-grey: transparency, or on
- * an opaque background its edge colour, with shapes as strong as they stand out from it.
- */
-export function fillPixels(data: Uint8ClampedArray, width: number, height: number, fill: string) {
-  const paper = paperOf(data, width, height)
-  const colour = [1, 3, 5].map((at) => parseInt(fill.slice(at, at + 2), 16) / 255)
-  const away = (i: number) => (Math.abs(luma(data[i], data[i + 1], data[i + 2]) - paper.level) * data[i + 3]) / 255
-  // On an opaque background the shape that stands out most is all shape
-  let most = 0
-  if (!paper.clear) for (let i = 0; i < data.length; i += 4) most = Math.max(most, away(i))
-  const out = new Uint8ClampedArray(data.length)
-  for (let i = 0; i < data.length; i += 4) {
-    const shape = paper.clear ? data[i + 3] / 255 : most > 0 ? away(i) / most : 0
-    for (let c = 0; c < 3; c++) out[i + c] = Math.round((0.5 + (colour[c] - 0.5) * shape) * 255)
-    out[i + 3] = 255
-  }
-  return out
-}
+/** How much more light the thinnest paper (white in the relief) lets through than plain paper */
+export const THINNEST_GAIN = 2
 
 /**
- * The layer for a blend mode, from the one for Hard light (mid-grey plain paper): Soft light uses it as it is;
- * Multiply keeps only what darkens, with plain paper white; Screen only what lightens, with plain paper black. Each
- * part that shows comes out as strong as Hard light draws it.
+ * The two layers light through the paper is drawn with, from the relief (mid-grey plain paper). Thicker parts make
+ * a layer to multiply: white where the paper is plain or thinner, down to black (no light) for the thickest. Thinner
+ * parts make a layer to colour-dodge: black where the paper is plain or thicker, up to THINNEST_GAIN times the light
+ * for the thinnest. At mid-grey design this matches hard light; over darker print, thinner parts show less.
  */
-export function blendPixels(layer: Uint8ClampedArray, blend: WatermarkBlend) {
-  if (blend === 'hard-light' || blend === 'soft-light') return layer
-  const out = new Uint8ClampedArray(layer.length)
-  for (let i = 0; i < layer.length; i += 4) {
-    for (let c = 0; c < 3; c++) {
-      const v = layer[i + c]
-      out[i + c] = blend === 'multiply' ? (v >= 128 ? 255 : Math.round((v * 255) / 128)) : v <= 128 ? 0 : Math.round(((v - 128) * 255) / 127)
-    }
-    out[i + 3] = 255
+export function lightLayers(relief: Uint8ClampedArray) {
+  const thicker = new Uint8ClampedArray(relief.length)
+  const thinner = new Uint8ClampedArray(relief.length)
+  for (let i = 0; i < relief.length; i += 4) {
+    const v = relief[i]
+    const gain = v <= 128 ? 1 : 1 + ((v - 128) / 127) * (THINNEST_GAIN - 1)
+    thicker[i] = thicker[i + 1] = thicker[i + 2] = v >= 128 ? 255 : Math.round((v * 255) / 128)
+    thinner[i] = thinner[i + 1] = thinner[i + 2] = Math.round((1 - 1 / gain) * 255)
+    thicker[i + 3] = thinner[i + 3] = 255
   }
-  return out
+  return { thicker, thinner }
 }
 
 /** Longest side the relief is worked out at, in px */
 const RELIEF_MAX_PX = 1024
-/** Blends and fills kept worked out per image, so undo and redo don't wait; older ones are let go */
-const LOOKS_KEPT = 4
-/** While a fill is dragged through colours, a new look is only worked out once it settles this long */
-const SETTLE_MS = 60
+/** Both readings kept worked out per image, so Invert, undo and redo never wait */
+const LOOKS_KEPT = 2
 
-export interface Relief {
+export interface ReliefLayer {
   canvas: HTMLCanvasElement
   url: string
 }
 
-/** What decides how a watermark's image is drawn */
-export type ReliefLook = Pick<Watermark, 'blend' | 'fill'> & { imageId: string }
+/** A watermark's image worked out for drawing: thicker paper multiplied over the design, thinner colour-dodged */
+export interface Relief {
+  thicker: ReliefLayer
+  thinner: ReliefLayer
+}
 
-const lookKey = ({ imageId, blend = DEFAULT_BLEND, fill }: ReliefLook) => `${imageId}|${blend}|${fill ?? ''}`
+/** What decides how a watermark's image is drawn */
+export type ReliefLook = Pick<Watermark, 'invert'> & { imageId: string }
+
+const lookKey = ({ imageId, invert }: ReliefLook) => `${imageId}|${invert ? 'invert' : ''}`
 
 interface Source {
   data: Uint8ClampedArray
@@ -169,37 +155,43 @@ function sourceOf(imageId: string) {
   return source
 }
 
-async function buildRelief(look: ReliefLook): Promise<Relief | undefined> {
-  const source = await sourceOf(look.imageId)
-  if (!source) return undefined
-  const { data, width, height } = source
-  const layer = look.fill ? fillPixels(data, width, height, look.fill) : reliefPixels(data, width, height)
+async function buildLayer(pixels: Uint8ClampedArray, width: number, height: number): Promise<ReliefLayer | undefined> {
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
   const ctx = canvas.getContext('2d')
   if (!ctx) return undefined
-  const pixels = ctx.createImageData(width, height)
-  pixels.data.set(blendPixels(layer, look.blend ?? DEFAULT_BLEND))
-  ctx.putImageData(pixels, 0, 0)
+  const image = ctx.createImageData(width, height)
+  image.data.set(pixels)
+  ctx.putImageData(image, 0, 0)
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
-  if (!blob) return undefined
-  return { canvas, url: URL.createObjectURL(blob) }
+  return blob ? { canvas, url: URL.createObjectURL(blob) } : undefined
 }
 
-/** Keeps an image's latest few looks and lets the older ones go */
+async function buildRelief(look: ReliefLook): Promise<Relief | undefined> {
+  const source = await sourceOf(look.imageId)
+  if (!source) return undefined
+  const { data, width, height } = source
+  const layers = lightLayers(reliefPixels(data, width, height, look.invert))
+  const [thicker, thinner] = await Promise.all([buildLayer(layers.thicker, width, height), buildLayer(layers.thinner, width, height)])
+  if (thicker && thinner) return { thicker, thinner }
+  for (const layer of [thicker, thinner]) if (layer) URL.revokeObjectURL(layer.url)
+  return undefined
+}
+
+/** Keeps an image's latest looks and lets the older ones go */
 function remember(look: ReliefLook, key: string) {
   const keys = [key, ...(recent.get(look.imageId) ?? []).filter((k) => k !== key)]
   for (const old of keys.splice(LOOKS_KEPT)) {
     const relief = ready.get(old)
-    if (relief) URL.revokeObjectURL(relief.url)
+    if (relief) for (const layer of [relief.thicker, relief.thinner]) URL.revokeObjectURL(layer.url)
     ready.delete(old)
     reliefs.delete(old)
   }
   recent.set(look.imageId, keys)
 }
 
-/** The watermark's image worked out for drawing over the banknote in its blend and fill */
+/** The watermark's image worked out for drawing over the banknote, read the way its Invert says */
 export function loadRelief(look: ReliefLook): Promise<Relief | undefined> {
   const key = lookKey(look)
   let relief = reliefs.get(key)
@@ -216,30 +208,26 @@ export function loadRelief(look: ReliefLook): Promise<Relief | undefined> {
 }
 
 /**
- * The relief's object URL for CSS, once worked out. Changing the blend or fill keeps the last one showing until the
- * new one is ready, so the watermark never blinks out.
+ * The relief's layers for CSS, once worked out. Switching Invert keeps the last reading showing until the new one is
+ * ready, so the watermark never blinks out.
  */
-export function useRelief(watermark: Pick<Watermark, 'imageId' | 'blend' | 'fill'> | undefined) {
+export function useRelief(watermark: Pick<Watermark, 'imageId' | 'invert'> | undefined) {
   const imageId = watermark?.imageId
-  const blend = watermark?.blend
-  const fill = watermark?.fill
-  const key = imageId ? lookKey({ imageId, blend, fill }) : undefined
-  const [loaded, setLoaded] = useState<{ key: string; imageId: string; url?: string }>()
-  const exact = key ? ready.get(key)?.url ?? (loaded?.key === key ? loaded.url : undefined) : undefined
-  const previous = imageId && loaded?.imageId === imageId ? loaded.url : undefined
-  // Rendered without it: work it out (once a changing fill settles), or pick it up if another view did since
+  const invert = watermark?.invert === true
+  const key = imageId ? lookKey({ imageId, invert }) : undefined
+  const [loaded, setLoaded] = useState<{ key: string; imageId: string; relief?: Relief }>()
+  const exact = key ? ready.get(key) ?? (loaded?.key === key ? loaded.relief : undefined) : undefined
+  const previous = imageId && loaded?.imageId === imageId ? loaded.relief : undefined
+  // Rendered without it: work it out, or pick it up if another view did since this one rendered
   useEffect(() => {
     if (!imageId || !key || exact) return
     let live = true
-    const timer = setTimeout(() => {
-      void loadRelief({ imageId, blend, fill }).then((relief) => {
-        if (live) setLoaded({ key, imageId, url: relief?.url })
-      })
-    }, previous ? SETTLE_MS : 0)
+    void loadRelief({ imageId, invert }).then((relief) => {
+      if (live) setLoaded({ key, imageId, relief })
+    })
     return () => {
       live = false
-      clearTimeout(timer)
     }
-  }, [imageId, blend, fill, key, exact, previous])
+  }, [imageId, invert, key, exact])
   return exact ?? previous
 }

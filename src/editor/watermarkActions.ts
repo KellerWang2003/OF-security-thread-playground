@@ -1,4 +1,4 @@
-import { SVG_TYPE, imageAspect, removeImage, storeImage } from '../lib/images'
+import { imageAspect, removeImage, storeImage } from '../lib/images'
 import { findNote, updateNote } from '../lib/store'
 import type { Note, Watermark } from '../lib/types'
 import { fitWatermark, newWatermark, withWatermarkImage } from '../lib/watermark'
@@ -31,14 +31,14 @@ export function updateWatermark({ projectId, noteId }: NoteRef, change: (waterma
   updateNote(projectId, noteId, (n) => (n.watermark ? { ...n, watermark: fitWatermark(change(n.watermark, n), n) } : n))
 }
 
-/** Uploads the watermark's image (its proportions set the height), or removes it; only an SVG keeps the fill */
+/** Uploads the watermark's image (its proportions set the height), or removes it */
 export async function setWatermarkImage(ref: NoteRef, file: File | undefined) {
   const old = findNote(ref.projectId, ref.noteId)?.watermark?.imageId
   if (file) {
     const [imageId, aspect] = await Promise.all([storeImage(file), imageAspect(file)])
-    updateWatermark(ref, (w, n) => withWatermarkImage(w, imageId, aspect, n, file.type === SVG_TYPE))
+    updateWatermark(ref, (w, n) => withWatermarkImage(w, imageId, aspect, n))
   } else {
-    updateWatermark(ref, ({ imageId: _removed, fill: _fill, ...rest }) => rest)
+    updateWatermark(ref, ({ imageId: _removed, ...rest }) => rest)
   }
   if (old) await removeImage(old)
 }

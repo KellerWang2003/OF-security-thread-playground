@@ -4,10 +4,9 @@ import { watermarkOpacity, watermarkReveal } from './light'
 import { lightAt, playbackPlan, tiltAt } from './moves'
 import { loadImageUrl } from './images'
 import { advancePlayback, playbackEase, playbackSettings } from './playback'
-import { loadRelief } from './relief'
+import { type Relief, loadRelief } from './relief'
 import { fitSections, imageTiles, threadLength } from './thread'
 import type { Note } from './types'
-import { DEFAULT_BLEND } from './watermark'
 
 // Draws banknotes to a canvas exactly as NoteView shows them on the canvas, so the tilt can be exported
 
@@ -89,8 +88,8 @@ export function tiltedBounds(width: number, height: number, tilt: Tilt2 | number
 export interface NoteAssets {
   face?: HTMLImageElement
   frames: Map<string, HTMLImageElement>
-  /** The watermark worked out for hard-light drawing over the design (relief.ts) */
-  relief?: HTMLCanvasElement
+  /** The watermark worked out as light through the paper, drawn over the design (relief.ts) */
+  relief?: Relief
 }
 
 function loadImage(url: string) {
@@ -111,7 +110,7 @@ export async function loadNoteAssets(note: Note): Promise<NoteAssets> {
   const frames = new Map<string, HTMLImageElement>()
   const [face, relief] = await Promise.all([
     note.background === 'image' && note.faceImageId ? loadArtwork(note.faceImageId) : undefined,
-    note.watermark?.imageId ? loadRelief({ ...note.watermark, imageId: note.watermark.imageId }).then((r) => r?.canvas) : undefined,
+    note.watermark?.imageId ? loadRelief({ imageId: note.watermark.imageId, invert: note.watermark.invert }) : undefined,
     ...note.frames.map(async (frame) => {
       if (frame.kind !== 'image' || !frame.imageId) return
       const img = await loadArtwork(frame.imageId)
@@ -152,10 +151,14 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     ctx.drawImage(face, (width - w) / 2, (height - h) / 2, w, h)
   }
   if (watermark && assets.relief) {
-    // As NoteView: blended over the design in its blend mode, so it shows in the note's own colours, under the thread
-    ctx.globalCompositeOperation = watermark.blend ?? DEFAULT_BLEND
+    // As NoteView: light through the paper, thicker parts multiplied and thinner ones colour-dodged over the design,
+    // so it keeps the note's own colours and dark print stays dark, under the thread
+    const box = [mm(watermark.xMm), mm(watermark.yMm), mm(watermark.widthMm), mm(watermark.heightMm)] as const
     ctx.globalAlpha = watermarkOpacity(watermark.depth, options.reveal ?? watermarkReveal(0, { x: angleX, y: angle }))
-    ctx.drawImage(assets.relief, mm(watermark.xMm), mm(watermark.yMm), mm(watermark.widthMm), mm(watermark.heightMm))
+    ctx.globalCompositeOperation = 'multiply'
+    ctx.drawImage(assets.relief.thicker.canvas, ...box)
+    ctx.globalCompositeOperation = 'color-dodge'
+    ctx.drawImage(assets.relief.thinner.canvas, ...box)
     ctx.globalAlpha = 1
     ctx.globalCompositeOperation = 'source-over'
   }

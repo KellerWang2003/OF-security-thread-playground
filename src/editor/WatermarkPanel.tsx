@@ -1,19 +1,17 @@
-import { Blend, ImageUp, Trash2, X } from 'lucide-react'
+import { ImageUp, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ColorField, Group, IconButton, ScrubField, Section, SwitchField } from '../components/controls'
+import { cn } from '@/lib/utils'
+import { Group, IconButton, ScrubField, Section, SwitchField } from '../components/controls'
 import { reportError } from '../cloud/notices'
-import { SVG_TYPE, pickFiles, useImageType, useImageUrl } from '../lib/images'
-import type { Note, Watermark, WatermarkBlend } from '../lib/types'
-import {
-  DEFAULT_BLEND, DEFAULT_FILL, WATERMARK_BLENDS, WATERMARK_MIN_MM, WATERMARK_STEP, maxWatermarkWidth, resizeWatermark,
-} from '../lib/watermark'
+import { pickFiles, useImageUrl } from '../lib/images'
+import type { Note, Watermark } from '../lib/types'
+import { WATERMARK_MIN_MM, WATERMARK_STEP, maxWatermarkWidth, resizeWatermark } from '../lib/watermark'
 import type { NoteRef } from './frameActions'
 import { setWatermarkImage, updateWatermark } from './watermarkActions'
 
 /**
- * Right: the selected banknote's watermark. One image, read as it looks at its clearest (lighter than the paper is
- * thinner, darker is thicker), with a fill colour for an SVG; where it sits, how strongly it shows and how it blends.
+ * Right: the selected banknote's watermark. One image, read only by brightness, as paper has no colour (lighter than
+ * the paper is thinner, darker is thicker, or the other way round inverted); where it sits and how strongly it shows.
  */
 export function WatermarkPanel({ note, watermark, noteRef, onPlace, onRemove }: {
   note: Note
@@ -24,7 +22,6 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace, onRemove }: 
   onRemove: () => void
 }) {
   const image = useImageUrl(watermark.imageId)
-  const svg = useImageType(watermark.imageId) === SVG_TYPE
   const change = (next: (w: Watermark, n: Note) => Watermark) => updateWatermark(noteRef, next)
 
   return (
@@ -45,7 +42,10 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace, onRemove }: 
             }}
           >
             {image ? (
-              <img src={image} alt="" className="h-11 w-11 shrink-0 rounded bg-muted object-contain" />
+              // In greyscale, inverted with Invert, as the paper reads it
+              <span className="size-11 shrink-0 overflow-hidden rounded bg-muted">
+                <img src={image} alt="" className={cn('size-full object-contain grayscale', watermark.invert && 'invert')} />
+              </span>
             ) : (
               <span className="flex size-11 shrink-0 items-center justify-center rounded bg-muted">
                 <ImageUp />
@@ -59,12 +59,8 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace, onRemove }: 
             </IconButton>
           )}
         </div>
-        {svg && (
-          <>
-            <SwitchField label="Fill colour" checked={watermark.fill !== undefined}
-              onChange={(on) => change((w) => ({ ...w, fill: on ? DEFAULT_FILL : undefined }))} />
-            {watermark.fill && <ColorField value={watermark.fill} onChange={(fill) => change((w) => ({ ...w, fill }))} />}
-          </>
+        {watermark.imageId && (
+          <SwitchField label="Invert" checked={watermark.invert === true} onChange={(on) => change((w) => ({ ...w, invert: on }))} />
         )}
       </Section>
 
@@ -78,31 +74,8 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace, onRemove }: 
             max={maxWatermarkWidth(watermark, note)} step={WATERMARK_STEP} unit="mm" onChange={(widthMm) => change((w, n) => resizeWatermark(w, widthMm, n))} />
           <ScrubField label="Depth" title="How strongly the watermark shows at its clearest, tilted or held to the light" value={Math.round(watermark.depth * 100)} min={0} max={100}
             step={5} unit="%" onChange={(depth) => change((w) => ({ ...w, depth: depth / 100 }))} />
-          <BlendPicker value={watermark.blend ?? DEFAULT_BLEND} onChange={(blend) => change((w) => ({ ...w, blend }))} />
         </div>
       </Section>
     </Group>
-  )
-}
-
-/** How the watermark mixes with the design: each mode named, with what it shows in a line, as the effect dropdown */
-function BlendPicker({ value, onChange }: { value: WatermarkBlend; onChange: (blend: WatermarkBlend) => void }) {
-  return (
-    <Select value={value} items={WATERMARK_BLENDS} onValueChange={(next) => { if (next) onChange(next) }}>
-      <SelectTrigger aria-label="Blend" title="How the watermark mixes with the design under it" className="col-span-2 w-full">
-        <Blend />
-        <SelectValue className="flex-1 text-left" />
-      </SelectTrigger>
-      <SelectContent alignItemWithTrigger={false}>
-        {WATERMARK_BLENDS.map(({ value, label, description }) => (
-          <SelectItem key={value} value={value} className="items-start py-1.5">
-            <span className="flex min-w-0 flex-col gap-0.5 whitespace-normal">
-              <span>{label}</span>
-              <span className="text-[11px] leading-snug whitespace-normal text-muted-foreground">{description}</span>
-            </span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   )
 }

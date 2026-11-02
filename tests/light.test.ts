@@ -4,7 +4,7 @@ import { WATERMARK_CLEAR_DEG, WATERMARK_FAINT, offAxisDeg, tiltReveal, watermark
 import { lensState } from '../src/lib/lens'
 import { createNote } from '../src/lib/notes'
 import { lightAt, playbackPlan, tiltAt } from '../src/lib/moves'
-import type { Note, TiltSettings } from '../src/lib/types'
+import type { TiltSettings } from '../src/lib/types'
 
 vi.mock('../src/lib/images', () => ({ loadImageUrl: async () => undefined }))
 
@@ -73,16 +73,19 @@ describe('exported light', () => {
     expect(exportReveal(0, { x: 50, y: 0 })).toBe(1)
   })
 
-  it('draws the watermark over the design and under the thread, hard-light blended at its reveal, and nothing else differently', () => {
+  it('draws the watermark over the design and under the thread as light through paper, at its reveal, and nothing else differently', () => {
     const note = { ...createNote({ name: 'N', x: 0, y: 0, widthMm: 100, heightMm: 50, color: '#336699' }), watermark: { imageId: 'w', xMm: 10, yMm: 5, widthMm: 20, heightMm: 30, depth: 0.6 } }
-    const relief = { width: 1, height: 1 } as unknown as HTMLCanvasElement
+    const thicker = { width: 1, height: 1 } as unknown as HTMLCanvasElement
+    const thinner = { width: 1, height: 1 } as unknown as HTMLCanvasElement
+    const relief = { thicker: { canvas: thicker, url: 'blob:thicker' }, thinner: { canvas: thinner, url: 'blob:thinner' } }
     /** Every image drawn, and every fill, with the blend and opacity it was drawn at */
-    const draw = (reveal?: number, tilt = 0, drawn: Note = note) => {
+    const draw = (reveal?: number, tilt = 0) => {
       const calls: { what: string; blend: string; alpha: number; at?: number[] }[] = []
+      const what = (image: unknown) => (image === thicker ? 'thicker' : image === thinner ? 'thinner' : 'image')
       const ctx = new Proxy({ globalCompositeOperation: 'source-over', globalAlpha: 1 } as Record<string, unknown>, {
         get(target, key) {
           if (key in target) return target[key as string]
-          if (key === 'drawImage') return (image: unknown, ...at: number[]) => calls.push({ what: image === relief ? 'watermark' : 'image', blend: String(target.globalCompositeOperation), alpha: Number(target.globalAlpha), at })
+          if (key === 'drawImage') return (image: unknown, ...at: number[]) => calls.push({ what: what(image), blend: String(target.globalCompositeOperation), alpha: Number(target.globalAlpha), at })
           if (key === 'fillRect') return () => calls.push({ what: `fill ${String(target.fillStyle)}`, blend: String(target.globalCompositeOperation), alpha: Number(target.globalAlpha) })
           if (key === 'createLinearGradient') return () => ({ addColorStop() {} })
           return () => {}
@@ -92,20 +95,20 @@ describe('exported light', () => {
           return true
         },
       }) as unknown as CanvasRenderingContext2D
-      drawFace(ctx, drawn, { frames: new Map(), relief }, 2, tilt, { sheen: false, perspective: true, reveal })
+      drawFace(ctx, note, { frames: new Map(), relief }, 2, tilt, { sheen: false, perspective: true, reveal })
       return calls
     }
+    const layers = (calls: ReturnType<typeof draw>) => calls.filter((c) => c.what === 'thicker' || c.what === 'thinner')
     const flat = draw()
-    const watermark = flat.find((c) => c.what === 'watermark')!
-    expect(watermark).toMatchObject({ blend: 'hard-light', alpha: watermarkOpacity(0.6, 0), at: [20, 10, 40, 60] })
+    // Thicker paper multiplied, thinner colour-dodged, both at the watermark's opacity over its box
+    expect(layers(flat)).toEqual([
+      { what: 'thicker', blend: 'multiply', alpha: watermarkOpacity(0.6, 0), at: [20, 10, 40, 60] },
+      { what: 'thinner', blend: 'color-dodge', alpha: watermarkOpacity(0.6, 0), at: [20, 10, 40, 60] },
+    ])
     // The paper first, then the watermark, then the thread (frames are colours here), all drawn normally
-    expect(flat.map((c) => c.what).slice(0, 2)).toEqual(['fill #336699', 'watermark'])
-    expect(flat.filter((c) => c.what !== 'watermark').every((c) => c.blend === 'source-over' && c.alpha === 1)).toBe(true)
-    expect(draw(undefined, 20).find((c) => c.what === 'watermark')!.alpha).toBeCloseTo(watermarkOpacity(0.6, tiltReveal({ x: 0, y: 20 })))
-    expect(draw(1).find((c) => c.what === 'watermark')!.alpha).toBeCloseTo(0.6)
-    // In its own blend mode, as the canvas draws it
-    const screened = draw(1, 0, { ...note, watermark: { ...note.watermark, blend: 'screen' } })
-    expect(screened.find((c) => c.what === 'watermark')!.blend).toBe('screen')
-    expect(screened.filter((c) => c.what !== 'watermark').every((c) => c.blend === 'source-over')).toBe(true)
+    expect(flat.map((c) => c.what).slice(0, 3)).toEqual(['fill #336699', 'thicker', 'thinner'])
+    expect(flat.filter((c) => !layers(flat).includes(c)).every((c) => c.blend === 'source-over' && c.alpha === 1)).toBe(true)
+    expect(layers(draw(undefined, 20)).every((c) => Math.abs(c.alpha - watermarkOpacity(0.6, tiltReveal({ x: 0, y: 20 }))) < 1e-9)).toBe(true)
+    expect(layers(draw(1)).every((c) => Math.abs(c.alpha - 0.6) < 1e-9)).toBe(true)
   })
 })

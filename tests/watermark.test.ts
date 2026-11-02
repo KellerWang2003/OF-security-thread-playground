@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { projectImageIds } from '../src/cloud/repository'
 import { createNote, migrateProject } from '../src/lib/notes'
-import { blendPixels, fillPixels, paperLevel, paperOf, reliefPixels } from '../src/lib/relief'
-import type { Watermark, WatermarkBlend } from '../src/lib/types'
+import { THINNEST_GAIN, lightLayers, paperLevel, reliefPixels } from '../src/lib/relief'
+import type { Watermark } from '../src/lib/types'
 import {
   WATERMARK_DEPTH, dragWatermarkCorner, fitWatermark, maxWatermarkWidth, moveWatermark, moveWatermarkTo, newWatermark, resizeWatermark, withWatermarkImage,
 } from '../src/lib/watermark'
@@ -58,16 +58,14 @@ describe('placing a watermark', () => {
     expect(withWatermarkImage(mark(), 'img', undefined, note)).toEqual({ imageId: 'img', ...mark() })
   })
 
-  it('keeps its fill only for a new SVG, and its blend for any image', () => {
-    const filled = mark({ blend: 'screen', fill: '#ff0000' })
-    expect(withWatermarkImage(filled, 'svg', undefined, note, true)).toEqual({ imageId: 'svg', ...filled })
-    expect(withWatermarkImage(filled, 'png', undefined, note)).toEqual({ imageId: 'png', ...mark({ blend: 'screen' }) })
+  it('keeps Invert only when it is on, and drops what it does not know', () => {
+    expect(fitWatermark(mark({ invert: true }), note)).toEqual(mark({ invert: true }))
+    expect(fitWatermark(mark({ invert: false }), note)).toEqual(mark())
+    expect(fitWatermark({ ...mark(), blend: 'screen', fill: '#ffffff' } as unknown as Watermark, note)).toEqual(mark())
   })
 
-  it('keeps a blend and a fill, dropping ones it does not know and leaving Hard light unsaid', () => {
-    expect(fitWatermark(mark({ blend: 'multiply', fill: '#FFAA00' }), note)).toEqual(mark({ blend: 'multiply', fill: '#ffaa00' }))
-    expect(fitWatermark(mark({ blend: 'hard-light' }), note)).toEqual(mark())
-    expect(fitWatermark({ ...mark(), blend: 'difference', fill: 'red' } as unknown as Watermark, note)).toEqual(mark())
+  it('keeps reading a new image the same way round', () => {
+    expect(withWatermarkImage(mark({ invert: true }), 'img', undefined, note)).toEqual({ imageId: 'img', ...mark({ invert: true }) })
   })
 
   it('keeps its place when the banknote turns or changes size', () => {
@@ -85,7 +83,7 @@ describe('a saved watermark', () => {
   it('comes back from a save, put back on its banknote if it was off it', () => {
     expect(saved(mark({ imageId: 'img' })).watermark).toEqual(mark({ imageId: 'img' }))
     expect(saved(mark({ xMm: 500 })).watermark).toEqual(mark({ xMm: 80 }))
-    expect(saved(mark({ imageId: 'img', blend: 'soft-light', fill: '#123abc' })).watermark).toEqual(mark({ imageId: 'img', blend: 'soft-light', fill: '#123abc' }))
+    expect(saved(mark({ imageId: 'img', invert: true })).watermark).toEqual(mark({ imageId: 'img', invert: true }))
   })
 
   it('is left out when there is none, or it is not a watermark at all', () => {
@@ -128,30 +126,40 @@ describe('the watermark relief', () => {
     expect(greys(reliefPixels(image(CLEAR, WHITE, CLEAR), 4, 3)).slice(5, 7)).toEqual([255, 128])
   })
 
-  it('tells transparent plain paper from an opaque one', () => {
-    expect(paperOf(image(CLEAR, WHITE, BLACK), 4, 3)).toEqual({ clear: true, level: 0.5 })
-    expect(paperOf(image(WHITE, BLACK, BLACK), 4, 3)).toEqual({ clear: false, level: 1 })
+  it('reads only brightness, as paper has no colour: a red and a green as bright are the same grey thickness', () => {
+    const relief = reliefPixels(image(CLEAR, [255, 0, 0, 255], [0, 76, 0, 255]), 4, 3)
+    expect(greys(relief).slice(5, 7)).toEqual([54, 54])
+    expect(Array.from(relief.slice(20, 24))).toEqual([54, 54, 54, 255])
   })
 
-  it("recolours every shape of an SVG to its fill, whatever colour it was drawn in, and leaves plain paper mid-grey", () => {
-    const pixel = (pixels: Uint8ClampedArray, at: number) => Array.from(pixels.slice(at * 4, at * 4 + 4))
-    // On transparency a grey shape takes the fill as fully as a black one would; a half-covered pixel takes half
-    const white = fillPixels(image(CLEAR, GREY, [0, 0, 0, 128]), 4, 3, '#ffffff')
-    expect(pixel(white, 5)).toEqual([255, 255, 255, 255])
-    expect(pixel(white, 6)).toEqual([192, 192, 192, 255])
-    expect(greys(white).filter((_, i) => i !== 5 && i !== 6).every((grey) => grey === 128)).toBe(true)
-    // Its hue shows too, which no paper could do
-    expect(pixel(fillPixels(image(CLEAR, BLACK, CLEAR), 4, 3, '#ff0000'), 5)).toEqual([255, 0, 0, 255])
-    // On an opaque background a shape counts as far as it stands out from it
-    expect(greys(fillPixels(image(WHITE, BLACK, GREY), 4, 3, '#000000')).slice(4, 7)).toEqual([128, 0, 64])
+  it('reads dark parts as thinner and light parts as thicker when inverted, plain paper staying plain', () => {
+    expect(greys(reliefPixels(image(GREY, WHITE, BLACK), 4, 3, true))).toEqual([128, 128, 128, 128, 128, 0, 255, 128, 128, 128, 128, 128])
+    expect(greys(reliefPixels(image(CLEAR, BLACK, CLEAR), 4, 3, true)).slice(5, 7)).toEqual([255, 128])
   })
 
-  it("makes plain paper each blend's neutral, and keeps only what that blend can show, as strong as hard light draws it", () => {
-    const layer = new Uint8ClampedArray([128, 0, 255, 64, 192].flatMap((grey) => [grey, grey, grey, 255]))
-    const shown = (blend: WatermarkBlend) => greys(blendPixels(layer, blend))
-    expect(shown('hard-light')).toEqual([128, 0, 255, 64, 192])
-    expect(shown('soft-light')).toEqual([128, 0, 255, 64, 192])
-    expect(shown('multiply')).toEqual([255, 0, 255, 128, 255])
-    expect(shown('screen')).toEqual([0, 0, 255, 0, 129])
+  it('splits into a layer for thicker paper to multiply and one for thinner paper to colour-dodge, plain paper neutral in both', () => {
+    const relief = new Uint8ClampedArray([128, 0, 255, 64, 192].flatMap((grey) => [grey, grey, grey, 255]))
+    const { thicker, thinner } = lightLayers(relief)
+    expect(greys(thicker)).toEqual([255, 0, 255, 128, 255])
+    expect(greys(thinner)).toEqual([0, 0, 128, 0, 85])
+    expect([...thicker, ...thinner].filter((_, i) => i % 4 === 3).every((alpha) => alpha === 255)).toBe(true)
+  })
+
+  it('works like light through paper: thinner lets more through and thicker less, so black print stays black', () => {
+    // The browser's own multiply and colour dodge, design brightness 0 to 1 under a layer value 0 to 255
+    const through = (design: number, grey: number) => {
+      const { thicker, thinner } = lightLayers(new Uint8ClampedArray([grey, grey, grey, 255]))
+      const multiplied = design * (thicker[0] / 255)
+      const dodge = thinner[0] / 255
+      return multiplied === 0 ? 0 : dodge >= 1 ? 1 : Math.min(1, multiplied / (1 - dodge))
+    }
+    for (const design of [0, 0.2, 0.5, 1]) expect(through(design, 128)).toBeCloseTo(design)
+    expect(through(0.25, 255)).toBeCloseTo(0.25 * THINNEST_GAIN, 2)
+    expect(through(0, 255)).toBe(0)
+    expect(through(0.8, 0)).toBe(0)
+    expect(through(0.5, 64)).toBeCloseTo(0.25, 2)
+    // On a mid-grey design, thinner paper shows as hard light would
+    const hardLight = (design: number, grey: number) => design + (2 * grey / 255 - 1) * (1 - design)
+    expect(through(0.5, 192)).toBeCloseTo(hardLight(0.5, 192), 1)
   })
 })
