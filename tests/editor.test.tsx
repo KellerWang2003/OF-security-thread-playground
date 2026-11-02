@@ -138,6 +138,8 @@ describe('username workspace editor', () => {
     await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
     await user.click(screen.getByRole('button', { name: 'Duplicate', exact: true }))
     const before = useProjects.getState().demoPreview!.notes.map((n) => n.tilt.cycleDeg)
+    // The lens is edited in the thread editor
+    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
     const cycle = screen.getByText('Cycle', { exact: true }).closest('label, div')!.querySelector('input')!
     fireEvent.change(cycle, { target: { value: '47' } })
     fireEvent.blur(cycle)

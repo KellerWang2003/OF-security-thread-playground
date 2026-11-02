@@ -11,12 +11,13 @@ import { Canvas } from '../editor/Canvas'
 import { ExportDialog } from '../editor/ExportDialog'
 import { Inspector } from '../editor/Inspector'
 import { ProjectPanel } from '../editor/ProjectPanel'
+import { ThreadEditor } from '../editor/ThreadEditor'
 import { TimelineBar } from '../editor/TimelineBar'
 import { TiltRail } from '../editor/TiltRail'
 
 /**
  * A full-screen canvas with floating panels: project and banknotes top left, the frame timeline along
- * the bottom, and the selected note's properties on the right.
+ * the bottom, and the selected note's properties on the right. The thread editor opens over it all.
  */
 export function Editor({ project, isDemo = false }: { project: Project; isDemo?: boolean }) {
   const [selectedId, setSelectedId] = useState<string>()
@@ -33,6 +34,14 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     if (noteId !== selectedId) exitWindows()
     setSelectedId(noteId)
   }
+  // The thread editor shows the selected banknote while open; selecting another (or none) leaves it
+  const [threadNoteId, setThreadNoteId] = useState<string>()
+  const editThread = (noteId: string) => {
+    selectNote(noteId)
+    exitWindows()
+    setThreadNoteId(noteId)
+  }
+  const closeThread = () => setThreadNoteId(undefined)
   const [adding, setAdding] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [focus, setFocus] = useState<{ noteId: string; token: number }>()
@@ -123,6 +132,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   const reference = note ?? project.notes.at(0)
   const lens = reference ? playbackLens(reference) : undefined
   const noteRef = note ? { projectId: project.id, noteId: note.id } : undefined
+  const threadNote = note && note.id === threadNoteId ? note : undefined
 
   const selectAndFocus = (noteId: string) => {
     selectNote(noteId)
@@ -146,6 +156,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
         </div>
       ) : (
         <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={selectNote} onExitWindows={exitWindows} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} onExport={() => setExporting(true)}
+          onEditThread={editThread}
           onEditWindow={(noteId, windowId) => {
             selectNote(noteId)
             setEditingNoteId(noteId)
@@ -153,17 +164,25 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
           }} />
       )}
 
-      {!isEmpty && !editingWindows && <TiltRail limit={lens?.viewDeg} playback={reference && lens ? { projectId: project.id, tilt: playbackTilt(reference), lens } : undefined} />}
-      <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} aboveTilt={!isEmpty && !editingWindows} />
-      {!isEmpty && (
-        <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
+      {threadNote ? (
+        // The canvas stays underneath: it runs playback
+        <ThreadEditor key={threadNote.id} project={project} note={threadNote} onClose={closeThread} />
+      ) : (
+        <>
+          {!isEmpty && !editingWindows && <TiltRail limit={lens?.viewDeg} playback={reference && lens ? { projectId: project.id, tilt: playbackTilt(reference), lens } : undefined} />}
+          <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} aboveTilt={!isEmpty && !editingWindows} />
+          {!isEmpty && (
+            <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
+          )}
+          {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} onExport={() => setExporting(true)} onEditThread={() => editThread(note.id)}
+            selectedWindowId={editingWindows ? selectedWindowId : undefined}
+            onWindowSelect={(windowId) => {
+              if (!windowId) return exitWindows()
+              setEditingNoteId(note.id)
+              setSelectedWindowId(windowId)
+            }} />}
+        </>
       )}
-      {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} onExport={() => setExporting(true)} selectedWindowId={editingWindows ? selectedWindowId : undefined}
-        onWindowSelect={(windowId) => {
-          if (!windowId) return exitWindows()
-          setEditingNoteId(note.id)
-          setSelectedWindowId(windowId)
-        }} />}
 
       {exporting && <ExportDialog project={project} selectedId={note?.id} open={exporting} onOpenChange={setExporting} />}
 

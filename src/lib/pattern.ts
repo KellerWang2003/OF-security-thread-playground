@@ -236,6 +236,8 @@ export interface SlotFrame extends Frame {
 }
 /** The banknote frame (by index) a lens control's frame `i` stands for */
 export const frameIndex = (frames: Pick<Frame, 'id'>[], i: number) => (frames.at(i) as SlotFrame | undefined)?.index ?? i
+/** The number a lens control shows for its frame `i`: the banknote frame's, so a section's strips read as the frames they show */
+export const frameNumber = (frames: Pick<Frame, 'id'>[], i: number) => frameIndex(frames, i) + 1
 
 const views = new WeakMap<object, Map<string, unknown>>()
 /** A section as the lens controls see it: its strips as frames and its own lens */
@@ -437,13 +439,67 @@ export function splitSection(pattern: ThreadPattern, id: string, direction: 'alo
   return { pattern: { ...pattern, sections: pattern.sections.flatMap((x) => (x.id === id ? [first, second] : [x])) }, id: created }
 }
 
-/** A copy beside the original: the section split along its longer side, both halves alike */
-export function duplicateSection(pattern: ThreadPattern, id: string, widthMm: number) {
+/** A section split along its longer side (or the other, when that one is too small), the new half named `name` */
+function splitLonger(pattern: ThreadPattern, id: string, widthMm: number, name: string) {
   const s = pattern.sections.find((x) => x.id === id)
   if (!s) return undefined
   const along = s.endMm - s.startMm >= (s.acrossEnd - s.acrossStart) * widthMm
-  const name = `${s.name} copy`
   return splitSection(pattern, id, along ? 'along' : 'across', name) ?? splitSection(pattern, id, along ? 'across' : 'along', name)
+}
+
+/** A copy beside the original: the section split along its longer side, both halves alike */
+export function duplicateSection(pattern: ThreadPattern, id: string, widthMm: number) {
+  const s = pattern.sections.find((x) => x.id === id)
+  return s && splitLonger(pattern, id, widthMm, `${s.name} copy`)
+}
+
+/** The largest empty area of the repeat, on the snapping grid; undefined when the sections cover it */
+export function freeRect(pattern: ThreadPattern): Rect | undefined {
+  const cols = Math.floor(pattern.repeatMm / ALONG_STEP + EPS), rows = Math.round(1 / ACROSS_STEP)
+  const covered = (c: number, r: number) => {
+    const along = (c + 0.5) * ALONG_STEP, across = (r + 0.5) / rows
+    return pattern.sections.some((s) => along > s.startMm && along < s.endMm && across > s.acrossStart && across < s.acrossEnd)
+  }
+  // Each column's run of free cells ending at this row, then the widest stretch of columns at least as tall
+  const heights = new Array<number>(cols).fill(0)
+  let best: Rect | undefined, most = 0
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) heights[c] = covered(c, r) ? 0 : heights[c] + 1
+    for (let c = 0; c < cols; c++) {
+      const h = heights[c]
+      if (!h) continue
+      let lo = c, hi = c
+      while (lo > 0 && heights[lo - 1] >= h) lo--
+      while (hi < cols - 1 && heights[hi + 1] >= h) hi++
+      const size = (hi - lo + 1) * ALONG_STEP * (h / rows)
+      if (size > most + EPS) {
+        most = size
+        best = { startMm: tidy(lo * ALONG_STEP), endMm: tidy((hi + 1) * ALONG_STEP), acrossStart: tidyShare((r + 1 - h) / rows), acrossEnd: tidyShare((r + 1) / rows) }
+      }
+    }
+  }
+  return best
+}
+
+/**
+ * A new plain section (the banknote's lens, every frame): over the largest empty area, or else cut from `fromId`
+ * (or the largest section) along its longer side. Undefined when there's no room.
+ */
+export function addBlankSection(pattern: ThreadPattern, widthMm: number, fromId?: string): { pattern: ThreadPattern; id: string } | undefined {
+  const free = freeRect(pattern)
+  if (free) return addSection(pattern, free)
+  const largest = pattern.sections.reduce((a, b) => (area(b) > area(a) ? b : a))
+  const from = pattern.sections.find((s) => s.id === fromId) ?? largest
+  const split = splitLonger(pattern, from.id, widthMm, nextName(pattern)) ?? (from === largest ? undefined : splitLonger(pattern, largest.id, widthMm, nextName(pattern)))
+  if (!split) return undefined
+  return {
+    id: split.id,
+    pattern: { ...split.pattern, sections: split.pattern.sections.map((s) => {
+      if (s.id !== split.id) return s
+      const { lens: _lens, track: _track, ...plain } = s
+      return plain
+    }) },
+  }
 }
 
 export const removeSection = (pattern: ThreadPattern, id: string): ThreadPattern =>

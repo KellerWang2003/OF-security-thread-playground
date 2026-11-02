@@ -4,10 +4,12 @@ import { DEFAULT_TILT, migrateProject } from '../src/lib/notes'
 import {
   ACROSS_STEP,
   WHOLE_ID,
+  addBlankSection,
   defaultPattern,
   drawRect,
   duplicateSection,
   framesMissed,
+  freeRect,
   migratePattern,
   moveRect,
   padTrack,
@@ -390,6 +392,29 @@ describe('editing sections', () => {
     expect(removeSection(pattern, WHOLE_ID)).toBe(pattern)
     expect(removeSection(split.pattern, split.id).sections).toHaveLength(1)
     expect(splitSection({ ...pattern, sections: [section({ id: 't', endMm: 0.5 })] }, 't', 'along')).toBeUndefined()
+  })
+
+  it('finds the largest empty area on the snapping grid', () => {
+    const covered = lanes()
+    expect(freeRect(covered)).toBeUndefined()
+    expect(freeRect(removeSection(covered, covered.sections[1].id))).toEqual({ startMm: 0, endMm: 4, acrossStart: 0.5, acrossEnd: 1 })
+    // An L-shaped gap: the bigger of its two rectangles
+    const corner = { repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 1, acrossEnd: 0.5 })] }
+    expect(freeRect(corner)).toEqual({ startMm: 1, endMm: 4, acrossStart: 0, acrossEnd: 1 })
+  })
+
+  it('adds a plain section in the largest gap, or cut from the selected section when there is none', () => {
+    const covered = lanes()
+    const [side, updown] = covered.sections
+    const filled = addBlankSection(removeSection(covered, updown.id), 4)!
+    expect(filled.pattern.sections[1]).toEqual({ id: filled.id, name: 'Section 2', startMm: 0, endMm: 4, acrossStart: 0.5, acrossEnd: 1 })
+    // No gap: the selected lane is cut along its longer side, and the new half plays the banknote's lens and every frame
+    const cut = addBlankSection(covered, 4, side.id)!
+    expect(cut.pattern.sections.map((s) => s.name)).toEqual(['Lane ↔', 'Section 3', 'Lane ↕'])
+    expect(cut.pattern.sections[0]).toMatchObject({ lens: side.lens, track: side.track, startMm: 0, endMm: 2 })
+    expect(cut.pattern.sections[1]).toEqual({ id: cut.id, name: 'Section 3', startMm: 2, endMm: 4, acrossStart: 0, acrossEnd: 0.5 })
+    // Nothing selected: the largest section is cut
+    expect(addBlankSection(covered, 4)!.pattern.sections).toHaveLength(3)
   })
 })
 

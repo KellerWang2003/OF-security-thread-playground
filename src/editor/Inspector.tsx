@@ -1,25 +1,29 @@
-import { useRef } from 'react'
 import { reportError } from '../cloud/notices'
-import { Download, ImageUp, RectangleHorizontal, RectangleVertical, X } from 'lucide-react'
+import { Download, ImageUp, RectangleHorizontal, RectangleVertical, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ColorField, Group, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
+import { LENS_EFFECTS, lensState } from '../lib/lens'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
+import { patternOf } from '../lib/pattern'
+import { checkPattern, warningCount } from '../lib/patternRules'
 import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
-import { PANEL_WIDTH, savePanelWidth, setPanelWidth, usePanelWidth } from '../lib/panelWidth'
-import { EffectSection, LensMenu } from './EffectSection'
+import { PanelResizer } from './PanelResizer'
+import { PatternPicture } from './PatternPicture'
 import { WindowsCard } from './WindowsCard'
 import { setFaceImage, type NoteRef } from './frameActions'
 
 type Change = (note: Note) => Note
 
 /** Right: the selected note's properties, Figma style */
-export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onExport }: {
+export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onExport, onEditThread }: {
   note: Note
   onExport: () => void
+  /** Opens the thread editor, where the lens and the thread's sections are edited */
+  onEditThread: () => void
   noteRef: NoteRef
   selectedWindowId?: string
   /** Selecting a window edits it on the canvas; undefined leaves window editing */
@@ -189,53 +193,39 @@ export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onE
 
       </Group>
 
-      <Group title="Lens effect" action={<LensMenu projectId={noteRef.projectId} note={note} />}>
-        <EffectSection projectId={noteRef.projectId} note={note} />
+      <Group title="Lens effect">
+        <LensSummary note={note} onEdit={onEditThread} />
       </Group>
     </Panel>
     </>
   )
 }
 
-/**
- * The panel's left edge: drag it to make the panel wider for controls that need finer placement,
- * double-click to go back to the default width. The width is remembered.
- */
-function PanelResizer() {
-  const width = usePanelWidth((s) => s.width)
-  const drag = useRef<{ startX: number; startWidth: number } | null>(null)
+/** The thread's lens at a glance (its sections as a picture, the effect or mixed angles, rule warnings) and the way into the thread editor */
+function LensSummary({ note, onEdit }: { note: Note; onEdit: () => void }) {
+  const pattern = patternOf(note)
+  const count = pattern.sections.length
+  const warnings = warningCount(checkPattern(note))
+  const effect = LENS_EFFECTS.find((e) => e.value === lensState(note.tilt, note.frames).effect)?.label
+  const vertical = note.thread.direction === 'vertical'
   return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize panel"
-      title="Drag to resize the panel, double-click to reset"
-      className="group absolute top-3 bottom-3 z-10 w-3 translate-x-1/2 cursor-col-resize touch-none"
-      style={{ right: `calc(${width}px + 12px)` }}
-      onPointerDown={(e) => {
-        if (e.button !== 0) return
-        e.preventDefault()
-        e.currentTarget.setPointerCapture(e.pointerId)
-        drag.current = { startX: e.clientX, startWidth: width }
-      }}
-      onPointerMove={(e) => {
-        const d = drag.current
-        if (d) setPanelWidth(d.startWidth + d.startX - e.clientX)
-      }}
-      onPointerUp={() => {
-        if (drag.current) savePanelWidth()
-        drag.current = null
-      }}
-      onLostPointerCapture={() => {
-        if (drag.current) savePanelWidth()
-        drag.current = null
-      }}
-      onDoubleClick={() => {
-        setPanelWidth(PANEL_WIDTH.initial)
-        savePanelWidth()
-      }}
-    >
-      <div className="absolute inset-y-6 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-primary/0 transition-colors group-hover:bg-primary/50 group-active:bg-primary" />
-    </div>
+    <Section nested>
+      <div className="flex items-center gap-3">
+        <PatternPicture note={note} width={vertical ? 28 : 56} height={vertical ? 56 : 28} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate text-sm">{pattern.mixed ? 'Mixed angles' : effect}</span>
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
+            {count} {count === 1 ? 'section' : 'sections'}
+            {warnings > 0 && (
+              <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-500" title={`${warnings} rule ${warnings === 1 ? 'warning' : 'warnings'}`}>
+                <TriangleAlert className="size-3" />
+                {warnings}
+              </span>
+            )}
+          </span>
+        </div>
+      </div>
+      <Button variant="outline" size="sm" onClick={onEdit}>Edit thread</Button>
+    </Section>
   )
 }

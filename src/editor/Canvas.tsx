@@ -85,6 +85,7 @@ export function Canvas({
   onExitWindows,
   onExport,
   onEditWindow,
+  onEditThread,
 }: {
   projectId: string
   notes: Note[]
@@ -99,6 +100,8 @@ export function Canvas({
   onExport: () => void
   /** A click on a thread window opens it for editing */
   onEditWindow?: (noteId: string, windowId: string) => void
+  /** A double-click on a thread opens the thread editor */
+  onEditThread?: (noteId: string) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const size = useElementSize(ref)
@@ -418,6 +421,11 @@ export function Canvas({
       }}
       onPointerCancel={endGesture}
       onLostPointerCapture={endGesture}
+      onDoubleClick={(e) => {
+        const target = e.target as HTMLElement
+        const noteId = noteAt(target, 'data-note-body')
+        if (noteId && target.closest('[data-thread], [data-window-editor]')) onEditThread?.(noteId)
+      }}
       onDragOver={(e) => {
         e.preventDefault()
         setDropping(true)
