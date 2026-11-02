@@ -1,7 +1,7 @@
 import { undoProject, redoProject, updateNote } from '../lib/store'
 import { beginHistoryGroup, endHistoryGroup, breakHistoryGroup } from '../lib/history'
 import { togglePlayback } from '../tilt/tilt'
-import { lensState } from '../lib/lens'
+import { playbackLens, playbackTilt } from '../lib/pattern'
 import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -121,7 +121,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   const note = project.notes.find((n) => n.id === selectedId)
   // Each banknote has its own lens; playback and the tilt pad follow the selected one (or the first)
   const reference = note ?? project.notes.at(0)
-  const lens = reference ? lensState(reference.tilt, reference.frames) : undefined
+  const lens = reference ? playbackLens(reference) : undefined
   const noteRef = note ? { projectId: project.id, noteId: note.id } : undefined
 
   const selectAndFocus = (noteId: string) => {
@@ -153,7 +153,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
           }} />
       )}
 
-      {!isEmpty && !editingWindows && <TiltRail limit={lens?.viewDeg} playback={reference && lens ? { projectId: project.id, tilt: reference.tilt, lens } : undefined} />}
+      {!isEmpty && !editingWindows && <TiltRail limit={lens?.viewDeg} playback={reference && lens ? { projectId: project.id, tilt: playbackTilt(reference), lens } : undefined} />}
       <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} onSelect={selectAndFocus} onAdd={() => setAdding(true)} aboveTilt={!isEmpty && !editingWindows} />
       {!isEmpty && (
         <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />

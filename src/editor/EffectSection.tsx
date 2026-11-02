@@ -477,7 +477,7 @@ function TiltMap({ note, lens }: { note: Note; lens: LensState }) {
         >
           <canvas ref={canvas} width={MAP_RES} height={MAP_RES} className={cn('absolute inset-0 size-full [image-rendering:pixelated] opacity-80', print && 'invisible')} />
           {print ? (
-            size && <PrintCanvas note={note} lens={lens} ridges={ridges} sizePx={size.width} />
+            size && <PrintCanvas note={note} ridges={ridges} sizePx={size.width} />
           ) : (
             <>
               <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-foreground/20" />

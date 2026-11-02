@@ -23,6 +23,8 @@ export interface ExportOptions {
   perspective: boolean
   /** Draws the visible frame's number on each thread, as the # toggle does on the canvas */
   frameNumbers?: boolean
+  /** Where each banknote's thread pattern starts along its thread (mm, by banknote id), as the canvas previews it */
+  offsets?: Record<string, number>
 }
 
 const safeName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Banknote'

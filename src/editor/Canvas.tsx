@@ -9,6 +9,8 @@ import { clamp } from '../lib/frames'
 import { lensState } from '../lib/lens'
 import { playbackPlan } from '../lib/moves'
 import { usePanelWidth } from '../lib/panelWidth'
+import { playbackLens, playbackTilt } from '../lib/pattern'
+import { usePatternOffsets } from '../lib/patternOffset'
 import { type Guide, snapBox } from '../lib/snap'
 import { updateNote } from '../lib/store'
 import type { Note } from '../lib/types'
@@ -114,10 +116,12 @@ export function Canvas({
 
   const selected = notes.find((n) => n.id === selectedId)
   const reference = selected ?? notes.at(0)
-  const lens = useMemo(() => (reference ? lensState(reference.tilt, reference.frames) : undefined), [reference])
+  // A thread mixing ridge angles plays each tilt at its fastest section's cycle
+  const lens = useMemo(() => (reference ? playbackLens(reference) : undefined), [reference])
   const loopLens = lens ?? lensState({ cycleDeg: 30, transition: 0 })
-  const plan = useMemo(() => playbackPlan(reference?.tilt ?? { cycleDeg: 30, transition: 0 }, loopLens), [reference, loopLens])
+  const plan = useMemo(() => playbackPlan(reference ? playbackTilt(reference) : { cycleDeg: 30, transition: 0 }, loopLens), [reference, loopLens])
   useTiltLoop(plan, loopLens.viewDeg)
+  const offsets = usePatternOffsets((s) => s.offsets)
 
   // Until the first pan or zoom, the view simply fits every note
   const current = view ?? (size && notes.length ? fitView(notes, size) : undefined)
@@ -462,7 +466,7 @@ export function Canvas({
                   source === 'wobble' || activeMode === 'tilt' || activeMode === 'move' ? 'outline-primary/5' : 'outline-primary/25',
                 )}
               >
-                <NoteView note={note} scale={scale} live perspective={perspective && !(isSelected && editingWindows)} sheen={sheen} showWindowCuts={isSelected && editingWindows} showFrameNumber={frameNumbers} />
+                <NoteView note={note} scale={scale} live perspective={perspective && !(isSelected && editingWindows)} sheen={sheen} showWindowCuts={isSelected && editingWindows} showFrameNumber={frameNumbers} offsetMm={offsets[note.id]} />
                 {isSelected && editingWindows && note.thread.windows.enabled && (
                   <WindowEditor note={note} scale={scale} selectedId={selectedWindowId} onSelect={onWindowSelect}
                     onChange={(sections) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, windows: { ...n.thread.windows, sections } } }))} />

@@ -16,9 +16,10 @@ import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
 import { clamp, cyclePhase } from '../lib/frames'
-import { cyclePosition, flatLabel, flatStep, framesReached, lensMix, lensState, reachSpans, respondsTo, tiltForPosition, tiltReach, type LensState } from '../lib/lens'
+import { cyclePosition, flatLabel, flatStep, lensState, reachSpans, respondsTo, tiltForPosition, tiltReach, type LensState } from '../lib/lens'
 import { pickFiles } from '../lib/images'
 import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
+import { framesMissed, playbackLens, playbackTilt, sectionMix, timelineSection } from '../lib/pattern'
 import type { Frame, Note } from '../lib/types'
 import { setRecording, setTilt, togglePlayback, useTilt } from '../tilt/tilt'
 import { PlaybackPanel } from './PlaybackPanel'
@@ -50,12 +51,15 @@ export function TimelineBar({
   note,
   noteRef,
   besidePanel,
+  sectionId,
 }: {
   projectId: string
   notes: Note[]
   note?: Note
   noteRef?: NoteRef
   besidePanel: boolean
+  /** The thread section whose lens the track follows, in the thread editor */
+  sectionId?: string
 }) {
   const source = useTilt((state) => state.source)
   const playing = source === 'wobble'
@@ -79,7 +83,7 @@ export function TimelineBar({
         </IconButton>
         <FrameSettings projectId={projectId} note={note ?? notes.at(0)} />
       </div>
-      {note && noteRef && <FrameTrack note={note} noteRef={noteRef} />}
+      {note && noteRef && <FrameTrack note={note} noteRef={noteRef} sectionId={sectionId} />}
     </Panel>
   )
 }
@@ -89,8 +93,9 @@ const STACKED = 'min-h-0 flex-1 rounded-md border border-transparent'
 
 /** Project-wide playback controls, shared by every banknote, stacked in a column beside Play. */
 function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) {
-  const tilt = note?.tilt ?? DEFAULT_TILT
-  const lens = lensState(tilt, note?.frames)
+  // A thread mixing ridge angles plays each tilt at its fastest section's cycle
+  const tilt = note ? playbackTilt(note) : DEFAULT_TILT
+  const lens = note ? playbackLens(note) : lensState(tilt)
   const recording = useTilt((s) => s.recording)
   const frameNumbers = useTilt((s) => s.frameNumbers)
 
@@ -143,21 +148,20 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
  * cycle the current tilt is, wrapping around as the frames loop. Drag to scrub, scroll to move along,
  * ⌘-scroll to zoom.
  */
-function FrameTrack({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
+function FrameTrack({ note, noteRef, sectionId }: { note: Note; noteRef: NoteRef; sectionId?: string }) {
   const scroller = useRef<HTMLDivElement>(null)
   const track = useRef<HTMLDivElement>(null)
   const gesture = useRef<{ mode: 'scrub' } | { mode: 'resize'; frameId: string; startX: number; startLength: number } | null>(null)
   const [pxPerUnit, setPxPerUnit] = useState(ZOOM.initial)
-  const { frames, tilt } = note
-  const lens = lensState(tilt, frames)
+  const { frames } = note
+  // One section's lens (the first, or the one picked in the thread editor); a plain thread's is the banknote's
+  const followed = timelineSection(note, sectionId)
+  const { lens, tilt } = followed
   // Only the frame shown, so the track re-renders when it changes rather than on every animation frame
-  const current = useTilt((s) => lensMix(note, { x: s.angleX, y: s.angle }, lens).current)
-  const reachedY = framesReached(note, 'y', lens)
-  const reachedX = framesReached(note, 'x', lens)
-  const missed = (i: number) => [
-    ...(respondsTo(lens, 'y') && !reachedY.has(i) ? ['y' as const] : []),
-    ...(respondsTo(lens, 'x') && !reachedX.has(i) ? ['x' as const] : []),
-  ]
+  const current = useTilt((s) => sectionMix(note, followed, { x: s.angleX, y: s.angle }).current)
+  // Frames a tilt plays somewhere on the thread yet never shows anywhere
+  const unseen = framesMissed(note)
+  const missed = (i: number) => unseen.at(i) ?? []
   const lengths = frames.map((f) => f.length)
   const totalLength = lengths.reduce((sum, l) => sum + l, 0)
   const starts = lengths.map((_, i) => lengths.slice(0, i).reduce((sum, l) => sum + l, 0))

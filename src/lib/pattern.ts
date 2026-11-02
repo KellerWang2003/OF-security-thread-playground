@@ -178,6 +178,9 @@ export function sectionMix(note: Pick<Note, 'frames'>, p: PreparedSection, tilt:
 /** Every section's frames at a tilt, in section order */
 export const patternMix = (note: PatternNote, tilt: Tilt2) => preparePattern(note).sections.map((p) => sectionMix(note, p, tilt))
 
+/** The frame numbers a thread shows, for its label: each section's, without repeats */
+export const shownLabel = (currents: number[]) => [...new Set(currents)].map((c) => c + 1).join(' · ')
+
 /** The frame a section shows flat (by index) */
 export const restFrame = (note: Pick<Note, 'frames'>, p: PreparedSection) => sectionMix(note, p, FLAT).current
 
@@ -220,9 +223,11 @@ export function playbackTilt(note: PatternNote): TiltSettings {
   const lens = playbackLens(note)
   return lens.cycleX != null && lens.cycleY != null ? { ...note.tilt, playTilt: 'both' } : note.tilt
 }
-/** The tilt settings the timeline's playhead follows: the banknote's lens, or with mixed angles the first section's */
-export const timelineTilt = (note: PatternNote) =>
-  patternOf(note).mixed ? (preparePattern(note).sections.at(0)?.tilt ?? note.tilt) : note.tilt
+/** The section the timeline's playhead, reach and flat follow: the one picked in the thread editor, otherwise the first */
+export function timelineSection(note: PatternNote, sectionId?: string): PreparedSection {
+  const { sections } = preparePattern(note)
+  return sections.find((p) => p.section.id === sectionId) ?? sections[0]
+}
 
 /** A strip of a section's print, as the lens controls see it: the banknote frame it shows, at the strip's own length */
 export interface SlotFrame extends Frame {

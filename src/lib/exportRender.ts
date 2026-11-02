@@ -1,7 +1,8 @@
 import { SHADE_DEG } from './frames'
-import { lensMix, lensState, type Tilt2 } from './lens'
+import { lensMix, type Tilt2 } from './lens'
 import { playbackPlan, tiltAt } from './moves'
 import { loadImageUrl } from './images'
+import { patternMix, playbackLens, playbackTilt, preparePattern, sectionSpans, shownLabel } from './pattern'
 import { advancePlayback, playbackEase, playbackSettings } from './playback'
 import { fitSections, imageTiles, threadLength } from './thread'
 import type { Note } from './types'
@@ -34,8 +35,8 @@ export function playbackAngles(tilt: Note['tilt'], fps: number, loops = 1) {
 }
 
 /** The tilt of every video frame for `loops` passes of the project's playback moves, exactly as live playback */
-export function playbackTilts(note: Pick<Note, 'tilt' | 'frames'>, fps: number, loops = 1): Tilt2[] {
-  const plan = playbackPlan(note.tilt, lensState(note.tilt, note.frames))
+export function playbackTilts(note: Pick<Note, 'tilt' | 'frames' | 'pattern'>, fps: number, loops = 1): Tilt2[] {
+  const plan = playbackPlan(playbackTilt(note), playbackLens(note))
   const count = Math.max(1, Math.round(plan.seconds * loops * fps))
   return Array.from({ length: count }, (_, i) => tiltAt(plan, i / fps))
 }
@@ -115,8 +116,16 @@ function roundedRect(ctx: Ctx, width: number, height: number, radius: number) {
   ctx.roundRect(0, 0, width, height, radius)
 }
 
+export interface FaceOptions {
+  sheen: boolean
+  perspective: boolean
+  frameNumbers?: boolean
+  /** Where along the thread the pattern's repeat starts, mm, as the canvas previews it */
+  offsetMm?: number
+}
+
 /** The flat note at `scale` px per mm, as NoteView draws it before it is turned in 3D */
-export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number, tiltAt: Tilt2 | number, options: { sheen: boolean; perspective: boolean; frameNumbers?: boolean }) {
+export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number, tiltAt: Tilt2 | number, options: FaceOptions) {
   const { thread, frames } = note
   const { x: angleX, y: angle } = asTilt(tiltAt)
   const mm = (value: number) => value * scale
@@ -180,9 +189,25 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     }
     ctx.globalAlpha = 1
   }
-  const mix = lensMix(note, { x: angleX, y: angle })
-  drawFrame(mix.base, 1)
-  if (mix.blend > 0 && mix.next !== mix.base) drawFrame(mix.next, mix.blend)
+  // Each section of the pattern shows its own frames through its areas, as NoteView clips them
+  const prepared = preparePattern(note)
+  const mixes = prepared.plain ? [lensMix(note, { x: angleX, y: angle })] : patternMix(note, { x: angleX, y: angle })
+  mixes.forEach((mix, i) => {
+    const section = prepared.plain ? undefined : prepared.sections[i].section
+    if (section) {
+      ctx.save()
+      ctx.beginPath()
+      const near = thickness * section.acrossStart, far = thickness * section.acrossEnd
+      for (const [lo, hi] of sectionSpans(section, prepared.pattern.repeatMm, options.offsetMm ?? 0, lengthMm)) {
+        if (horizontal) ctx.rect(mm(lo), near, mm(hi - lo), far - near)
+        else ctx.rect(near, mm(lo), far - near, mm(hi - lo))
+      }
+      ctx.clip()
+    }
+    drawFrame(mix.base, 1)
+    if (mix.blend > 0 && mix.next !== mix.base) drawFrame(mix.next, mix.blend)
+    if (section) ctx.restore()
+  })
 
   const t = angle / SHADE_DEG
   if (options.sheen) {
@@ -233,7 +258,7 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, width, height)
   }
-  if (options.frameNumbers && frames.length > 0) drawFrameNumber(ctx, String(mix.current + 1), strip, mm)
+  if (options.frameNumbers && frames.length > 0) drawFrameNumber(ctx, shownLabel(mixes.map((mix) => mix.current)), strip, mm)
   ctx.restore()
 }
 
@@ -357,7 +382,7 @@ export function drawExportFrame(
   faces: Map<string, OffscreenCanvas>,
   scale: number,
   angle: Tilt2 | number,
-  options: { sheen: boolean; perspective: boolean; frameNumbers?: boolean; background?: string },
+  options: Omit<FaceOptions, 'offsetMm'> & { background?: string; offsets?: Record<string, number> },
 ) {
   ctx.clearRect(0, 0, layout.width, layout.height)
   if (options.background) {
@@ -371,7 +396,7 @@ export function drawExportFrame(
     if (!face || !noteAssets) continue
     const faceCtx = face.getContext('2d')!
     faceCtx.clearRect(0, 0, face.width, face.height)
-    drawFace(faceCtx, cell.note, noteAssets, scale, angle, options)
+    drawFace(faceCtx, cell.note, noteAssets, scale, angle, { ...options, offsetMm: options.offsets?.[cell.note.id] })
     drawTilted(ctx, face, cell.cx, cell.cy, options.perspective ? angle : 0, perspectiveFor(cell.note, scale))
   }
 }

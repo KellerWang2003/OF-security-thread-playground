@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { cyclePosition, lensAngle, lensMix, lensState } from '../src/lib/lens'
-import { frameAtPosition, phasePosition, printedFrame, ridgePhase, weave } from '../src/lib/print'
-import type { TiltSettings } from '../src/lib/types'
+import { DEFAULT_TILT, createNote } from '../src/lib/notes'
+import { patternMix, preparePattern } from '../src/lib/pattern'
+import { presetPattern } from '../src/lib/patternPresets'
+import { cutPattern, frameAtPosition, phasePosition, printedAt, printedFrame, ridgePhase, weave } from '../src/lib/print'
+import type { Note, ThreadPattern, TiltSettings } from '../src/lib/types'
 
 const frames = (lengths: number[]) => lengths.map((length, i) => ({ id: String(i), kind: 'color' as const, color: '#000', name: '', length }))
 const tilt = (patch: Partial<TiltSettings>) => ({ cycleDeg: 40, transition: 0, ...patch }) as TiltSettings
@@ -78,6 +81,74 @@ describe('the print under the ridges', () => {
         const phase = (((cyclePosition(lens, { x, y }) - lens.offset + 0.5) % 1) + 1) % 1
         expect(frameAtPosition(w.edges, phasePosition(w, phase))).toBe(lensMix({ frames: f, tilt: t }, { x, y }, lens).current)
       }
+    }
+  })
+})
+
+describe('the print of a thread with sections', () => {
+  const note = (make?: (n: Note) => ThreadPattern): Note => {
+    const base = { ...createNote({ name: 'P', x: 0, y: 0, widthMm: 134, heightMm: 68, color: '#fff' }), frames: frames([1, 1, 1, 1, 1]), tilt: { ...DEFAULT_TILT, cycleDeg: 25 } }
+    base.thread = { ...base.thread, widthMm: 4 }
+    return make ? { ...base, pattern: make(base) } : base
+  }
+  const printOf = (n: Note, pitch = 0.4) => {
+    const prepared = preparePattern(n)
+    return (x: number, y: number) => printedAt(cutPattern(prepared.sections, n.frames, pitch), prepared.pattern.repeatMm, n.thread, x, y)
+  }
+
+  it('prints a plain thread exactly as before', () => {
+    const n = note()
+    const lens = lensState(n.tilt, n.frames)
+    const w = weave(lens, n.frames, 0.4)
+    const at = printOf(n)
+    for (let x = 0; x < 4; x += 0.17) for (let y = 0; y < 9; y += 0.23) expect(at(x, y)?.frame).toBe(printedFrame(w, x, y))
+  })
+
+  it('cuts each section at its own ridge angle', () => {
+    const n = note((b) => presetPattern(b, 'chevron'))
+    const at = printOf(n)
+    const sections = preparePattern(n).sections
+    expect(sections.map((p) => p.angle).toSorted()).toEqual([-45, 45])
+    // Along each arm's ridges (a tilt that changes nothing, y down on the thread) the strip stays the same; across them it changes
+    sections.forEach((p, i) => {
+      const x0 = i === 0 ? 1 : 3
+      const along = { x: (p.lens.cycleX ?? 0) * p.lens.dirY, y: (p.lens.cycleY ?? 0) * p.lens.dirX }
+      const len = Math.hypot(along.x, along.y)
+      for (let k = 0; k < 5; k++) {
+        const y0 = 1 + k * 0.37
+        const a = at(x0, y0)!, b = at(x0 + (0.5 * along.x) / len, y0 + (0.5 * along.y) / len)!
+        expect(b.section).toBe(i)
+        expect(b.phase).toBeCloseTo(a.phase, 9)
+        expect(b.slot).toBe(a.slot)
+      }
+    })
+    // The two arms lean opposite ways
+    const [a, b] = sections.map((p) => Math.sign((p.lens.cycleX ?? 0) * p.lens.dirY * (p.lens.cycleY ?? 0) * p.lens.dirX))
+    expect(a).toBe(-b)
+  })
+
+  it('shows each section the frames its own track gives, and nothing in a gap', () => {
+    const n = note((b) => ({ ...presetPattern(b, 'split'), sections: [presetPattern(b, 'split').sections[0]] }))
+    const at = printOf(n)
+    expect(at(3, 1)).toBeUndefined()
+    const lane = preparePattern(n).sections[0]
+    for (let y = 0; y < 3; y += 0.05) {
+      const p = at(1, y)!
+      expect(p.frame).toBe(lane.slots[p.slot])
+      expect([1, 2, 3]).toContain(p.frame)
+    }
+  })
+
+  it('lights the strip each section shows at a tilt', () => {
+    const n = note((b) => presetPattern(b, 'split'))
+    const prepared = preparePattern(n)
+    for (const tilt of [{ x: 0, y: 17 }, { x: -33, y: 0 }]) {
+      const mixes = patternMix(n, tilt)
+      prepared.sections.forEach((p, i) => {
+        const phase = (((cyclePosition(p.lens, tilt) - p.lens.offset + 0.5) % 1) + 1) % 1
+        const w = weave(p.lens, n.frames, 1)
+        expect(frameAtPosition(w.edges, phasePosition(w, phase))).toBe(mixes[i].slot)
+      })
     }
   })
 })

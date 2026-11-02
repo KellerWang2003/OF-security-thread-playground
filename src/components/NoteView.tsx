@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { SHADE_DEG, TILT_LIMIT } from '../lib/frames'
 import { lensMix } from '../lib/lens'
 import { useImageUrl } from '../lib/images'
+import { patternMix, preparePattern, sectionClip, shownLabel } from '../lib/pattern'
 import { imageTiles, threadWindowMask, windowEdges } from '../lib/thread'
 import type { Frame, Note } from '../lib/types'
 import { useTilt } from '../tilt/tilt'
@@ -28,6 +29,13 @@ function useImageAspect(url: string | undefined) {
 }
 
 /** Complete, upright images fit the thread's thickness and repeat with optional spacing. */
+export interface FillLayout {
+  direction: Note['thread']['direction']
+  thicknessPx: number
+  lengthPx: number
+  gapPx: number
+}
+
 export function FrameFill({
   frame,
   direction,
@@ -35,12 +43,8 @@ export function FrameFill({
   lengthPx,
   gapPx,
   opacity = 1,
-}: {
+}: FillLayout & {
   frame: Frame
-  direction: Note['thread']['direction']
-  thicknessPx: number
-  lengthPx: number
-  gapPx: number
   opacity?: number
 }) {
   const url = useImageUrl(frame.imageId)
@@ -111,10 +115,63 @@ function tiltStyle(angle: number, angleX: number, blend: number) {
   return { rotate: angleX ? `rotateX(${angle}deg) rotateY(${angleX}deg)` : `rotateX(${angle}deg)`, parts }
 }
 
-/** Which frames show, and which one counts as current: the only parts of a tilt that need a re-render */
-const shownKey = (note: Pick<Note, 'frames' | 'tilt'>, angle: number, angleX: number) => {
-  const mix = lensMix(note, { x: angleX, y: angle })
-  return `${mix.base}|${mix.blend > 0 ? mix.next : mix.base}|${mix.current}`
+/**
+ * Which frames show, and which one counts as current: the only parts of a tilt that need a re-render. One entry
+ * per section of the thread's pattern; a thread from before patterns has the one.
+ */
+const shownKey = (note: Note, angle: number, angleX: number) => {
+  if (preparePattern(note).plain) {
+    const mix = lensMix(note, { x: angleX, y: angle })
+    return `${mix.base}|${mix.blend > 0 ? mix.next : mix.base}|${mix.current}`
+  }
+  return patternMix(note, { x: angleX, y: angle }).map((mix) => `${mix.base}|${mix.blend > 0 ? mix.next : mix.base}|${mix.current}`).join(';')
+}
+const parseShown = (key: string) => key.split(';').map((entry) => entry.split('|').map(Number))
+/** How much the next frame shows over the base one, per section */
+const blendsAt = (note: Note, angle: number, angleX: number) =>
+  preparePattern(note).plain ? [lensMix(note, { x: angleX, y: angle }).blend] : patternMix(note, { x: angleX, y: angle }).map((mix) => mix.blend)
+
+/**
+ * What a stretch of thread `lengthMm` long shows: the frames each section of the pattern shows (`shown`, base and
+ * next per section), through that section's areas repeated along it from `offsetMm`. Fading frames take their
+ * opacity from `blends`, or live views write it onto `[data-tilt="blend"]` themselves (`data-section` says whose).
+ * A thread from before patterns is drawn exactly as it always was.
+ */
+export function ThreadArt({ note, shown, blends, fill, lengthMm, scale, offsetMm = 0 }: {
+  note: Note
+  shown: number[][]
+  blends?: number[]
+  fill: FillLayout
+  lengthMm: number
+  scale: number
+  offsetMm?: number
+}) {
+  const { frames } = note
+  const prepared = preparePattern(note)
+  if (prepared.plain) {
+    const [base, next] = shown[0] ?? []
+    const baseFrame = frames.at(base)
+    const nextFrame = next !== base ? frames.at(next) : undefined
+    return (
+      <>
+        {baseFrame && <FrameFill frame={baseFrame} {...fill} />}
+        {nextFrame && <div className="absolute inset-0" data-tilt="blend" style={blends ? { opacity: blends[0] } : {}}><FrameFill frame={nextFrame} {...fill} /></div>}
+      </>
+    )
+  }
+  return prepared.sections.map((p, i) => {
+    const entry = shown[i]
+    if (!entry) return null
+    const [base, next] = entry
+    const baseFrame = frames.at(base)
+    const nextFrame = next !== base ? frames.at(next) : undefined
+    return (
+      <div key={p.section.id} data-section={i} className="absolute inset-0" style={sectionClip(p.section, prepared.pattern.repeatMm, offsetMm, lengthMm, scale, fill.direction)}>
+        {baseFrame && <FrameFill frame={baseFrame} {...fill} />}
+        {nextFrame && <div className="absolute inset-0" data-tilt="blend" data-section={i} style={blends ? { opacity: blends[i] } : {}}><FrameFill frame={nextFrame} {...fill} /></div>}
+      </div>
+    )
+  })
 }
 
 const SIDE_LIGHT = `rgba(255,255,255,${0.12 * SHADE_MAX})`
@@ -135,6 +192,7 @@ export function NoteView({
   sheen = false,
   showWindowCuts = false,
   showFrameNumber = false,
+  offsetMm = 0,
 }: {
   note: Note
   scale: number
@@ -147,6 +205,8 @@ export function NoteView({
   showWindowCuts?: boolean
   /** Labels the thread with the number of the frame it shows; exports draw it too when the toggle is on */
   showFrameNumber?: boolean
+  /** Where along the thread the pattern's repeat starts, mm: a preview of where the print may land */
+  offsetMm?: number
 }) {
   const { thread, frames } = note
   const root = useRef<HTMLDivElement>(null)
@@ -154,9 +214,7 @@ export function NoteView({
   const face = useImageUrl(note.background === 'image' ? note.faceImageId : undefined)
   // Live notes re-render only when this changes, not on every animation frame
   const liveShown = useTilt((s) => (live ? shownKey(note, s.angle, s.angleX) : ''))
-  const [base, next, current] = (live ? liveShown : shownKey(note, angle, angleX)).split('|').map(Number)
-  const baseFrame = frames.at(base)
-  const nextFrame = next !== base ? frames.at(next) : undefined
+  const shown = parseShown(live ? liveShown : shownKey(note, angle, angleX))
 
   // Live: write the continuous parts straight onto the elements, after every render and on every tilt change
   const apply = useRef((_angle: number, _angleX: number) => {})
@@ -164,10 +222,12 @@ export function NoteView({
     apply.current = (angle: number, angleX: number) => {
       const element = root.current
       if (!live || !element) return
-      const style = tiltStyle(angle, angleX, lensMix(note, { x: angleX, y: angle }).blend)
+      const blends = blendsAt(note, angle, angleX)
+      const style = tiltStyle(angle, angleX, blends[0] ?? 0)
       element.style.transform = perspective ? style.rotate : ''
       for (const part of element.querySelectorAll<HTMLElement>('[data-tilt]')) {
-        Object.assign(part.style, style.parts[part.dataset.tilt as TiltPart])
+        const section = part.dataset.section
+        Object.assign(part.style, section === undefined ? style.parts[part.dataset.tilt as TiltPart] : { opacity: blends[Number(section)] ?? 0 })
       }
     }
     const { angle, angleX } = useTilt.getState()
@@ -190,8 +250,10 @@ export function NoteView({
 
   const windowMask = threadWindowMask(thread, scale)
   // Static notes (thumbnails, tests) are drawn from props; live ones leave these to apply()
-  const still = live ? undefined : tiltStyle(angle, angleX, lensMix(note, { x: angleX, y: angle }).blend)
+  const blends = live ? undefined : blendsAt(note, angle, angleX)
+  const still = blends && tiltStyle(angle, angleX, blends[0] ?? 0)
   const part = (name: TiltPart, style: CSSProperties = {}) => ({ 'data-tilt': name, style: { ...style, ...still?.parts[name] } })
+  const art = <ThreadArt note={note} shown={shown} blends={blends} fill={fill} lengthMm={lengthMm} scale={scale} offsetMm={offsetMm} />
 
   return (
     <div
@@ -210,8 +272,7 @@ export function NoteView({
 
       {showWindowCuts && thread.windows.enabled && (
         <div aria-hidden="true" data-window-ghost className="pointer-events-none absolute overflow-hidden" style={{ ...strip, opacity: 0.2, backgroundColor: thread.backgroundColor }}>
-          {baseFrame && <FrameFill frame={baseFrame} {...fill} />}
-          {nextFrame && <div className="absolute inset-0" {...part('blend')}><FrameFill frame={nextFrame} {...fill} /></div>}
+          {art}
         </div>
       )}
 
@@ -220,8 +281,7 @@ export function NoteView({
         className={cn('absolute overflow-hidden', horizontal ? 'cursor-ns-resize' : 'cursor-ew-resize')}
         style={{ ...strip, ...windowMask, backgroundColor: thread.backgroundColor }}
       >
-        {baseFrame && <FrameFill frame={baseFrame} {...fill} />}
-        {nextFrame && <div className="absolute inset-0" {...part('blend')}><FrameFill frame={nextFrame} {...fill} /></div>}
+        {art}
         {sheen && (
           // The highlight sits halfway along the thread when flat and slides along it as the note tilts
           <div
@@ -250,7 +310,7 @@ export function NoteView({
             className="rounded-full bg-foreground/85 px-1.5 font-semibold leading-none text-background tabular-nums shadow-sm"
             style={{ fontSize: Math.max(10, Math.min(mm(thread.widthMm) * 0.6, 18)), paddingBlock: 3 }}
           >
-            {current + 1}
+            {shownLabel(shown.map((entry) => entry[2]))}
           </span>
         </div>
       )}
