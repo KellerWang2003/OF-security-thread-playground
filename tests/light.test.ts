@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { drawFace, exportReveal, playbackLights, playbackTilts } from '../src/lib/exportRender'
-import { WATERMARK_CLEAR_DEG, WATERMARK_FAINT, offAxisDeg, tiltReveal, watermarkOpacity, watermarkReveal } from '../src/lib/light'
+import {
+  WATERMARK_FAINT, WATERMARK_TILTED, WATERMARK_TILT_DEG, offAxisDeg, tiltReveal, watermarkOpacity, watermarkReveal,
+} from '../src/lib/light'
 import { lensState } from '../src/lib/lens'
 import { createNote } from '../src/lib/notes'
 import { lightAt, playbackPlan, tiltAt } from '../src/lib/moves'
@@ -20,10 +22,10 @@ describe('how clearly the watermark shows', () => {
     expect(offAxisDeg({ x: 20, y: 20 })).toBeGreaterThan(20)
   })
 
-  it('is faint flat and comes out as the banknote tilts either way, clearest from WATERMARK_CLEAR_DEG on', () => {
+  it('comes out a little as the banknote tilts either way, as far as tilting goes from WATERMARK_TILT_DEG on', () => {
     expect(tiltReveal({ x: 0, y: 0 })).toBe(0)
-    expect(tiltReveal({ x: 0, y: WATERMARK_CLEAR_DEG / 2 })).toBeCloseTo(0.5)
-    expect(tiltReveal({ x: 0, y: -WATERMARK_CLEAR_DEG })).toBe(1)
+    expect(tiltReveal({ x: 0, y: WATERMARK_TILT_DEG / 2 })).toBeCloseTo(0.5)
+    expect(tiltReveal({ x: 0, y: -WATERMARK_TILT_DEG })).toBe(1)
     expect(tiltReveal({ x: 60, y: 0 })).toBe(1)
     expect(tiltReveal({ x: 0, y: 10 })).toBeLessThan(tiltReveal({ x: 0, y: 20 }))
     expect(tiltReveal({ x: 10, y: 0 })).toBeCloseTo(tiltReveal({ x: 0, y: -10 }))
@@ -33,9 +35,25 @@ describe('how clearly the watermark shows', () => {
     expect(watermarkReveal(0, { x: 0, y: 0 })).toBe(0)
     expect(watermarkReveal(1, { x: 0, y: 0 })).toBe(1)
     expect(watermarkReveal(0.4, { x: 0, y: 0 })).toBeCloseTo(0.4)
-    expect(watermarkReveal(0.2, { x: 0, y: 20 })).toBeCloseTo(tiltReveal({ x: 0, y: 20 }))
+    expect(watermarkReveal(0, { x: 0, y: 20 })).toBeGreaterThan(0)
+    expect(watermarkReveal(0.4, { x: 0, y: 20 })).toBeCloseTo(0.4)
     expect(watermarkReveal(1, { x: 0, y: 70 })).toBe(1)
     expect(watermarkReveal(3, { x: 0, y: 0 })).toBe(1)
+  })
+
+  it('is all but invisible in reflected light, flat or tilted, as on a real banknote, and only clear held to the light', () => {
+    const depth = 0.8
+    const shown = (light: number, tilt: { x: number; y: number }) => watermarkOpacity(depth, watermarkReveal(light, tilt))
+    expect(shown(0, { x: 0, y: 0 })).toBeCloseTo(depth * WATERMARK_FAINT)
+    expect(shown(0, { x: 0, y: 0 })).toBeLessThanOrEqual(depth * 0.05)
+    // Tilting shows it a little more, whichever way, never more than WATERMARK_TILTED of its depth
+    expect(shown(0, { x: 0, y: 15 })).toBeGreaterThan(shown(0, { x: 0, y: 0 }))
+    expect(shown(0, { x: 0, y: -WATERMARK_TILT_DEG })).toBeCloseTo(depth * WATERMARK_TILTED)
+    expect(shown(0, { x: 60, y: 0 })).toBeCloseTo(depth * WATERMARK_TILTED)
+    expect(WATERMARK_TILTED).toBeLessThan(0.25)
+    // Held to the light, all of it at any tilt
+    expect(shown(1, { x: 0, y: 0 })).toBeCloseTo(depth)
+    expect(shown(1, { x: 45, y: 0 })).toBeCloseTo(depth)
   })
 
   it('draws a faint share of its depth flat and all of it at its clearest', () => {
@@ -69,8 +87,9 @@ describe('exported light', () => {
     expect(exportReveal(0, { x: 0, y: 0 }, true)).toBe(1)
     expect(exportReveal(0.5, 0)).toBeCloseTo(0.5)
     expect(exportReveal(0.5, 0, true)).toBe(1)
-    expect(exportReveal(0, 20)).toBeCloseTo(tiltReveal({ x: 0, y: 20 }))
-    expect(exportReveal(0, { x: 50, y: 0 })).toBe(1)
+    expect(exportReveal(0, 20)).toBeCloseTo(watermarkReveal(0, { x: 0, y: 20 }))
+    expect(exportReveal(0, { x: 50, y: 0 })).toBeCloseTo(watermarkReveal(0, { x: 50, y: 0 }))
+    expect(exportReveal(0, { x: 50, y: 0 })).toBeLessThan(1)
   })
 
   it('draws the watermark over the design and under the thread as light through it, at its reveal, and nothing else differently', () => {
@@ -103,7 +122,7 @@ describe('exported light', () => {
     // The paper first, then the watermark, then the thread (frames are colours here), all drawn normally
     expect(flat.map((c) => c.what).slice(0, 2)).toEqual(['fill #336699', 'watermark'])
     expect(flat.filter((c) => c.what !== 'watermark').every((c) => c.blend === 'source-over' && c.alpha === 1)).toBe(true)
-    expect(draw(undefined, 20).find((c) => c.what === 'watermark')!.alpha).toBeCloseTo(watermarkOpacity(0.6, tiltReveal({ x: 0, y: 20 })))
+    expect(draw(undefined, 20).find((c) => c.what === 'watermark')!.alpha).toBeCloseTo(watermarkOpacity(0.6, watermarkReveal(0, { x: 0, y: 20 })))
     expect(draw(1).find((c) => c.what === 'watermark')!.alpha).toBeCloseTo(0.6)
   })
 })

@@ -82,7 +82,7 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace }: {
             step={WATERMARK_STEP} unit="mm" onChange={(yMm) => change((w) => ({ ...w, yMm }))} />
           <ScrubField label="W" title="Watermark width; its height follows the image" value={Math.round(watermark.widthMm * 100) / 100} min={WATERMARK_MIN_MM}
             max={maxWatermarkWidth(watermark, note)} step={WATERMARK_STEP} unit="mm" onChange={(widthMm) => change((w, n) => resizeWatermark(w, widthMm, n))} />
-          <ScrubField label="Depth" title="How strongly the watermark shows at its clearest, tilted or held to the light" value={Math.round(watermark.depth * 100)} min={0} max={100}
+          <ScrubField label="Depth" title="How strongly the watermark shows held to the light" value={Math.round(watermark.depth * 100)} min={0} max={100}
             step={5} unit="%" onChange={(depth) => change((w) => ({ ...w, depth: depth / 100 }))} />
         </div>
       </Section>

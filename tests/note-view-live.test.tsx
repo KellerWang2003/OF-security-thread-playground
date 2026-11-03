@@ -2,7 +2,7 @@
 import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NoteView } from '../src/components/NoteView'
-import { tiltReveal, watermarkOpacity } from '../src/lib/light'
+import { WATERMARK_TILTED, watermarkOpacity, watermarkReveal } from '../src/lib/light'
 import { createNote } from '../src/lib/notes'
 import { setTilt } from '../src/tilt/tilt'
 
@@ -99,9 +99,9 @@ describe("a NoteView's watermark", () => {
     }
     const { container } = render(<Counted />)
     act(() => setTilt({ angle: 10 }))
-    expect(opacity(container)).toBeCloseTo(watermarkOpacity(0.6, tiltReveal({ x: 0, y: 10 })))
+    expect(opacity(container)).toBeCloseTo(watermarkOpacity(0.6, watermarkReveal(0, { x: 0, y: 10 })))
     act(() => setTilt({ angle: 0, angleX: -30 }))
-    expect(opacity(container)).toBeCloseTo(0.6)
+    expect(opacity(container)).toBeCloseTo(0.6 * WATERMARK_TILTED)
     act(() => setTilt({ angleX: 0 }))
     const before = renders
     act(() => setTilt({ light: 0.5 }))
@@ -138,7 +138,7 @@ describe("a NoteView's watermark", () => {
     rerender(<NoteView note={withWatermark()} scale={1} />)
     expect(opacity(container)).toBeCloseTo(watermarkOpacity(0.6, 0))
     rerender(<NoteView note={withWatermark()} scale={1} angle={30} />)
-    expect(opacity(container)).toBeCloseTo(0.6)
+    expect(opacity(container)).toBeCloseTo(0.6 * WATERMARK_TILTED)
   })
 
   it('lets the dark parts of its image through instead when inverted', () => {

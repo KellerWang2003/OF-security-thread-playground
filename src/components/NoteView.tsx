@@ -188,7 +188,8 @@ type LiveState = { angle: number; angleX: number; light: number }
  * The note with its thread, drawn at `scale` px per mm. The frame shown comes from the tilt (up/down `angle`,
  * side `angleX`) through the note's lens, or with `live` from the shared tilt as it moves; with `perspective`
  * the note also turns in 3D, and `sheen` adds a highlight that travels along the thread. Its watermark, in the
- * note's own colours under the thread, is faint flat, clearer as the note tilts and clear held to the light.
+ * note's own colours under the thread, is all but invisible in reflected light, a little more as the note tilts,
+ * and clear held to the light.
  */
 export function NoteView({
   note,
