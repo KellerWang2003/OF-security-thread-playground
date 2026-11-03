@@ -2,11 +2,11 @@
 
 Banknote Playground: a design tool for previewing lenticular security threads on banknotes (Oberthur Fiduciaire x ArtCenter studio). See README.md for what it does and the code layout.
 
-The app is called Banknote Playground (renamed from Security thread playground on 3 November): page title, sign-in page, project list, package name. Production is the Vercel project `banknote-playground` at banknote-playground.vercel.app. Keep of-playground.vercel.app: it serves the same deployment with no redirect, since a browser keeps its username, settings and offline copies per address and the old link has been shared. Older names stay on purpose where renaming would risk users' data for nothing they see: the Supabase table, bucket and function (`thread_playground_projects`, `thread-playground-artwork`, `thread-workspace`) and the `of-playground.*` browser storage keys (renaming those resets what users' browsers remember). The app folder and the `thread-playground` launch config keep the old name too, for now.
+The app is called Banknote Playground (renamed from Security thread playground on 3 November): page title, sign-in page, project list, package name. Production is the Vercel project `banknote-playground`, deployed from the GitHub repo KellerWang2003/banknote-playground, at banknote-playground.vercel.app. Keep of-playground.vercel.app: it serves the same deployment with no redirect, since a browser keeps its username, settings and offline copies per address and the old link has been shared. Older names stay on purpose where renaming would risk users' data for nothing they see: the Supabase table, bucket and function (`thread_playground_projects`, `thread-playground-artwork`, `thread-workspace`) and the `of-playground.*` browser storage keys (renaming those resets what users' browsers remember). The folder was renamed to match (it was `OF Security Thread Playground`), and so was the parent folder's launch config (`banknote-playground`, was `thread-playground`).
 
 ## Commands
 
-- `npm run dev`: dev server. From the parent folder, the `thread-playground` launch config runs it on port 5174.
+- `npm run dev`: dev server. From the parent folder, the `banknote-playground` launch config runs it on port 5174.
 - `npm run build`: type-check (TypeScript 7) and build. Run it before every commit.
 - `npm run lint`: Oxlint. `src/components/ui/**` (generated shadcn code) is ignored.
 
