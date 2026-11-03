@@ -1,6 +1,7 @@
 import { reportError } from '../cloud/notices'
-import { Columns2, ImageUp, RectangleHorizontal, RectangleVertical, Rows2, Share, Shuffle, TriangleAlert, X } from 'lucide-react'
+import { ImageUp, RectangleHorizontal, RectangleVertical, Share, Shuffle, Trash2, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ColorField, Group, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
@@ -22,12 +23,15 @@ import type { Layer } from './watermarkActions'
 type Change = (note: Note) => Note
 
 /**
- * Right: the selected banknote's own settings (size, background), always, and under them the layer picked, if any:
- * its security thread (placement, artwork, and its lens with the way into the thread editor) or its watermark. One
- * layer at a time, so the panel never grows with features.
+ * Right: the selected banknote, one tab per part, as the Banknotes list has its layers: the banknote itself (size,
+ * background), its security thread (placement, artwork, and its lens with the way into the thread editor) and its
+ * watermark once it has one. The tab is the part picked: a click on the canvas or in the list turns to it, and turning
+ * to a tab picks that part. One part at a time, so the panel never grows with features.
  */
-export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSelect, onExport, onEditThread, onPlaceWatermark, onRemoveWatermark }: {
+export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onWindowSelect, onExport, onEditThread, onPlaceWatermark, onRemoveWatermark }: {
   note: Note
+  /** Picks a part of the banknote, as its row in the list does */
+  onLayer: (layer: Layer) => void
   onExport: () => void
   /** Opens the thread editor, where the lens and the thread's sections are edited */
   onEditThread: () => void
@@ -80,13 +84,26 @@ export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSele
   return (
     <>
     <PanelResizer />
-    <Panel className="absolute top-3 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-y-auto">
+    <Panel className="absolute top-3 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-hidden">
       <div className="flex items-center justify-between gap-2 border-b border-border/60 py-2 pr-2 pl-4">
         <span className="truncate text-sm font-medium">{note.name}</span>
         <Button variant="outline" size="sm" onClick={onExport}><Share />Export</Button>
       </div>
 
-      <Group title="Banknote">
+      <Tabs value={layer} onValueChange={(next) => onLayer(next as Layer)} className="min-h-0 flex-1 gap-0">
+      <div className="flex items-center justify-between gap-2 border-b border-border/60 py-1.5 pr-2 pl-2.5">
+        <TabsList variant="line" className="h-7">
+          <TabsTrigger value="note" className="px-1.5 text-[13px]">Banknote</TabsTrigger>
+          <TabsTrigger value="thread" className="px-1.5 text-[13px]">Thread</TabsTrigger>
+          {note.watermark && <TabsTrigger value="watermark" className="px-1.5 text-[13px]">Watermark</TabsTrigger>}
+        </TabsList>
+        {layer === 'watermark' && note.watermark && (
+          <IconButton label="Remove watermark" size="icon-xs" className="text-muted-foreground" onClick={onRemoveWatermark}><Trash2 /></IconButton>
+        )}
+      </div>
+
+      <TabsContent value="note" className="min-h-0 overflow-y-auto">
+      <Group>
       <Section nested>
         <Segmented
           value={portrait ? 'portrait' : 'landscape'}
@@ -146,10 +163,10 @@ export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSele
         )}
       </Section>
       </Group>
+      </TabsContent>
 
-      {/* The picked layer is a section of its own under the banknote's settings, titled with its icon from the list */}
-      {layer === 'thread' && (
-      <Group title="Security thread" icon={thread.direction === 'vertical' ? <Columns2 /> : <Rows2 />}>
+      <TabsContent value="thread" className="min-h-0 overflow-y-auto">
+      <Group>
       <Section nested>
         <Segmented
           value={thread.direction}
@@ -208,11 +225,14 @@ export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSele
       <LensEffect note={note} noteRef={noteRef} onEditThread={onEditThread} />
       <PrintOffset note={note} onWindowSelect={onWindowSelect} />
       </Group>
-      )}
+      </TabsContent>
 
-      {layer === 'watermark' && note.watermark && (
-        <WatermarkPanel note={note} watermark={note.watermark} noteRef={noteRef} onPlace={onPlaceWatermark} onRemove={onRemoveWatermark} />
+      {note.watermark && (
+        <TabsContent value="watermark" className="min-h-0 overflow-y-auto">
+          <WatermarkPanel note={note} watermark={note.watermark} noteRef={noteRef} onPlace={onPlaceWatermark} />
+        </TabsContent>
       )}
+      </Tabs>
     </Panel>
     </>
   )

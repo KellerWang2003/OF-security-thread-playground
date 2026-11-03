@@ -145,7 +145,7 @@ describe('thread editor', () => {
 
     // Back on the canvas, the banknote's thread is still selected, with Edit thread to go back in, in the panel and under the thread
     expect(screen.getByRole('button', { name: 'Export', exact: true })).toBeDefined()
-    expect(screen.getByRole('heading', { name: 'Security thread', exact: true })).toBeDefined()
+    expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Thread')
     expect(screen.getAllByRole('button', { name: 'Edit thread', exact: true })).toHaveLength(2)
     await user.click(within(document.querySelector<HTMLElement>('[data-edit-thread]')!).getByRole('button', { name: 'Edit thread' }))
     expect(screen.getByRole('region', { name: 'Thread editor' })).toBeDefined()

@@ -261,7 +261,8 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
           {!isEmpty && (
             <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
           )}
-          {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} layer={shownLayer} onExport={() => setExporting(true)} onEditThread={() => editThread(note.id)}
+          {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} layer={shownLayer} onLayer={(next) => selectLayer(note.id, next)}
+            onExport={() => setExporting(true)} onEditThread={() => editThread(note.id)}
             selectedWindowId={editingWindows ? selectedWindowId : undefined}
             onWindowSelect={(windowId) => {
               if (!windowId) return exitWindows()

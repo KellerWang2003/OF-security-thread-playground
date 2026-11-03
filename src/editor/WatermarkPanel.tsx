@@ -1,4 +1,4 @@
-import { Droplet, ImageUp, Trash2, X } from 'lucide-react'
+import { ImageUp, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Group, IconButton, ScrubField, Section, SwitchField } from '../components/controls'
 import { reportError } from '../cloud/notices'
@@ -9,22 +9,22 @@ import type { NoteRef } from './frameActions'
 import { setWatermarkImage, updateWatermark } from './watermarkActions'
 
 /**
- * Right: the selected banknote's watermark. One image, read only by brightness, as paper has no colour: its light parts
- * are thinner paper that lets more light through, or its dark parts with Invert. Where it sits and how strongly it shows.
+ * Right, under the Watermark tab: the selected banknote's watermark. One image, read only by brightness, as paper has no
+ * colour: its light parts are thinner paper that lets more light through, or its dark parts with Invert. Where it sits
+ * and how strongly it shows. Removing it is beside the tabs.
  */
-export function WatermarkPanel({ note, watermark, noteRef, onPlace, onRemove }: {
+export function WatermarkPanel({ note, watermark, noteRef, onPlace }: {
   note: Note
   watermark: Watermark
   noteRef: NoteRef
   /** Shows it on the canvas, flat and clear, to place it */
   onPlace: () => void
-  onRemove: () => void
 }) {
   const image = useImageUrl(watermark.imageId)
   const change = (next: (w: Watermark, n: Note) => Watermark) => updateWatermark(noteRef, next)
 
   return (
-    <Group title="Watermark" icon={<Droplet />} action={<IconButton label="Remove watermark" className="text-muted-foreground" onClick={onRemove}><Trash2 /></IconButton>}>
+    <Group>
       <Section nested>
         <div className="flex items-center gap-2">
           <Button
