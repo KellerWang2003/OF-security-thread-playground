@@ -480,9 +480,20 @@ describe('thread editor', () => {
     fireEvent.pointerUp(view, { button: 0, clientX: 10, clientY: 20, pointerId: 1 })
     expect(sections()).toHaveLength(1)
 
-    // Tilted, the thread always turns with it
+    // Tilted, the thread turns with it
     act(() => setTilt({ source: 'drag', angle: 20, target: 20, angleX: 0, targetX: 0 }))
     expect(strip().element.style.transform).toBe('rotateX(20deg) rotateY(0deg)')
+
+    // With Tilt off it lies flat, and a drag around it pans instead of tilting
+    await user.click(within(editor).getByRole('button', { name: 'Tilt', exact: true }))
+    expect(strip().element.style.transform).toBe('')
+    const placed = strip().element.parentElement!.style.transform
+    fireEvent.pointerDown(view, { button: 0, buttons: 1, clientX: 10, clientY: 100, pointerId: 1 })
+    fireEvent.pointerMove(view, { buttons: 1, clientX: 40, clientY: 60, pointerId: 1 })
+    fireEvent.pointerUp(view, { button: 0, clientX: 40, clientY: 60, pointerId: 1 })
+    expect(useTilt.getState().target).toBe(20)
+    expect(strip().element.parentElement!.style.transform).not.toBe(placed)
+    await user.click(within(editor).getByRole('button', { name: 'Tilt', exact: true }))
     act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
 
     // Beside the thread: the repeat and thickness, and the selected section's length and width, to type in

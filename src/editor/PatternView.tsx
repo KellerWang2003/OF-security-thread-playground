@@ -40,7 +40,7 @@ type Gesture =
   | { mode: 'move'; id: string; start: ThreadSection; pattern: ThreadPattern; at: { along: number; across: number }; moved: boolean }
   | { mode: 'resize'; id: string; edge: Edge; pattern: ThreadPattern; copy: number }
   | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; moved: boolean }
-  | { mode: 'pan'; startX: number; startY: number; from: View }
+  | { mode: 'pan'; startX: number; startY: number; from: View; button: number; moved: boolean }
 
 /** Repeats shown: always three, however long the repeat (Keller) */
 const REPEATS = 3
@@ -70,19 +70,22 @@ function fitView(box: { width: number; height: number }, repeatMm: number, width
  * when it touches none), drag a section to move it or its edges to resize it (snapping to 0.5 mm along and twelfths
  * across); a click selects, and a double-click on an empty area fills it. Beside the first repeat, measurements to
  * read and edit: the repeat and the thread's thickness, and the selected section's length and width. Like the
- * canvas, a drag around the thread tilts it, always in perspective (editing still lands where the pointer is),
- * scrolling or a middle-button drag pans, and pinching or ⌘/Ctrl-scrolling zooms. The
+ * canvas, a drag around the thread tilts it, in perspective (editing still lands where the pointer is), unless
+ * `tilting` is off: then the thread lies flat, showing the frames of the current tilt, and a drag pans. Scrolling or a
+ * middle-button drag pans, and pinching or ⌘/Ctrl-scrolling zooms. The
  * view fills its parent, behind the floating panels, as the canvas does; the thread fits and centres in `room`
  * (Tailwind insets clear of the panels), and panned it runs on under them instead of being cut off at that box. A
  * longer repeat or a thicker thread keeps the zoom, so the thread itself grows.
  */
-export function PatternView({ note, projectId, selectedId, onSelect, ridges, limit = 90, room: roomClassName }: {
+export function PatternView({ note, projectId, selectedId, onSelect, ridges, tilting = true, limit = 90, room: roomClassName }: {
   note: Note
   projectId: string
   selectedId?: string
   onSelect: (id: string | undefined) => void
   /** Hatch each section at its ridge angle */
   ridges: boolean
+  /** A drag around the thread tilts it, and the thread turns with the tilt; off, it lies flat and a drag pans */
+  tilting?: boolean
   /** How far a drag may tilt, either way */
   limit?: number
   /** Where the thread fits and centres, as Tailwind insets within the view */
@@ -166,7 +169,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, lim
   }
   // Turned in perspective, the thread is a plane seen at an angle: a point on screen is traced back onto it, so
   // drawing and moving land under the pointer at any tilt
-  const turned = angle !== 0 || angleX !== 0
+  const turned = tilting && (angle !== 0 || angleX !== 0)
   const depth = 2.2 * Math.max(width, height)
   const locate = (e: { clientX: number; clientY: number }) => {
     // The untilted box: the strip's parent, the same size and never turned
@@ -207,7 +210,10 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, lim
     const g = gesture.current
     if (!g) return
     if (e.buttons === 0) return end()
-    if (g.mode === 'pan') return setView({ ...g.from, x: g.from.x + e.clientX - g.startX, y: g.from.y + e.clientY - g.startY })
+    if (g.mode === 'pan') {
+      g.moved ||= Math.hypot(e.clientX - g.startX, e.clientY - g.startY) > 3
+      return setView({ ...g.from, x: g.from.x + e.clientX - g.startX, y: g.from.y + e.clientY - g.startY })
+    }
     if (g.mode === 'tilt') {
       const dx = e.clientX - g.startX, dy = e.clientY - g.startY
       if (!g.moved && Math.hypot(dx, dy) < 3) return
@@ -252,6 +258,8 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, lim
       else if (!g.moved) onSelect(undefined)
       return
     }
+    // With tilting off a left drag pans instead, and a click still clears the selection
+    if (g?.mode === 'pan' && g.button === 0 && !g.moved) onSelect(undefined)
     if (g?.mode !== 'draw') return
     setPreview(undefined)
     const rect = g.rect
@@ -283,11 +291,11 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, lim
     <div ref={box} className={cn('absolute inset-0 touch-none overflow-hidden', panning && 'cursor-grabbing')}
       onPointerDown={(e) => {
         // Around the thread, a drag tilts it, as on the canvas, from where the tilt is heading (springing back on
-        // release unless the pad holds it); a middle-button drag pans
+        // release unless the pad holds it); a middle-button drag pans, and so does any drag with tilting off
         if (e.button !== 0 && e.button !== 1) return
         e.currentTarget.setPointerCapture(e.pointerId)
-        if (e.button === 1) {
-          gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, from: view }
+        if (e.button === 1 || !tilting) {
+          gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, from: view, button: e.button, moved: false }
           setPanning(true)
           return
         }

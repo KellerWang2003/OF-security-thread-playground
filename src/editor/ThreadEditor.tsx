@@ -1,4 +1,4 @@
-import { ChevronLeft, CircleCheck, Copy, Eye, EyeOff, Info, Plus, Redo2, RotateCcw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
+import { ChevronLeft, CircleCheck, Copy, Eye, EyeOff, Info, Plus, Redo2, Rotate3d, RotateCcw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -55,6 +55,8 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
   const pattern = patternOf(note)
   const [selectedId, setSelectedId] = useState(() => pattern.sections.at(0)?.id)
   const [ridges, setRidges] = useState(false)
+  // Off, the thread lies flat so a frame can be worked on without it turning away (Keller)
+  const [tiltOn, setTiltOn] = useState(true)
   // Preview and Checks open one at a time, as an accordion, so the controls above always keep room
   const [info, setInfo] = useState<'preview' | 'checks'>()
   const openInfo = (part: 'preview' | 'checks') => (open: boolean) => setInfo(open ? part : undefined)
@@ -138,7 +140,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       <div className="absolute inset-0 bg-muted/40" />
 
       {/* The whole editor, behind the panels, as on the canvas; the thread fits between them, and fits again once turned */}
-      <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={setSelectedId} ridges={ridges}
+      <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={setSelectedId} ridges={ridges} tilting={tiltOn}
         limit={lens.viewDeg} room="top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[248px]" />
 
       <Panel className="absolute top-3 right-3 left-3 flex h-11 items-center gap-2 rounded-[calc(var(--radius)+0.375rem+1px)] pr-1.5 pl-1.5">
@@ -153,6 +155,11 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
               {warnings}
             </Button>
           )}
+          <Toggle size="sm" aria-label="Tilt" title={tiltOn ? 'A drag around the thread tilts it; off, the thread lies flat' : 'The thread lies flat and a drag pans; on, a drag tilts it'}
+            pressed={tiltOn} onPressedChange={setTiltOn}>
+            <Rotate3d />
+            Tilt
+          </Toggle>
           <Toggle size="sm" aria-label="Ridges" title={ridges ? "Hide each section's ridges" : "Show each section's ridges"} pressed={ridges} onPressedChange={setRidges}>
             {ridges ? <Eye /> : <EyeOff />}
             Ridges
