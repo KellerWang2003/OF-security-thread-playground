@@ -1,5 +1,8 @@
-import { useId, useRef, useState, type CSSProperties } from 'react'
+import { Maximize, Minus, Plus } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { IconButton } from '../components/controls'
 import { ThreadArt } from '../components/NoteView'
 import { clamp } from '../lib/frames'
 import { lensMix } from '../lib/lens'
@@ -18,7 +21,7 @@ import {
 } from '../lib/pattern'
 import { updateNote } from '../lib/store'
 import type { Note, ThreadPattern, ThreadSection } from '../lib/types'
-import { useTilt } from '../tilt/tilt'
+import { setTilt, springToFlat, useTilt } from '../tilt/tilt'
 import { useElementSize } from './useElementSize'
 
 /** Px per mm the view never goes past, so a short repeat doesn't blow up into a blur */
@@ -33,6 +36,13 @@ type Gesture =
   | { mode: 'draw'; copy: number; from: PatternPoint; moved: boolean; rect?: Rect }
   | { mode: 'move'; id: string; start: ThreadSection; pattern: ThreadPattern; at: { along: number; across: number }; moved: boolean }
   | { mode: 'resize'; id: string; edge: Edge; pattern: ThreadPattern; copy: number }
+  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; id?: string; moved: boolean }
+  | { mode: 'pan'; startX: number; startY: number; from: View }
+
+/** The view's zoom (1 fits the repeats shown) and how far it is panned from the middle, px */
+type View = { zoom: number; x: number; y: number }
+const FIT: View = { zoom: 1, x: 0, y: 0 }
+const ZOOM_LIMITS = { min: 0.25, max: 8 }
 
 const EDGES: Edge[] = ['startMm', 'endMm', 'acrossStart', 'acrossEnd']
 const isAlong = (edge: Edge) => edge === 'startMm' || edge === 'endMm'
@@ -51,15 +61,23 @@ function layout(box: { width: number; height: number }, repeatMm: number, widthM
  * the real artwork at the current tilt, with the repeat's ends, each section's outline and, optionally, its ridges.
  * Drag on empty thread to draw a section (it takes the look of the section beside it, as Fill does, or plays plain
  * when it touches none), drag a section to move it or its edges to resize it (snapping to 0.5 mm along and twelfths
- * across); a click selects, and a double-click on an empty area fills it.
+ * across); a click selects, and a double-click on an empty area fills it. Like the canvas, scrolling or dragging
+ * around the thread pans, pinching or ⌘/Ctrl-scrolling zooms; with `tiltDrag` a drag on the thread tilts instead
+ * of drawing, and with `perspective` the thread turns with the tilt (editing still lands where the pointer is).
  */
-export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
+export function PatternView({ note, projectId, selectedId, onSelect, ridges, tiltDrag = false, perspective = false, limit = 90 }: {
   note: Note
   projectId: string
   selectedId?: string
   onSelect: (id: string | undefined) => void
   /** Hatch each section at its ridge angle */
   ridges: boolean
+  /** A drag on the thread tilts it, as on the canvas, instead of drawing or moving sections */
+  tiltDrag?: boolean
+  /** The thread turns in perspective with the tilt; off, it plays flat */
+  perspective?: boolean
+  /** How far a drag may tilt, either way */
+  limit?: number
 }) {
   const box = useRef<HTMLDivElement>(null)
   const strip = useRef<HTMLDivElement>(null)
@@ -70,6 +88,29 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
   const uid = useId().replace(/:/g, '')
   const angle = useTilt((s) => s.angle)
   const angleX = useTilt((s) => s.angleX)
+  const [viewState, setView] = useState<View>(FIT)
+  const viewRef = useRef(viewState)
+  useEffect(() => { viewRef.current = viewState })
+  const [panning, setPanning] = useState(false)
+
+  // Wheel needs a non-passive listener so the page never scrolls or zooms: scroll pans, pinch or ⌘/Ctrl-scroll zooms
+  useEffect(() => {
+    const element = box.current
+    if (!element) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const v = viewRef.current
+      if (e.ctrlKey || e.metaKey) {
+        const r = element.getBoundingClientRect()
+        // Mouse wheels send big steps, trackpad pinches small ones; cap each step so neither jumps
+        setView(zoomAround(v, Math.exp(-clamp(e.deltaY, -40, 40) * 0.01), e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2))
+      } else {
+        setView({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY })
+      }
+    }
+    element.addEventListener('wheel', onWheel, { passive: false })
+    return () => element.removeEventListener('wheel', onWheel)
+  }, [])
 
   const { thread } = note
   const vertical = thread.direction === 'vertical'
@@ -78,7 +119,8 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
   const repeat = pattern.repeatMm
   const view = size ? layout(size, repeat, thread.widthMm, vertical) : undefined
   if (!view) return <div ref={box} className="absolute inset-0 overflow-hidden" />
-  const { repeats, scale } = view
+  const { repeats } = view
+  const scale = view.scale * viewState.zoom
   const lengthMm = repeats * repeat
   const thickness = thread.widthMm * scale
   const length = lengthMm * scale
@@ -97,9 +139,15 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
     const c0 = r.acrossStart * thickness, c1 = r.acrossEnd * thickness
     return vertical ? { x: c0, y: a0, width: c1 - c0, height: a1 - a0 } : { x: a0, y: c0, width: a1 - a0, height: c1 - c0 }
   }
+  // Turned in perspective, the thread is a plane seen at an angle: a point on screen is traced back onto it, so
+  // drawing and moving land under the pointer at any tilt
+  const turned = perspective && (angle !== 0 || angleX !== 0)
+  const depth = 2.2 * Math.max(width, height)
   const locate = (e: { clientX: number; clientY: number }) => {
-    const r = strip.current!.getBoundingClientRect()
-    const px = e.clientX - r.left, py = e.clientY - r.top
+    // The untilted box: the strip's parent, the same size and never turned
+    const r = (strip.current!.parentElement ?? strip.current!).getBoundingClientRect()
+    let px = e.clientX - r.left, py = e.clientY - r.top
+    if (turned) [px, py] = unproject(px - width / 2, py - height / 2, angle, angleX, depth).map((v, i) => v + (i ? height : width) / 2)
     return { along: (vertical ? py : px) / scale, across: (vertical ? px : py) / thickness }
   }
   const copyOf = (along: number) => clamp(Math.floor(along / repeat), 0, repeats - 1)
@@ -110,6 +158,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
+    e.stopPropagation()
     e.currentTarget.setPointerCapture(e.pointerId)
     // A field being typed in lets go, so Delete and Escape reach the sections
     if (document.activeElement instanceof HTMLElement && document.activeElement.closest('input, textarea')) document.activeElement.blur()
@@ -118,7 +167,14 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
     const handle = target.closest<HTMLElement>('[data-edge]')
     const body = target.closest<HTMLElement>('[data-section-id]')
     const section = pattern.sections.find((s) => s.id === body?.dataset.sectionId)
-    if (section && handle) {
+    if (tiltDrag) {
+      // As on the canvas: from where the tilt is heading, springing back on release unless the pad holds it
+      const s = useTilt.getState()
+      const start = s.source === 'drag' ? s.target : s.angle
+      const startSide = s.source === 'drag' ? s.targetX : s.angleX
+      gesture.current = { mode: 'tilt', startX: e.clientX, startY: e.clientY, start, startSide, id: section?.id, moved: false }
+      setTilt({ source: 'drag', target: start, targetX: startSide })
+    } else if (section && handle) {
       onSelect(section.id)
       gesture.current = { mode: 'resize', id: section.id, edge: handle.dataset.edge as Edge, pattern, copy: Number(body?.dataset.copy ?? 0) }
     } else if (section) {
@@ -133,6 +189,19 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
     const g = gesture.current
     if (!g) return
     if (e.buttons === 0) return end()
+    if (g.mode === 'pan') return setView({ ...g.from, x: g.from.x + e.clientX - g.startX, y: g.from.y + e.clientY - g.startY })
+    if (g.mode === 'tilt') {
+      const dx = e.clientX - g.startX, dy = e.clientY - g.startY
+      if (!g.moved && Math.hypot(dx, dy) < 3) return
+      g.moved = true
+      // About 160 px of drag tilts 30°, as on the canvas, unless an axis is locked on the tilt pad
+      const { lockX, lockY } = useTilt.getState()
+      setTilt({
+        target: lockY ? g.start : clamp(g.start - (dy * 30) / 160, -limit, limit),
+        targetX: lockX ? g.startSide : clamp(g.startSide + (dx * 30) / 160, -limit, limit),
+      })
+      return
+    }
     const at = locate(e)
     if (g.mode === 'draw') {
       const to = { along: clamp(at.along - g.copy * repeat, 0, repeat), across: clamp(at.across, 0, 1) }
@@ -158,6 +227,13 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
   const end = () => {
     const g = gesture.current
     gesture.current = null
+    setPanning(false)
+    if (g?.mode === 'tilt') {
+      // A click without tilting still selects what it lands on
+      if (g.moved && useTilt.getState().springBack) springToFlat()
+      else if (!g.moved) onSelect(g.id)
+      return
+    }
     if (g?.mode !== 'draw') return
     setPreview(undefined)
     const rect = g.rect
@@ -175,7 +251,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
 
   // A double-click on empty thread fills that whole gap, as Fill does: the section in line with it runs on, or new ones take its look
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('[data-section-id]')) return
+    if (tiltDrag || (e.target as HTMLElement).closest('[data-section-id]')) return
     const at = locate(e)
     const copy = copyOf(at.along)
     const filled = fillGaps(pattern, thread.widthMm, { along: clamp(at.along - copy * repeat, 0, repeat), across: clamp(at.across, 0, 1) })
@@ -185,19 +261,26 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
   }
 
   return (
-    <div ref={box} className="absolute inset-0 flex items-center justify-center overflow-hidden">
+    <div ref={box} className={cn('absolute inset-0 flex touch-none items-center justify-center overflow-hidden', panning ? 'cursor-grabbing' : 'cursor-grab')}
+      onPointerDown={(e) => {
+        // Around the thread, a drag pans the view
+        if (e.button !== 0) return
+        e.currentTarget.setPointerCapture(e.pointerId)
+        gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, from: viewState }
+        setPanning(true)
+      }}
+      onPointerMove={onPointerMove} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}
+      onDoubleClick={(e) => { if (e.target === e.currentTarget) setView(FIT) }}>
+      <div className="relative shrink-0" style={{ width, height, transform: `translate(${viewState.x}px, ${viewState.y}px)`, perspective: depth }}>
       <div
         ref={strip}
         role="group"
         aria-label="Thread pattern"
         data-pattern-view=""
-        className={cn('relative touch-none shadow-sm select-none', preview || !hovered ? 'cursor-crosshair' : 'cursor-move')}
-        style={{ width, height }}
+        className={cn('relative touch-none shadow-sm select-none', tiltDrag ? 'cursor-grab' : preview || !hovered ? 'cursor-crosshair' : 'cursor-move')}
+        style={{ width, height, transform: turned ? `rotateX(${angle}deg) rotateY(${angleX}deg)` : undefined }}
+        // Moves and releases bubble up to the view's own handlers
         onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={end}
-        onPointerCancel={end}
-        onLostPointerCapture={end}
         onDoubleClick={onDoubleClick}
       >
         <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: thread.backgroundColor, ...EMPTY }}>
@@ -245,8 +328,50 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
           )
         }))}
       </div>
+      </div>
+
+      {/* Zoom, as on the canvas; its own pointer events, so a click never starts a pan */}
+      <div className="absolute top-3 right-3 flex items-center gap-0.5 rounded-lg border border-border/70 bg-background p-0.5 shadow-panel [&>[data-slot=button]]:rounded-[calc(var(--radius)-3px)]"
+        onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+        <IconButton label="Zoom out" onClick={() => setView((v) => zoomAround(v, 1 / 1.25, 0, 0))}><Minus /></IconButton>
+        <Button variant="ghost" size="sm" className="w-14 tabular-nums" title="Zoom to fit the repeats shown" onClick={() => setView(FIT)}>
+          {`${Math.round(viewState.zoom * 100)}%`}
+        </Button>
+        <IconButton label="Zoom in" onClick={() => setView((v) => zoomAround(v, 1.25, 0, 0))}><Plus /></IconButton>
+        <IconButton label="Fit" onClick={() => setView(FIT)}><Maximize /></IconButton>
+      </div>
     </div>
   )
+}
+
+/** The view zoomed by `factor` about a point given from the middle of the view, px, which stays put */
+function zoomAround(v: View, factor: number, cx: number, cy: number): View {
+  const zoom = clamp(v.zoom * factor, ZOOM_LIMITS.min, ZOOM_LIMITS.max)
+  const k = zoom / v.zoom
+  return { zoom, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k }
+}
+
+/**
+ * Where a point on screen (px from the middle of the untilted strip) lies on the strip turned by
+ * `rotateX(angle) rotateY(angleX)` under `perspective: depth`, px from its middle: the CSS projection run backwards.
+ * On the plane z = 0 that projection is a 3 × 3 homography, so it inverts exactly.
+ */
+function unproject(sx: number, sy: number, angle: number, angleX: number, depth: number): [number, number] {
+  const a = (angle * Math.PI) / 180, b = (angleX * Math.PI) / 180
+  const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b)
+  // rotateX · rotateY on (x, y, 0): x' = cb x, y' = sa sb x + ca y, z' = -ca sb x + sa y; then w = 1 - z' / depth
+  const h = [cb, 0, 0, sa * sb, ca, 0, (ca * sb) / depth, -sa / depth, 1]
+  const [x, y, w] = solve3(h, [sx, sy, 1])
+  return [x / w, y / w]
+}
+
+/** `m` (3 × 3, rows) inverted, times `v` */
+function solve3(m: number[], v: number[]): number[] {
+  const [a, b, c, d, e, f, g, h, i] = m
+  const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g
+  const det = a * A + b * B + c * C
+  const inv = [A, -(b * i - c * h), b * f - c * e, B, a * i - c * g, -(a * f - c * d), C, -(a * h - b * g), a * e - b * d].map((x) => x / det)
+  return [0, 1, 2].map((r) => inv[r * 3] * v[0] + inv[r * 3 + 1] * v[1] + inv[r * 3 + 2] * v[2])
 }
 
 /** Empty thread (no section prints there) as a faint check */

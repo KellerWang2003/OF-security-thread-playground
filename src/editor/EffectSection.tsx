@@ -88,15 +88,17 @@ export function LensMenu({ note, set }: { note: Pick<Note, 'frames' | 'tilt'>; s
  * A lens, as an effect: what tilting does. Each effect asks only what it needs and works out the rest; Custom
  * exposes the raw values. `note` is the banknote, or one thread section as the lens sees it (`sectionView`: its
  * strips as frames, its own lens); the print shows `printNote`, the whole thread. The right panel gives its first
- * section a title and puts Edit thread (`children`) above the effect.
+ * section a title and puts Edit thread (`children`) above the effect. The thread editor leaves out the preview
+ * (`preview={false}`) and shows `LensPreview` on its own.
  */
-export function EffectSection({ note, set, printNote = note, title, action, children }: {
+export function EffectSection({ note, set, printNote = note, title, action, children, preview = true }: {
   note: Note
   set: SetLens
   printNote?: Note
   title?: string
   action?: ReactNode
   children?: ReactNode
+  preview?: boolean
 }) {
   const { tilt } = note
   const lens = lensState(tilt, note.frames)
@@ -201,7 +203,20 @@ export function EffectSection({ note, set, printNote = note, title, action, chil
 
     </Section>
 
-    <Section nested>
+    {preview && (
+      <Section nested>
+        <LensPreview note={note} printNote={printNote} />
+      </Section>
+    )}
+    </>
+  )
+}
+
+/** What the lens gives, for information only: its angle and cycle, the frames each tilt shows, and the tilt map or print */
+export function LensPreview({ note, printNote = note }: { note: Note; printNote?: Note }) {
+  const lens = lensState(note.tilt, note.frames)
+  return (
+    <>
       <div className="grid grid-cols-2 gap-2 rounded-md bg-muted/40 p-2 text-xs">
         <div title="Ridge angle from the banknote's horizontal">
           <div className="text-muted-foreground">Lens angle</div>
@@ -220,7 +235,6 @@ export function EffectSection({ note, set, printNote = note, title, action, chil
       </div>
 
       <TiltMap note={note} lens={lens} printNote={printNote} />
-    </Section>
     </>
   )
 }

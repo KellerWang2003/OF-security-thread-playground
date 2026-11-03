@@ -10,7 +10,7 @@ import { usePatternOffsets } from '../src/lib/patternOffset'
 import { ridgePhase, weave } from '../src/lib/print'
 import { addNote, updateNote, useProjects } from '../src/lib/store'
 import { createNote } from '../src/lib/notes'
-import { setTilt } from '../src/tilt/tilt'
+import { setTilt, useTilt } from '../src/tilt/tilt'
 import { TooltipProvider } from '../src/components/ui/tooltip'
 import type { Note } from '../src/lib/types'
 
@@ -69,6 +69,17 @@ const at = (along: number, across: number) => {
   const { thickness, scale } = strip()
   return { clientX: across * thickness, clientY: along * scale, pointerId: 1 }
 }
+/** Mixed-angle presets show only while Mixed angles is on: switch it on first when needed, then pick the preset */
+async function preset(user: ReturnType<typeof userEvent.setup>, editor: HTMLElement, label: string) {
+  if (!within(editor).queryByRole('button', { name: new RegExp(`^${label}`) })) await user.click(within(editor).getByRole('switch', { name: 'Mixed angles' }))
+  await user.click(within(editor).getByRole('button', { name: new RegExp(`^${label}`) }))
+}
+/** Preview and Checks sit closed at the bottom of the right panel */
+async function open(user: ReturnType<typeof userEvent.setup>, editor: HTMLElement, title: 'Preview' | 'Checks') {
+  const trigger = within(editor).getByRole('button', { name: title, exact: true })
+  if (trigger.getAttribute('aria-expanded') !== 'true') await user.click(trigger)
+}
+
 function drag(target: Element, from: { along: number; across: number }, to: { along: number; across: number }) {
   fireEvent.pointerDown(target, { button: 0, buttons: 1, ...at(from.along, from.across) })
   fireEvent.pointerMove(target, { buttons: 1, ...at(to.along, to.across) })
@@ -85,7 +96,7 @@ describe('thread editor', () => {
     expect(within(editor).getByText('Demo banknote')).toBeDefined()
     expect(strip().element.querySelectorAll('[data-repeat-edge]')).toHaveLength(2)
 
-    await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
+    await preset(user, editor, 'Split band')
     expect(sections().map((s) => s.name)).toEqual(['Lane ↔', 'Lane ↕'])
     expect(note().pattern!.mixed).toBe(true)
     expect(within(editor).getByRole('switch', { name: 'Mixed angles' }).getAttribute('aria-checked')).toBe('true')
@@ -185,6 +196,7 @@ describe('thread editor', () => {
     expect(within(editor).getByRole('button', { name: 'Strip 1: frame 2', exact: true }).getAttribute('aria-expanded')).not.toBe('true')
 
     // Now it rests on another frame than the rest: the check says so, and a click on it selects the section
+    await open(user, editor, 'Checks')
     await user.click(within(editor).getByRole('button', { name: 'Whole thread', exact: true }))
     expect(within(editor).getByRole('heading', { name: 'Whole thread' })).toBeDefined()
     await user.click(within(editor).getByRole('button', { name: 'Corner rests on 2, the others on 1', exact: true }))
@@ -198,7 +210,7 @@ describe('thread editor', () => {
     const user = await openDemo('thread-delete-select-ui-test')
     await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
-    await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
+    await preset(user, editor, 'Split band')
     // Splitting the first lane puts the new half straight after it, named after it and selected
     await user.click(within(editor).getByRole('button', { name: 'Add section', exact: true }))
     expect(sections().map((s) => s.name)).toEqual(['Lane ↔', 'Lane ↔ 2', 'Lane ↕'])
@@ -223,12 +235,13 @@ describe('thread editor', () => {
     const user = await openDemo('thread-fill-gaps-ui-test')
     await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
-    await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
+    await preset(user, editor, 'Split band')
     const [side, updown] = sections()
     // The ↔ lane split in two, and its new half deleted
     await user.click(within(editor).getByRole('button', { name: 'Lane ↔', exact: true }))
     await user.click(within(editor).getByRole('button', { name: 'Add section', exact: true }))
     await user.keyboard('{Delete}')
+    await open(user, editor, 'Checks')
     const gaps = () => editor.querySelector('[data-check="gaps"]')!
     expect(gaps().textContent).toContain('25% of each repeat is empty')
 
@@ -269,10 +282,11 @@ describe('thread editor', () => {
     await user.keyboard('{Escape}')
     expect(within(editor).queryByRole('heading', { name: 'Whole thread' })).toBeNull()
     expect(within(editor).getByText('Shared')).toBeDefined()
+    await open(user, editor, 'Preview')
     expect(within(editor).getByRole('button', { name: 'Tilt map' })).toBeDefined()
 
     // Mixed angles: no one lens to show, so the print of every section together
-    await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
+    await preset(user, editor, 'Split band')
     await user.keyboard('{Escape}')
     expect(within(editor).queryByRole('heading', { name: 'Lane ↔' })).toBeNull()
     expect(within(editor).getByText('Mixed')).toBeDefined()
@@ -294,7 +308,7 @@ describe('thread editor', () => {
     expect(screen.queryByTitle(offsetTitle)).toBeNull()
     await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
-    await user.click(within(editor).getByRole('button', { name: /^Alternating/ }))
+    await preset(user, editor, 'Alternating')
     // A repeat longer than the 8 mm windows, so a window can sit inside one block
     const repeat = screen.getByTitle('Length of one repeat of the pattern along the thread').querySelector('input')!
     fireEvent.change(repeat, { target: { value: '20' } })
@@ -338,16 +352,22 @@ describe('thread editor', () => {
     const redo = () => within(editor).getByRole('button', { name: 'Redo', exact: true }) as HTMLButtonElement
     expect(undo().disabled).toBe(true)
 
-    await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
+    await preset(user, editor, 'Split band')
     expect(sections()).toHaveLength(2)
     expect(undo().disabled).toBe(false)
     await user.keyboard('{Meta>}z{/Meta}')
     expect(sections()).toHaveLength(1)
+    // Switching Mixed angles on was a step of its own
+    expect(note().pattern!.mixed).toBe(true)
+    await user.keyboard('{Meta>}z{/Meta}')
+    expect(note().pattern?.mixed ?? false).toBe(false)
     expect(undo().disabled).toBe(true)
     // Nothing more of this banknote's to undo: ⌘Z leaves the other banknote alone
     await user.keyboard('{Meta>}z{/Meta}')
     expect(project().notes[1].name).toBe('Other renamed')
     expect(redo().disabled).toBe(false)
+    await user.keyboard('{Meta>}{Shift>}z{/Shift}{/Meta}')
+    expect(note().pattern!.mixed).toBe(true)
     await user.keyboard('{Meta>}{Shift>}z{/Shift}{/Meta}')
     expect(sections()).toHaveLength(2)
     await user.click(undo())
@@ -359,6 +379,7 @@ describe('thread editor', () => {
     await user.click(within(editor).getByRole('button', { name: 'Back to the canvas', exact: true }))
     await user.keyboard('{Meta>}z{/Meta}')
     expect(sections()).toHaveLength(1)
+    await user.keyboard('{Meta>}z{/Meta}')
     expect(project().notes[1].name).toBe('Other renamed')
     await user.keyboard('{Meta>}z{/Meta}')
     expect(project().notes[1].name).toBe('Other')
@@ -374,10 +395,13 @@ describe('thread editor', () => {
       ['Chevron lock', ['Arm /', 'Arm \\']],
       ['Single lens', ['Whole thread']],
     ]
+    // Without Mixed angles only the presets that need none are offered
+    expect(within(editor).getAllByRole('button', { name: /^(Single lens|Split band|Alternating|Chevron lock)/ }).map((b) => b.textContent)).toEqual(['Single lens'])
     for (const [label, names] of presets) {
-      await user.click(within(editor).getByRole('button', { name: new RegExp(`^${label}`) }))
+      await preset(user, editor, label)
       expect(sections().map((s) => s.name)).toEqual(names)
-      expect(note().pattern!.mixed).toBe(label !== 'Single lens')
+      // A preset never switches Mixed angles off
+      expect(note().pattern!.mixed).toBe(true)
       // The first section is selected, and each section is outlined in each of the three repeats shown
       expect(within(editor).getByRole('heading', { name: names[0] })).toBeDefined()
       expect(strip().element.querySelectorAll('[data-section-id]')).toHaveLength(3 * names.length)
@@ -392,7 +416,7 @@ describe('thread editor', () => {
     act(() => updateNote(useProjects.getState().demoPreview!.id, note().id, (n) => ({ ...n, thread: { ...n.thread, direction: 'vertical' } })))
 
     // Split band: tilting up or down changes only the ↕ lane, tilting sideways only the ↔ lane
-    await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
+    await preset(user, editor, 'Split band')
     const colour = (i: number) => strip().element.querySelector<HTMLElement>(`[data-section="${i}"] > div`)!.style.backgroundColor
     act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
     const flat = [colour(0), colour(1)]
@@ -419,7 +443,7 @@ describe('thread editor', () => {
     const user = await openDemo('thread-ridges-ui-test')
     await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
-    await user.click(within(editor).getByRole('button', { name: /^Chevron lock/ }))
+    await preset(user, editor, 'Chevron lock')
     await user.click(within(editor).getByRole('button', { name: 'Ridges', exact: true }))
     // A hatch's lines run at its rotation, which SVG turns clockwise (y down, as on the print)
     const runs = (hatch: Element) => {
@@ -438,6 +462,33 @@ describe('thread editor', () => {
     // Arm / rises to the right, and the lens panel says so
     const arm = runs(onThread[0])
     expect(arm.x * arm.y).toBeLessThan(0)
+    await open(user, editor, 'Preview')
     expect(within(editor).getByText('Lens angle').nextElementSibling!.textContent).toBe('45° /')
+  })
+
+  it('tilts the thread by dragging with Tilt on, turns it in perspective unless switched off, and turns the thread from the Thread tab', async () => {
+    const user = await openDemo('thread-view-ui-test')
+    await user.click(editThread())
+    const editor = screen.getByRole('region', { name: 'Thread editor' })
+
+    // With Tilt on, a drag on the thread tilts it instead of drawing
+    await user.click(within(editor).getByRole('button', { name: 'Tilt', exact: true }))
+    const element = strip().element
+    fireEvent.pointerDown(element, { button: 0, buttons: 1, clientX: 10, clientY: 100, pointerId: 1 })
+    fireEvent.pointerMove(element, { buttons: 1, clientX: 10, clientY: 20, pointerId: 1 })
+    expect(useTilt.getState().target).toBe(15)
+    fireEvent.pointerUp(element, { button: 0, clientX: 10, clientY: 20, pointerId: 1 })
+    expect(sections()).toHaveLength(1)
+
+    // Tilted, the thread turns with it, unless Perspective is off
+    act(() => setTilt({ source: 'drag', angle: 20, target: 20, angleX: 0, targetX: 0 }))
+    expect(strip().element.style.transform).toBe('rotateX(20deg) rotateY(0deg)')
+    await user.click(within(editor).getByRole('button', { name: 'Perspective', exact: true }))
+    expect(strip().element.style.transform).toBe('')
+
+    // The Thread tab turns the thread
+    await user.click(within(editor).getByRole('tab', { name: 'Thread' }))
+    await user.click(within(editor).getByRole('button', { name: 'Horizontal', exact: true }))
+    expect(note().thread.direction).toBe('horizontal')
   })
 })

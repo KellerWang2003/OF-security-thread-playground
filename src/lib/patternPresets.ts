@@ -10,11 +10,12 @@ import type { Note, SectionLens, ThreadPattern, TiltSettings } from './types'
  * directions; the sections get the effects the layout needs.
  */
 export type PresetKind = 'single' | 'split' | 'alternate' | 'chevron'
-export const PATTERN_PRESETS: { value: PresetKind; label: string; title: string }[] = [
-  { value: 'single', label: 'Single lens', title: 'One ridge angle over the whole thread' },
-  { value: 'split', label: 'Split band', title: 'Two lanes the whole length: one plays side to side, one up and down' },
-  { value: 'alternate', label: 'Alternating', title: 'Full-width blocks along the thread, ridges alternating 0° and 90°' },
-  { value: 'chevron', label: 'Chevron lock', title: 'Halves at +45° and −45°: together on up/down, opposite ways side to side' },
+/** `mixed`: the layout needs Mixed angles, so the thread editor shows it only while they are on */
+export const PATTERN_PRESETS: { value: PresetKind; label: string; title: string; mixed: boolean }[] = [
+  { value: 'single', label: 'Single lens', title: 'One ridge angle over the whole thread', mixed: false },
+  { value: 'split', label: 'Split band', title: 'Two lanes the whole length: one plays side to side, one up and down', mixed: true },
+  { value: 'alternate', label: 'Alternating', title: 'Full-width blocks along the thread, ridges alternating 0° and 90°', mixed: true },
+  { value: 'chevron', label: 'Chevron lock', title: 'Halves at +45° and −45°: together on up/down, opposite ways side to side', mixed: true },
 ]
 
 export type PresetNote = Pick<Note, 'frames' | 'tilt' | 'pattern' | 'thread' | 'widthMm' | 'heightMm'>

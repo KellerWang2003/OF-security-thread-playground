@@ -1,6 +1,7 @@
-import { ChevronLeft, CircleCheck, Copy, Info, Plus, Redo2, RotateCcw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, ChevronLeft, ChevronUp, CircleCheck, Copy, Info, Plus, Redo2, RotateCcw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
 import { Group, IconButton, Panel, ScrubField, Section, SwitchField } from '../components/controls'
@@ -39,26 +41,33 @@ import { PATTERN_PRESETS, presetPattern } from '../lib/patternPresets'
 import { checkPattern, warningCount, type PatternCheck } from '../lib/patternRules'
 import { stepNote, updateNote } from '../lib/store'
 import type { Note, Project, ThreadPattern, ThreadSection } from '../lib/types'
-import { EffectSection, LensMenu, ThreadPrint, type SetLens } from './EffectSection'
+import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
 import { Explain, RidgeIcon, swatch } from './LensVisuals'
 import { PanelResizer } from './PanelResizer'
 import { PatternPicture } from './PatternPicture'
 import { PatternView } from './PatternView'
+import { ThreadSettings } from './ThreadSettings'
 import { TiltRail } from './TiltRail'
 import { TimelineBar } from './TimelineBar'
 
 /**
- * One banknote's thread pattern, full screen. Top: back, the banknote, Mixed angles, the repeat and undo. Left: the
- * presets and the sections. Middle: the thread magnified, where sections are drawn, moved and resized. Right: the
- * selected section's area and frames, the lens (the section's own with mixed angles, otherwise the shared one; with
- * mixed angles and nothing selected, the whole print) and the rule checks. Bottom: the tilt pad and the playback
- * bar, as on the canvas.
+ * One banknote's thread pattern, full screen. Top: back, the banknote, the repeat, the view toggles and undo. Left:
+ * Mixed angles, the presets it allows and the sections. Middle: the thread magnified, where sections are drawn, moved
+ * and resized, and the view panned, zoomed and tilted. Right: two tabs, as Figma's Design and Prototype: Section (the
+ * selected section's area and frames, and the lens: the section's own with mixed angles, otherwise the shared one)
+ * and Thread (direction, thickness, artwork); under both, fixed at the bottom, Preview and Checks, for information
+ * only, open upwards. Bottom: the tilt pad and the playback bar, as on the canvas.
  */
 export function ThreadEditor({ project, note, onClose }: { project: Project; note: Note; onClose: () => void }) {
   const pattern = patternOf(note)
   const [selectedId, setSelectedId] = useState(() => pattern.sections.at(0)?.id)
   const [ridges, setRidges] = useState(false)
-  const checksRef = useRef<HTMLDivElement>(null)
+  const [tiltDrag, setTiltDrag] = useState(false)
+  const [perspective, setPerspective] = useState(true)
+  const [tab, setTab] = useState<'section' | 'thread'>('section')
+  // Preview and Checks open one at a time, as an accordion, so the controls above always keep room
+  const [info, setInfo] = useState<'preview' | 'checks'>()
+  const openInfo = (part: 'preview' | 'checks') => (open: boolean) => setInfo(open ? part : undefined)
   const history = useHistory((s) => s.entries[project.id])
   // Undo here only takes back this banknote's steps; the canvas's undo still covers the whole project
   const canUndo = canStepNote(project, note.id, 'undo', history)
@@ -139,7 +148,8 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       <div className="absolute inset-0 bg-muted/40" />
 
       <div className="absolute top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[272px]">
-        <PatternView note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={setSelectedId} ridges={ridges} />
+        <PatternView note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={setSelectedId} ridges={ridges}
+          tiltDrag={tiltDrag} perspective={perspective} limit={lens.viewDeg} />
       </div>
 
       <Panel className="absolute top-3 right-3 left-3 flex h-11 items-center gap-2 rounded-[calc(var(--radius)+0.375rem+1px)] pr-1.5 pl-1.5">
@@ -149,16 +159,18 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
         <div className="ml-auto flex shrink-0 items-center gap-3">
           {warnings > 0 && (
             <Button variant="ghost" size="sm" className="text-amber-600 dark:text-amber-500" title="Rule warnings: show the checks"
-              onClick={() => checksRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })}>
+              onClick={() => setInfo('checks')}>
               <TriangleAlert />
               {warnings}
             </Button>
           )}
-          <SwitchField label="Mixed angles" title="Each section plays its own lens; off, every section plays the banknote's"
-            checked={pattern.mixed} onChange={(mixed) => edit((n) => ({ ...patternOf(n), mixed }))} />
           <ScrubField className="w-36" label="Repeat" title="Length of one repeat of the pattern along the thread" value={pattern.repeatMm}
             min={REPEAT_LIMITS.min} max={REPEAT_LIMITS.max} step={ALONG_STEP} unit="mm" onChange={(v) => edit((n) => setRepeat(patternOf(n), v))} />
-          <Toggle size="sm" aria-label="Ridges" title="Hatch each section at its ridge angle" pressed={ridges} onPressedChange={setRidges}>Ridges</Toggle>
+          <div className="flex items-center gap-0.5">
+            <Toggle size="sm" aria-label="Tilt" title="Drag on the thread to tilt it, as on the canvas; off, dragging draws and moves sections" pressed={tiltDrag} onPressedChange={setTiltDrag}>Tilt</Toggle>
+            <Toggle size="sm" aria-label="Perspective" title="The thread turns with the tilt; off, it plays flat" pressed={perspective} onPressedChange={setPerspective}>Perspective</Toggle>
+            <Toggle size="sm" aria-label="Ridges" title="Hatch each section at its ridge angle" pressed={ridges} onPressedChange={setRidges}>Ridges</Toggle>
+          </div>
           <div className="flex items-center gap-0.5">
             <IconButton className="rounded-lg" label="Undo" title="Undo (⌘/Ctrl+Z)" disabled={!canUndo} onClick={() => stepNote(project.id, note.id, 'undo')}><Undo2 /></IconButton>
             <IconButton className="rounded-lg" label="Redo" title="Redo (⌘/Ctrl+Shift+Z)" disabled={!canRedo} onClick={() => stepNote(project.id, note.id, 'redo')}><Redo2 /></IconButton>
@@ -167,13 +179,20 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       </Panel>
 
       <Panel className="absolute top-16 left-3 flex max-h-[calc(100%-376px)] min-h-12 w-[248px] flex-col rounded-[calc(var(--radius)+0.375rem+1px)]">
+        {/* The hero control: whether sections can each have their own lens, and so which presets apply */}
+        <div className="px-3 pt-3 pb-2">
+          <SwitchField label="Mixed angles" title="Each section plays its own lens; off, every section plays the banknote's"
+            checked={pattern.mixed} onChange={(mixed) => edit((n) => ({ ...patternOf(n), mixed }))} />
+        </div>
+        <Separator />
         <div className="flex flex-col gap-2 p-3 pb-2">
           <h2 className="text-[11px] font-medium text-muted-foreground">Presets</h2>
           <div className="grid grid-cols-2 gap-1.5">
-            {PATTERN_PRESETS.map((preset) => (
+            {PATTERN_PRESETS.filter((preset) => pattern.mixed || !preset.mixed).map((preset) => (
               <Button key={preset.value} variant="outline" title={preset.title} className="h-auto flex-col gap-1.5 p-2 text-xs font-normal"
                 onClick={() => {
-                  const next = presetPattern(note, preset.value)
+                  // A preset never switches Mixed angles: it is only offered when it fits the setting
+                  const next = { ...presetPattern(note, preset.value), mixed: pattern.mixed }
                   edit(() => next)
                   setSelectedId(next.sections.at(0)?.id)
                 }}>
@@ -192,52 +211,94 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       </Panel>
 
       <PanelResizer className="top-16" />
-      <Panel className="absolute top-16 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-y-auto">
-        {selected && (
-          <Group title={selected.name}>
-            <Section nested title="Area" action={<span className="text-[11px] text-muted-foreground">mm</span>}>
-              <AreaFields section={selected} repeatMm={pattern.repeatMm} widthMm={note.thread.widthMm} vertical={vertical}
-                onChange={(edge, value) => edit((n) => resizeEdge(patternOf(n), selected.id, edge, value, false))} />
-            </Section>
-            <Section nested title="Frames" action={
-              <IconButton label="Every frame in order" size="icon-xs" disabled={isIdentity(sectionSlots(note.frames, selected))}
-                onClick={() => edit((n) => setSectionTrack(n, selected.id, n.frames.map((_, i) => i)))}>
-                <RotateCcw />
-              </IconButton>
-            }>
-              <TrackEditor note={note} section={selected} onChange={(slots) => edit((n) => setSectionTrack(n, selected.id, slots))} />
-            </Section>
-          </Group>
-        )}
-        {lensNote ? (
-          <Group title="Lens" action={
-            <div className="flex items-center gap-1">
-              {!pattern.mixed && <span className="text-[11px] text-muted-foreground" title="Mixed angles is off: every section plays this lens">Shared</span>}
-              <LensMenu note={lensNote} set={setLens} />
-            </div>
-          }>
-            <EffectSection key={pattern.mixed ? selectedSectionId : 'shared'} note={lensNote} set={setLens} printNote={note} />
-          </Group>
-        ) : (
-          // Mixed angles with nothing selected: no one lens to edit, so the print of them all together
-          <Group title="Lens" action={<span className="pr-1.5 text-[11px] text-muted-foreground" title="Mixed angles is on: each section plays its own lens">Mixed</span>}>
-            <Section nested>
-              <ThreadPrint note={note} />
-            </Section>
-          </Group>
-        )}
-        <div ref={checksRef}>
-          <Group title="Checks" action={warnings > 0 ? <span className="text-xs text-amber-600 tabular-nums dark:text-amber-500">{warnings}</span> : undefined}>
-            <Section nested>
-              <CheckList checks={checks} onSelect={setSelectedId} onFillGaps={() => added(fillGaps(pattern, note.thread.widthMm))} />
-            </Section>
-          </Group>
+      <Panel className="absolute top-16 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-hidden">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as 'section' | 'thread')} className="min-h-0 flex-1 gap-0">
+          <div className="border-b border-border/60 px-2.5 py-1.5">
+            <TabsList variant="line" className="h-7">
+              <TabsTrigger value="section" className="px-1.5 text-[13px]">Section</TabsTrigger>
+              <TabsTrigger value="thread" className="px-1.5 text-[13px]">Thread</TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="section" className="min-h-0 overflow-y-auto">
+            {selected && (
+              <Group title={selected.name}>
+                <Section nested title="Area" action={<span className="text-[11px] text-muted-foreground">mm</span>}>
+                  <AreaFields section={selected} repeatMm={pattern.repeatMm} widthMm={note.thread.widthMm} vertical={vertical}
+                    onChange={(edge, value) => edit((n) => resizeEdge(patternOf(n), selected.id, edge, value, false))} />
+                </Section>
+                <Section nested title="Frames" action={
+                  <IconButton label="Every frame in order" size="icon-xs" disabled={isIdentity(sectionSlots(note.frames, selected))}
+                    onClick={() => edit((n) => setSectionTrack(n, selected.id, n.frames.map((_, i) => i)))}>
+                    <RotateCcw />
+                  </IconButton>
+                }>
+                  <TrackEditor note={note} section={selected} onChange={(slots) => edit((n) => setSectionTrack(n, selected.id, slots))} />
+                </Section>
+              </Group>
+            )}
+            {lensNote ? (
+              <Group title="Lens" action={
+                <div className="flex items-center gap-1">
+                  {!pattern.mixed && <span className="text-[11px] text-muted-foreground" title="Mixed angles is off: every section plays this lens">Shared</span>}
+                  <LensMenu note={lensNote} set={setLens} />
+                </div>
+              }>
+                <EffectSection key={pattern.mixed ? selectedSectionId : 'shared'} note={lensNote} set={setLens} printNote={note} preview={false} />
+              </Group>
+            ) : (
+              // Mixed angles with nothing selected: no one lens to edit (Preview shows the print of them all)
+              <p className="px-4 py-3 text-xs text-muted-foreground">No section selected</p>
+            )}
+          </TabsContent>
+          <TabsContent value="thread" className="min-h-0 overflow-y-auto">
+            <Group title="Thread">
+              <ThreadSettings note={note} projectId={project.id} />
+            </Group>
+          </TabsContent>
+        </Tabs>
+
+        {/* For information only, so fixed at the bottom under either tab, opening upwards one at a time */}
+        <div className="flex shrink-0 flex-col divide-y divide-border/60 border-t border-border/60">
+          <InfoDrawer title="Preview" open={info === 'preview'} onOpenChange={openInfo('preview')} action={pattern.mixed && !lensNote
+            ? <span className="text-[11px] text-muted-foreground" title="Mixed angles is on: each section plays its own lens">Mixed</span> : undefined}>
+            {lensNote ? <LensPreview note={lensNote} printNote={note} /> : <ThreadPrint note={note} />}
+          </InfoDrawer>
+          <InfoDrawer title="Checks" open={info === 'checks'} onOpenChange={openInfo('checks')}
+            action={warnings > 0 ? <span className="text-xs text-amber-600 tabular-nums dark:text-amber-500">{warnings}</span> : undefined}>
+            <CheckList checks={checks} onSelect={setSelectedId} onFillGaps={() => added(fillGaps(pattern, note.thread.widthMm))} />
+          </InfoDrawer>
         </div>
       </Panel>
 
       <TiltRail limit={lens.viewDeg} playback={{ projectId: project.id, tilt: playbackTilt(note), lens }} />
       <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel sectionId={selectedSectionId} />
     </div>
+  )
+}
+
+/** A part of the right panel fixed at its bottom: its title stays put under the content above and it opens upwards */
+function InfoDrawer({ title, action, open, onOpenChange, children }: {
+  title: string
+  action?: ReactNode
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  children: ReactNode
+}) {
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange} className="flex flex-col">
+      <div className="flex h-9 items-center justify-between pr-2.5 pl-4">
+        <CollapsibleTrigger render={
+          <Button variant="ghost" size="xs" className="-ml-1.5 gap-1 px-1.5 text-[13px] font-semibold" />
+        }>
+          {title}
+          {open ? <ChevronDown className="text-muted-foreground" /> : <ChevronUp className="text-muted-foreground" />}
+        </CollapsibleTrigger>
+        {action}
+      </div>
+      <CollapsibleContent className="max-h-[50vh] overflow-y-auto px-4 pb-3">
+        <div className="flex flex-col gap-3">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
