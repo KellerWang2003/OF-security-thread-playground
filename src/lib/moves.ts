@@ -1,6 +1,6 @@
 import { clamp } from './frames'
 import { FLAT, SWEEP_MAX, respondsTo, type Axis, type LensState, type Tilt2 } from './lens'
-import { playbackEase, playbackSettings } from './playback'
+import { SWEEP_SECONDS, playbackEase, playbackSettings } from './playback'
 import type { PlaybackCurve, PlaybackMove, RecordedPoint, Recording, TiltSettings } from './types'
 
 /**
@@ -32,8 +32,8 @@ export const GESTURE_MAX_SECONDS = 20
 export const MOVES_MAX = 8
 /** Points around a circle move */
 const CIRCLE_POINTS = 48
-/** How fast playback travels between flat and a gesture's ends, in degrees per second at 1× */
-const JOIN_DEG_PER_SECOND = 60
+/** How fast playback travels between flat and a gesture's ends, in degrees per second at 1×: a 60° sweep's pace */
+const JOIN_DEG_PER_SECOND = 60 / SWEEP_SECONDS
 
 const newId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Math.random()))
 export const newMove = (kind: PlaybackMove['kind'] = 'y'): PlaybackMove => ({ id: newId(), kind })
@@ -109,7 +109,7 @@ function byDistance(points: Tilt2[]) {
 }
 
 function moveSegments(move: PlaybackMove, lens: LensState, speed: number): Segment[] {
-  const leg = 1 / speed
+  const leg = SWEEP_SECONDS / speed
   if (move.kind === 'gesture') {
     const recorded = (move.points ?? []).filter((p) => Number.isFinite(p.t) && Number.isFinite(p.x) && Number.isFinite(p.y))
     if (recorded.length < 2) return []

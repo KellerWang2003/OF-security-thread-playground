@@ -86,13 +86,14 @@ describe('reveal on one tilt', () => {
 describe('playback', () => {
   it('sweeps each chosen tilt in turn, flat → full cycle → flat', () => {
     const note = { frames: frames([10, 10, 10]), tilt: { cycleDeg: 40, cycleXDeg: 80, effect: 'both', runX: 'left', playTilt: 'both', transition: 0, speed: 1, curve: 'linear' } as TiltSettings }
-    const tilts = playbackTilts(note, 10)
-    expect(tilts).toHaveLength(40)
-    expect(tilts[10].x).toBeCloseTo(0)
-    expect(tilts[10].y).toBeCloseTo(40)
+    // Four sweeps of 1⅓ s: 40 frames each at 30 fps
+    const tilts = playbackTilts(note, 30)
+    expect(tilts).toHaveLength(160)
+    expect(tilts[40].x).toBeCloseTo(0)
+    expect(tilts[40].y).toBeCloseTo(40)
     // Diagonal 45°: the side tilt runs at the up/down cycle
-    expect(tilts[30].x).toBeCloseTo(-40)
-    expect(tilts[30].y).toBeCloseTo(0)
+    expect(tilts[120].x).toBeCloseTo(-40)
+    expect(tilts[120].y).toBeCloseTo(0)
   })
 
   it('matches the up/down angles of a project from before lenses', () => {

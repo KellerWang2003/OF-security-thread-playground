@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { exportLayout, exportSize, perspectiveFor, playbackAngles, projectRow, sourceRow, tiltedBounds } from '../src/lib/exportRender'
 import { createNote } from '../src/lib/notes'
-import { DEFAULT_PLAYBACK } from '../src/lib/playback'
+import { SWEEP_SECONDS } from '../src/lib/playback'
 import { copyStarts, imageBox } from '../src/lib/artwork'
 
 vi.mock('../src/lib/images', () => ({ loadImageUrl: async () => undefined }))
@@ -11,23 +11,24 @@ const makeNote = (widthMm = 68, heightMm = 120) => createNote({ name: 'Test', x:
 describe('playback angles', () => {
   it('goes from flat up through the cycle and back, like live playback', () => {
     const tilt = { cycleDeg: 30, transition: 0, speed: 1, curve: 'linear' as const }
+    // 1⅓ s up and 1⅓ s down at 1×: 40 frames each at 30 fps
     const angles = playbackAngles(tilt, 30)
-    expect(angles).toHaveLength(60)
+    expect(angles).toHaveLength(80)
     expect(angles[0]).toBe(0)
-    expect(angles[15]).toBeCloseTo(15)
-    expect(angles[30]).toBeCloseTo(30)
-    expect(angles[45]).toBeCloseTo(15)
+    expect(angles[20]).toBeCloseTo(15)
+    expect(angles[40]).toBeCloseTo(30)
+    expect(angles[60]).toBeCloseTo(15)
   })
 
   it('loops at the project speed, turning straight back at full tilt', () => {
     const tilt = { cycleDeg: 20, transition: 0, speed: 2, curve: 'smooth' as const }
-    // 0.5 s up, 0.5 s down
-    const angles = playbackAngles(tilt, 10, 2)
-    expect(angles).toHaveLength(20)
-    expect(angles[5]).toBeCloseTo(20)
-    expect(angles[8]).toBeLessThan(20)
-    expect(angles[10]).toBe(0)
-    expect(angles[15]).toBeCloseTo(20)
+    // ⅔ s up, ⅔ s down at 2×: 10 frames each at 15 fps
+    const angles = playbackAngles(tilt, 15, 2)
+    expect(angles).toHaveLength(40)
+    expect(angles[10]).toBeCloseTo(20)
+    expect(angles[13]).toBeLessThan(20)
+    expect(angles[20]).toBeCloseTo(0)
+    expect(angles[30]).toBeCloseTo(20)
   })
 })
 
@@ -72,8 +73,8 @@ describe('layout', () => {
     expect(together.height).toBe(720)
     expect(apart.height).toBe(720)
     expect(apart.width).toBeLessThan(together.width)
-    // One sweep out and back takes 2 s at 1×
-    expect(apart.seconds).toBeCloseTo(2 / DEFAULT_PLAYBACK.speed)
+    // One sweep out and one back at 1×
+    expect(apart.seconds).toBeCloseTo(2 * SWEEP_SECONDS)
   })
 
   it('hits the chosen resolution with tilt, and keeps wide rows within 4K', () => {

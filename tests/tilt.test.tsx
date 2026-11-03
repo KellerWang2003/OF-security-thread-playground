@@ -8,6 +8,9 @@ import { lensState } from '../src/lib/lens'
 import { playbackPlan } from '../src/lib/moves'
 import type { TiltSettings } from '../src/lib/types'
 
+// These test how the loop follows the plan, on sweeps of a whole second; moves.test.ts covers the real pace
+vi.mock('../src/lib/playback', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/playback')>(), SWEEP_SECONDS: 1 }))
+
 const lensFor = (cycleDeg: number) => lensState({ cycleDeg, transition: 0 })
 const planFor = (cycleDeg: number, settings: Partial<TiltSettings> = {}) => playbackPlan({ cycleDeg, transition: 0, ...settings }, lensFor(cycleDeg))
 

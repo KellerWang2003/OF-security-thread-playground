@@ -6,10 +6,14 @@ import {
   playbackPlan, recordingFromSamples, tiltAt,
 } from '../src/lib/moves'
 import { migrateProject } from '../src/lib/notes'
+import { SWEEP_SECONDS } from '../src/lib/playback'
 import type { TiltSettings } from '../src/lib/types'
 
 const frames = [10, 10, 10].map((length, i) => ({ id: String(i), kind: 'color' as const, color: '#000', name: '', length }))
 const base = { cycleDeg: 40, cycleXDeg: 80, effect: 'both', transition: 0, speed: 1, curve: 'linear' } as TiltSettings
+/** Seconds one sweep takes at 1× (1⅓), and a glide between flat and a swing's start or end, which keeps a 60° sweep's pace */
+const leg = SWEEP_SECONDS
+const glide = (deg: number) => (deg / 60) * SWEEP_SECONDS
 const planOf = (moves: TiltSettings['moves'], settings: Partial<TiltSettings> = {}) => {
   const tilt = { ...base, ...settings, moves } as TiltSettings
   return playbackPlan(tilt, lensState(tilt, frames))
@@ -24,20 +28,21 @@ describe('playback moves', () => {
   it('moves both tilts at once on a diagonal, to the angles set', () => {
     const tilt = { ...base, moves: [{ id: 'a', kind: 'diagonal', x: -30, y: 20 }] } as TiltSettings
     const plan = playbackPlan(tilt, lensState(tilt, frames))
-    expect(plan.seconds).toBeCloseTo(2)
-    expect(tiltAt(plan, 0.5)).toEqual({ x: -15, y: 10 })
-    expect(tiltAt(plan, 1)).toEqual({ x: -30, y: 20 })
-    expect(tiltAt(plan, 2)).toEqual({ x: 0, y: 0 })
+    // Out and back, a sweep of 1⅓ s each at 1× (Keller slowed 1× to three quarters of a second's sweep on 3 November)
+    expect(plan.seconds).toBeCloseTo(8 / 3)
+    expect(tiltAt(plan, leg / 2)).toEqual({ x: expect.closeTo(-15), y: expect.closeTo(10) })
+    expect(tiltAt(plan, leg)).toEqual({ x: expect.closeTo(-30), y: expect.closeTo(20) })
+    expect(tiltAt(plan, 2 * leg)).toEqual({ x: expect.closeTo(0), y: expect.closeTo(0) })
   })
 
   it('goes out, once round and back on a circle, and export follows it', () => {
     const tilt = { ...base, moves: [{ id: 'c', kind: 'circle', x: 30, y: 30 }] } as TiltSettings
     const plan = playbackPlan(tilt, lensState(tilt, frames))
-    expect(plan.seconds).toBeCloseTo(4)
-    expect(tiltAt(plan, 1).y).toBeCloseTo(30)
-    expect(tiltAt(plan, 1.5).x).toBeCloseTo(30, 0)
-    expect(tiltAt(plan, 2).y).toBeCloseTo(-30, 0)
-    expect(playbackTilts({ tilt, frames }, 10)).toHaveLength(40)
+    expect(plan.seconds).toBeCloseTo(4 * leg)
+    expect(tiltAt(plan, leg).y).toBeCloseTo(30)
+    expect(tiltAt(plan, 1.5 * leg).x).toBeCloseTo(30, 0)
+    expect(tiltAt(plan, 2 * leg).y).toBeCloseTo(-30, 0)
+    expect(playbackTilts({ tilt, frames }, 15)).toHaveLength(80)
   })
 
   it('plays a recorded gesture in its own time, joined to flat', () => {
@@ -62,30 +67,30 @@ describe('swing moves', () => {
   it('glides from flat to −12°, makes one pass to +12°, then glides back to flat', () => {
     const tilt = { ...base, moves: [{ id: 's', kind: 'y', from: -12, y: 12 }] } as TiltSettings
     const plan = playbackPlan(tilt, lensState(tilt, frames))
-    const join = 12 / 60
-    expect(plan.seconds).toBeCloseTo(1 + 2 * join)
+    const join = glide(12)
+    expect(plan.seconds).toBeCloseTo(leg + 2 * join)
     expect(tiltAt(plan, 0).y).toBeCloseTo(0)
     expect(tiltAt(plan, join).y).toBeCloseTo(-12)
-    expect(tiltAt(plan, join + 1).y).toBeCloseTo(12)
+    expect(tiltAt(plan, join + leg).y).toBeCloseTo(12)
     expect(tiltAt(plan, plan.seconds - 1e-6).y).toBeCloseTo(0, 1)
   })
 
   it('swings an unset up/down move once across a full cycle centred on flat', () => {
     const tilt = { ...base, moves: [{ id: 'u', kind: 'y' }] } as TiltSettings
     const plan = playbackPlan(tilt, lensState(tilt, frames))
-    const join = 20 / 60
+    const join = glide(20)
     // Cycle 40°, frames run up: −20° → +20°
     expect(tiltAt(plan, join).y).toBeCloseTo(-20)
-    expect(tiltAt(plan, join + 1).y).toBeCloseTo(20)
+    expect(tiltAt(plan, join + leg).y).toBeCloseTo(20)
   })
 
   it('returns to flat between moves', () => {
     const tilt = { ...base, moves: [{ id: 'a', kind: 'y', from: -10, y: 10 }, { id: 'b', kind: 'x', from: 0, x: 20 }] } as TiltSettings
     const plan = playbackPlan(tilt, lensState(tilt, frames))
-    const first = 1 + 2 * (10 / 60)
+    const first = leg + 2 * glide(10)
     expect(tiltAt(plan, first).x).toBeCloseTo(0)
     expect(tiltAt(plan, first).y).toBeCloseTo(0)
-    expect(tiltAt(plan, first + 1).x).toBeCloseTo(20)
+    expect(tiltAt(plan, first + leg).x).toBeCloseTo(20)
   })
 })
 
@@ -105,17 +110,17 @@ describe('hold', () => {
 
   it('pauses at flat once the move before it has come back, and nowhere else', () => {
     const plan = planOf([{ id: 'a', kind: 'y', y: 20 }, { id: 'h', kind: 'hold', seconds: 1.5 }, { id: 'b', kind: 'x', x: 30 }])
-    // Out and back for each swing, plus the hold between them
-    expect(plan.seconds).toBeCloseTo(2 + 1.5 + 2)
+    // Out and back for each swing, plus the hold between them, which keeps its own seconds
+    expect(plan.seconds).toBeCloseTo(2 * leg + 1.5 + 2 * leg)
     // Full tilt is passed through, not held
-    expect(tiltAt(plan, 1).y).toBeCloseTo(20)
-    expect(tiltAt(plan, 1.25).y).toBeCloseTo(15)
-    for (const t of [2, 2.75, 3.49]) expect(tiltAt(plan, t)).toEqual({ x: 0, y: 0 })
-    expect(tiltAt(plan, 4).x).toBeCloseTo(15)
+    expect(tiltAt(plan, leg).y).toBeCloseTo(20)
+    expect(tiltAt(plan, 1.25 * leg).y).toBeCloseTo(15)
+    for (const t of [2 * leg, 2 * leg + 0.75, 2 * leg + 1.49]) expect(tiltAt(plan, t)).toEqual({ x: expect.closeTo(0), y: expect.closeTo(0) })
+    expect(tiltAt(plan, 2 * leg + 1.5 + leg / 2).x).toBeCloseTo(15)
   })
 
   it('leaves every other move without a pause, whatever hold an older save set for all of them', () => {
-    expect(planOf([{ id: 'a', kind: 'y', y: 20 }], { holdSeconds: 0.5 }).seconds).toBeCloseTo(2)
+    expect(planOf([{ id: 'a', kind: 'y', y: 20 }], { holdSeconds: 0.5 }).seconds).toBeCloseTo(2 * leg)
     expect(planOf([{ id: 'l', kind: 'light' }], { holdSeconds: 0.5 }).seconds).toBeCloseTo(2 * LIGHT_FADE_SECONDS + LIGHT_HOLD_SECONDS)
   })
 })
@@ -142,10 +147,10 @@ describe('hold to light', () => {
 
   it('plays in reflected light between the other moves, which still start and end flat', () => {
     const plan = planOf([{ id: 'a', kind: 'y', from: -10, y: 10 }, { id: 'l', kind: 'light' }])
-    const swing = 1 + 2 * (10 / 60)
+    const swing = leg + 2 * glide(10)
     expect(plan.seconds).toBeCloseTo(swing + 2.5)
     expect(lightAt(plan, swing / 2)).toBe(0)
-    expect(tiltAt(plan, swing)).toEqual({ x: 0, y: 0 })
+    expect(tiltAt(plan, swing)).toEqual({ x: expect.closeTo(0), y: expect.closeTo(0) })
     expect(lightAt(plan, swing + 1)).toBe(1)
   })
 

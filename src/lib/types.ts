@@ -58,7 +58,7 @@ export interface ThreadWindows {
 export type PlaybackCurve = 'smooth' | 'linear' | 'ease-in' | 'ease-out'
 
 export interface TiltSettings {
-  /** Playback speed multiplier; 1 = one second in each direction */
+  /** Playback speed multiplier; 1 = a sweep each way in SWEEP_SECONDS (1⅓ s) */
   speed?: number
   curve?: PlaybackCurve
   /** No longer read: pauses are Hold moves in `moves` (Keller, 3 November); kept so older saves still type-check */

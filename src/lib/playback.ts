@@ -8,13 +8,16 @@ export const PLAYBACK_CURVES: { value: PlaybackCurve; label: string }[] = [
   { value: 'ease-out', label: 'Ease out' },
 ]
 export const SPEED_LIMITS = { min: 0.25, max: 4, step: 0.25 }
-/** New banknotes play at 0.75× (Keller, 3 November: 1× felt fast); a project keeps the speed it was saved with */
-export const DEFAULT_PLAYBACK = { speed: 0.75, curve: 'smooth' as PlaybackCurve }
+export const DEFAULT_PLAYBACK = { speed: 1, curve: 'smooth' as PlaybackCurve }
+/**
+ * Seconds one sweep takes at 1×, out or back. It was 1 until 3 November, when Keller slowed playback everywhere to
+ * three quarters of that speed, 1× still reading 1×. Holds and recordings keep their own time
+ */
+export const SWEEP_SECONDS = 4 / 3
 export type PlaybackSettings = Pick<TiltSettings, 'speed' | 'curve'>
 
 export function playbackSettings(settings: PlaybackSettings = {}) {
   return {
-    // Saves from before playback settings played at 1×, and still do
     speed: Number.isFinite(settings.speed) ? clamp(settings.speed!, SPEED_LIMITS.min, SPEED_LIMITS.max) : 1,
     curve: PLAYBACK_CURVES.some((c) => c.value === settings.curve) ? settings.curve! : DEFAULT_PLAYBACK.curve,
   }

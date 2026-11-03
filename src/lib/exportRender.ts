@@ -4,7 +4,7 @@ import { watermarkOpacity, watermarkReveal } from './light'
 import { lightAt, playbackPlan, tiltAt } from './moves'
 import { loadImageUrl } from './images'
 import { patternMix, playbackLens, playbackTilt, preparePattern, sectionSpans, shownLabel } from './pattern'
-import { playbackEase, playbackSettings } from './playback'
+import { SWEEP_SECONDS, playbackEase, playbackSettings } from './playback'
 import { type Relief, loadRelief } from './relief'
 import { copyStarts, imageBox } from './artwork'
 import { fitSections, threadLength } from './thread'
@@ -20,10 +20,10 @@ export const EXPORT_MARGIN_MM = 6
 /** One sweep's easing at each video frame: 0 at flat, 1 at the end of the cycle, as live playback */
 function sweepProgress(tilt: Note['tilt'], fps: number, sweeps: number) {
   const { speed, curve } = playbackSettings(tilt)
-  const loopSeconds = 2 / speed
+  const loopSeconds = (2 * SWEEP_SECONDS) / speed
   const count = Math.max(1, Math.round(loopSeconds * sweeps * fps))
   return Array.from({ length: count }, (_, i) => {
-    const phase = ((i / fps) % loopSeconds) * speed
+    const phase = (((i / fps) % loopSeconds) * speed) / SWEEP_SECONDS
     return playbackEase(phase <= 1 ? phase : 2 - phase, curve)
   })
 }

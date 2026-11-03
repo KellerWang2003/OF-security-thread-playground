@@ -232,7 +232,7 @@ function MotionSettings({ tilt, set }: { tilt: TiltSettings; set: (patch: Partia
   return (
     <Section title="Motion">
       <div className="grid grid-cols-3 gap-1.5">
-        <ScrubField label="Speed" title="Playback speed multiplier; 1× takes one second each way" value={speed} {...SPEED_LIMITS} unit="×" onChange={(next) => set({ speed: next })} />
+        <ScrubField label="Speed" title="Playback speed multiplier; 1× takes 1⅓ seconds each way" value={speed} {...SPEED_LIMITS} unit="×" onChange={(next) => set({ speed: next })} />
         <Select value={curve} items={PLAYBACK_CURVES} onValueChange={(next) => { if (next) set({ curve: next }) }}>
           <SelectTrigger aria-label="Playback curve" size="sm" className="h-8 w-full text-xs">
             <svg viewBox="0 0 84 24" className="h-4 w-8 shrink-0 text-foreground" aria-hidden>
