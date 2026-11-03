@@ -17,6 +17,9 @@ const MAX_LENGTH = 3
 const NONE = 0xffff
 /** Owner codes: section index × this + strip */
 const PER_SECTION = 16
+/** Each woven print's lit versions, by the strips shown; keyed by the print itself, so a new print (artwork that has
+ * just loaded, an edited pattern) never shows a version lit from the old one */
+const litPrints = new WeakMap<Uint8ClampedArray, Map<string, ImageData>>()
 
 /**
  * The selected banknote's thread as printed, magnified and centred in a square `sizePx` wide: its frames tiled as
@@ -112,13 +115,18 @@ export function PrintCanvas({ note, ridges, sizePx }: { note: Note; ridges: numb
         data[k + 3] = src[k + 3] + (255 - src[k + 3]) * edge
       }
     }
-    return { data, owner, lit: new Map<string, ImageData>() }
+    return { data, owner }
   }, [cut, frames, images, thread.backgroundColor, thread.direction, gapMm, vertical, across, ridges, w, h, scale, dpr])
 
   useEffect(() => {
     const ctx = canvas.current?.getContext('2d')
     if (!ctx) return
-    let lit = woven.lit.get(current)
+    let byShown = litPrints.get(woven.data)
+    if (!byShown) {
+      byShown = new Map()
+      litPrints.set(woven.data, byShown)
+    }
+    let lit = byShown.get(current)
     if (!lit) {
       const shown = current.split(',').map(Number)
       lit = new ImageData(new Uint8ClampedArray(woven.data), w, h)
@@ -126,7 +134,7 @@ export function PrintCanvas({ note, ridges, sizePx }: { note: Note; ridges: numb
         const o = woven.owner[p]
         if (o !== NONE && o % PER_SECTION !== shown[Math.floor(o / PER_SECTION)]) lit.data[p * 4 + 3] *= DIM
       }
-      woven.lit.set(current, lit)
+      byShown.set(current, lit)
     }
     ctx.putImageData(lit, 0, 0)
   }, [woven, current, w, h])
