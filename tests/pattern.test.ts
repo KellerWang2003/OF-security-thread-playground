@@ -463,11 +463,16 @@ describe('filling gaps', () => {
 
   it('finds every gap as rectangles, largest first, or only the one around a point', () => {
     expect(gapRects(lanes())).toEqual([])
-    // Two separate gaps either side of a middle block, and an L-shaped one round a corner
+    // Two gaps either side of a middle block, and an L-shaped one round a corner
     const two = { repeatMm: 4, mixed: false, sections: [section({ id: 'a', startMm: 1, endMm: 2 })] }
     expect(gapRects(two)).toEqual([{ startMm: 2, endMm: 4, acrossStart: 0, acrossEnd: 1 }, { startMm: 0, endMm: 1, acrossStart: 0, acrossEnd: 1 }])
-    expect(gapRects(two, { along: 0.5, across: 0.5 })).toEqual([{ startMm: 0, endMm: 1, acrossStart: 0, acrossEnd: 1 }])
     expect(gapRects(two, { along: 1.5, across: 0.5 })).toEqual([])
+    // A gap at the end of the repeat runs on into the start of the next one, as the thread shows it
+    expect(gapRects(two, { along: 0.5, across: 0.5 })).toEqual(gapRects(two))
+    const middle = { repeatMm: 4, mixed: false, sections: [section({ id: 'a', startMm: 1, endMm: 3, acrossEnd: 0.5 }), section({ id: 'b', startMm: 1, endMm: 3, acrossStart: 0.5 })] }
+    const ends = [{ startMm: 0, endMm: 1, acrossStart: 0, acrossEnd: 1 }, { startMm: 3, endMm: 4, acrossStart: 0, acrossEnd: 1 }]
+    expect(gapRects(middle, { along: 3.5, across: 0.2 })).toEqual(ends)
+    expect(gapRects(middle, { along: 0.5, across: 0.9 })).toEqual(ends)
     const corner = { repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 1, acrossEnd: 0.5 })] }
     expect(gapRects(corner)).toEqual([{ startMm: 1, endMm: 4, acrossStart: 0, acrossEnd: 1 }, { startMm: 0, endMm: 1, acrossStart: 0.5, acrossEnd: 1 }])
     // Edges off the snapping grid leave no sliver behind

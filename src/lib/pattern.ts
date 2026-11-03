@@ -508,7 +508,8 @@ export function addBlankSection(pattern: ThreadPattern, widthMm: number, fromId?
 
 /**
  * The empty parts of the repeat as rectangles, largest first. The repeat is cut along every section edge, so a gap
- * left by an edge off the snapping grid is filled exactly, with no sliver; given `at`, only the gap around that point.
+ * left by an edge off the snapping grid is filled exactly, with no sliver; given `at`, only the gap around that point,
+ * which runs on across the repeat's ends into the next repeat.
  */
 export function gapRects(pattern: ThreadPattern, at?: PatternPoint): Rect[] {
   const lines = (values: number[], max: number) => [0, max, ...values.map((v) => clamp(v, 0, max))]
@@ -528,13 +529,13 @@ export function gapRects(pattern: ThreadPattern, at?: PatternPoint): Rect[] {
     const start = cells(along, at.along).flatMap((c) => cells(across, at.across).map((r) => [c, r])).find(([c, r]) => free[c][r])
     if (!start) return []
     const [c0, r0] = start
-    // Only the free cells joined to that one
+    // Only the free cells joined to that one, across the repeat's ends too: the next repeat carries the gap on
     const keep = free.map((col) => col.map(() => false))
     const todo = [[c0, r0]]
     keep[c0][r0] = true
     while (todo.length) {
       const [c, r] = todo.pop()!
-      for (const [nc, nr] of [[c - 1, r], [c + 1, r], [c, r - 1], [c, r + 1]]) {
+      for (const [nc, nr] of [[mod(c - 1, cols), r], [mod(c + 1, cols), r], [c, r - 1], [c, r + 1]]) {
         if (nc < 0 || nr < 0 || nc >= cols || nr >= rows || keep[nc][nr] || !free[nc][nr]) continue
         keep[nc][nr] = true
         todo.push([nc, nr])
