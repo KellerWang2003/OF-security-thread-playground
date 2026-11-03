@@ -522,12 +522,11 @@ describe('thread editor', () => {
     expect(strip().element.querySelectorAll('pattern').length).toBeGreaterThan(0)
     expect(strip().element.querySelector('rect[fill^="url("]')).not.toBeNull()
 
-    // The panel sets the artwork, which lives only here; where the thread sits is set on the canvas
+    // The panel sets the background under every frame, which lives only here; where the thread sits is set on the canvas
     expect(within(editor).queryByRole('button', { name: 'Horizontal', exact: true })).toBeNull()
-    expect(within(editor).getByRole('heading', { name: 'Artwork' })).toBeDefined()
-    await user.click(within(editor).getByRole('switch', { name: 'Background' }))
+    expect(within(editor).getByRole('heading', { name: 'Background' })).toBeDefined()
+    await user.click(within(editor).getByRole('switch', { name: 'Colour' }))
     expect(note().thread.backgroundColor).toBe('#ffffff')
-    fireEvent.change(within(editor).getByTitle('Space between complete image copies along the thread').querySelector('input')!, { target: { value: '2' } })
-    expect(note().thread.imageGapMm).toBe(2)
+    expect(within(editor).queryByTitle('Space between complete image copies along the thread')).toBeNull()
   })
 })

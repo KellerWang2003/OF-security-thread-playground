@@ -1,11 +1,30 @@
 export interface Frame {
   id: string
-  kind: 'color' | 'image'
+  /** What the frame shows: nothing (the thread's background shows), one colour over the whole thread, or one image in the repeat */
+  kind: 'none' | 'color' | 'image'
   color: string
   imageId?: string
+  /** The image's height ÷ width, read when it was added; absent on images from before, until they have been read */
+  aspect?: number
+  /** Where the image sits in the repeat; absent, it fits the repeat and the thread, centred */
+  place?: ImagePlace
   name: string
   /** This frame's length on the timeline, relative to the others; its share of the full cycle */
   length: number
+}
+
+/**
+ * Where a frame's image sits in the thread's repeat (`ThreadPattern.repeatMm`). It shows once in every repeat, so
+ * its copies fall one repeat apart, and one that runs past the repeat's end carries on into the next. Along is mm
+ * from the repeat's start to the image's near end; across and size are shares of the thread's thickness, as a
+ * section's are, so the image keeps its place when the thread gets thicker. It always stays upright.
+ */
+export interface ImagePlace {
+  alongMm: number
+  /** Where the image starts across the thread, from its left edge (vertical) or top edge (horizontal) */
+  across: number
+  /** How much of the thread's thickness the image spans */
+  size: number
 }
 
 export interface ThreadSettings {
@@ -16,8 +35,11 @@ export interface ThreadSettings {
   direction: 'vertical' | 'horizontal'
   /** Thread centre: from the left edge for a vertical thread, from the top edge for a horizontal one */
   positionMm: number
-  /** Space between complete image copies along the thread */
-  imageGapMm: number
+  /**
+   * No longer drawn: images sit once per repeat. A thread from before keeps its old spacing between image copies
+   * here until its images have been read, to take its repeat from it (`settleArtwork`)
+   */
+  imageGapMm?: number
   windows: ThreadWindows
 }
 

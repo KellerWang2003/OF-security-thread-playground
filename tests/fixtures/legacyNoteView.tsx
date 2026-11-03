@@ -4,9 +4,17 @@ import { cn } from '@/lib/utils'
 import { SHADE_DEG, TILT_LIMIT } from '../../src/lib/frames'
 import { lensMix } from '../../src/lib/lens'
 import { useImageUrl } from '../../src/lib/images'
-import { imageTiles, threadWindowMask, windowEdges } from '../../src/lib/thread'
+import { threadWindowMask, windowEdges } from '../../src/lib/thread'
 import type { Frame, Note } from '../../src/lib/types'
 import { useTilt } from '../../src/tilt/tilt'
+
+/** Where complete image copies sat along the thread before images sat in the repeat, px: each copy's start and length (frozen copy) */
+function imageTiles(thicknessPx: number, lengthPx: number, gapPx: number, aspect: number, direction: 'vertical' | 'horizontal') {
+  const naturalPx = direction === 'vertical' ? thicknessPx * aspect : thicknessPx / aspect
+  if (!(naturalPx > 0)) return { naturalPx: 0, starts: [] }
+  const step = naturalPx + Math.max(0, gapPx)
+  return { naturalPx, starts: Array.from({ length: Math.ceil(lengthPx / step) }, (_, i) => i * step) }
+}
 
 // Height ÷ width of each image, once loaded
 const aspects = new Map<string, number>()

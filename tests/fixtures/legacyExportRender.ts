@@ -4,8 +4,16 @@ import { lensMix, lensState, type Tilt2 } from '../../src/lib/lens'
 import { playbackPlan, tiltAt } from '../../src/lib/moves'
 import { loadImageUrl } from '../../src/lib/images'
 import { advancePlayback, playbackEase, playbackSettings } from '../../src/lib/playback'
-import { fitSections, imageTiles, threadLength } from '../../src/lib/thread'
+import { fitSections, threadLength } from '../../src/lib/thread'
 import type { Note } from '../../src/lib/types'
+
+/** Where complete image copies sat along the thread before images sat in the repeat, px: each copy's start and length (frozen copy) */
+function imageTiles(thicknessPx: number, lengthPx: number, gapPx: number, aspect: number, direction: 'vertical' | 'horizontal') {
+  const naturalPx = direction === 'vertical' ? thicknessPx * aspect : thicknessPx / aspect
+  if (!(naturalPx > 0)) return { naturalPx: 0, starts: [] }
+  const step = naturalPx + Math.max(0, gapPx)
+  return { naturalPx, starts: Array.from({ length: Math.ceil(lengthPx / step) }, (_, i) => i * step) }
+}
 
 // Draws banknotes to a canvas exactly as NoteView shows them on the canvas, so the tilt can be exported
 

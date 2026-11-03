@@ -39,7 +39,7 @@ import { Explain, RidgeIcon, swatch } from './LensVisuals'
 import { PanelResizer } from './PanelResizer'
 import { PatternPicture } from './PatternPicture'
 import { PatternView } from './PatternView'
-import { ArtworkSettings } from './ArtworkSettings'
+import { BackgroundSettings } from './BackgroundSettings'
 import { TiltRail } from './TiltRail'
 import { TimelineBar } from './TimelineBar'
 
@@ -47,7 +47,7 @@ import { TimelineBar } from './TimelineBar'
  * One banknote's thread pattern, full screen. Top: back, the banknote, the repeat, the view toggles and undo. Left:
  * Mixed angles, the presets it allows and the sections. Middle: the thread magnified, where sections are drawn, moved
  * and resized, and the view panned, zoomed and tilted. Right, scrolling: the selected section's frames, the lens (the
- * section's own with mixed angles, otherwise the shared one) and the artwork (background, image gap), which is set
+ * section's own with mixed angles, otherwise the shared one) and the background under every frame, which are set
  * only here; where the thread sits on the banknote is set on the canvas. Under them, fixed at the bottom, Preview and
  * Checks, for information only, open upwards. Bottom: the tilt pad and the playback bar, as on the canvas.
  */
@@ -233,8 +233,8 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
               <EffectSection key={pattern.mixed ? selectedSectionId : 'shared'} note={lensNote} set={setLens} printNote={note} preview={false} />
             </Group>
           )}
-          <Group title="Artwork">
-            <ArtworkSettings note={note} projectId={project.id} />
+          <Group title="Background">
+            <BackgroundSettings note={note} projectId={project.id} />
           </Group>
         </div>
 

@@ -6,7 +6,8 @@ import { loadImageUrl } from './images'
 import { patternMix, playbackLens, playbackTilt, preparePattern, sectionSpans, shownLabel } from './pattern'
 import { advancePlayback, playbackEase, playbackSettings } from './playback'
 import { type Relief, loadRelief } from './relief'
-import { fitSections, imageTiles, threadLength } from './thread'
+import { copyStarts, imageBox } from './artwork'
+import { fitSections, threadLength } from './thread'
 import type { Note } from './types'
 
 // Draws banknotes to a canvas exactly as NoteView shows them on the canvas, so the tilt can be exported
@@ -194,11 +195,15 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     ctx.fillRect(0, 0, strip.w, strip.h)
   }
 
+  // Each section of the pattern shows its own frames through its areas, as NoteView clips them, and each frame's image
+  // sits once in every repeat from the same start
+  const prepared = preparePattern(note)
+  const { repeatMm } = prepared.pattern
+  const offsetMm = options.offsetMm ?? 0
   const thickness = horizontal ? strip.h : strip.w
-  const length = horizontal ? strip.w : strip.h
   const drawFrame = (index: number, opacity: number) => {
     const frame = frames.at(index)
-    if (!frame) return
+    if (!frame || frame.kind === 'none') return
     ctx.globalAlpha = opacity
     if (frame.kind === 'color') {
       ctx.fillStyle = frame.color
@@ -206,17 +211,15 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     } else {
       const img = assets.frames.get(frame.id)
       if (img && img.naturalWidth > 0) {
-        const { naturalPx, starts } = imageTiles(thickness, length, mm(thread.imageGapMm ?? 0), img.naturalHeight / img.naturalWidth, thread.direction)
-        for (const start of starts) {
-          if (horizontal) ctx.drawImage(img, start, 0, naturalPx, thickness)
-          else ctx.drawImage(img, 0, start, thickness, naturalPx)
+        const box = imageBox(frame.place, frame.aspect ?? img.naturalHeight / img.naturalWidth, repeatMm, thread.widthMm, thread.direction)
+        for (const start of copyStarts(box, repeatMm, offsetMm, lengthMm)) {
+          if (horizontal) ctx.drawImage(img, mm(start), mm(box.across), mm(box.alongSize), mm(box.acrossSize))
+          else ctx.drawImage(img, mm(box.across), mm(start), mm(box.acrossSize), mm(box.alongSize))
         }
       }
     }
     ctx.globalAlpha = 1
   }
-  // Each section of the pattern shows its own frames through its areas, as NoteView clips them
-  const prepared = preparePattern(note)
   const mixes = prepared.plain ? [lensMix(note, { x: angleX, y: angle })] : patternMix(note, { x: angleX, y: angle })
   mixes.forEach((mix, i) => {
     const section = prepared.plain ? undefined : prepared.sections[i].section
@@ -224,7 +227,7 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
       ctx.save()
       ctx.beginPath()
       const near = thickness * section.acrossStart, far = thickness * section.acrossEnd
-      for (const [lo, hi] of sectionSpans(section, prepared.pattern.repeatMm, options.offsetMm ?? 0, lengthMm)) {
+      for (const [lo, hi] of sectionSpans(section, repeatMm, offsetMm, lengthMm)) {
         if (horizontal) ctx.rect(mm(lo), near, mm(hi - lo), far - near)
         else ctx.rect(near, mm(lo), far - near, mm(hi - lo))
       }

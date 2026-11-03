@@ -14,6 +14,7 @@ import { ProjectPanel } from '../editor/ProjectPanel'
 import { ThreadEditor } from '../editor/ThreadEditor'
 import { TimelineBar } from '../editor/TimelineBar'
 import { TiltRail } from '../editor/TiltRail'
+import { useSettleArtwork } from '../editor/useSettleArtwork'
 import { addWatermark, layerOf, removeWatermark, type Layer } from '../editor/watermarkActions'
 
 /** Keys typed into these, or pressed while a dialog or menu is open, are not shortcuts */
@@ -25,6 +26,8 @@ const POPUP = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="list
  * the bottom, and the selected banknote's selected layer on the right. The thread editor opens over it all.
  */
 export function Editor({ project, isDemo = false }: { project: Project; isDemo?: boolean }) {
+  // Banknotes whose images came before frames kept their proportions are brought up to date once
+  useSettleArtwork(project)
   const [selectedId, setSelectedId] = useState<string>()
   // Which part of the selected banknote the right panel shows: the one last clicked, the banknote itself, its thread
   // or its watermark. Every selection sets it, so picking a banknote never brings back a layer picked before

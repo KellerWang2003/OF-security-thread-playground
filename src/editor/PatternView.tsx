@@ -159,7 +159,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   const tilt = { x: angleX, y: angle }
   const mixes = prepared.plain ? [lensMix(note, tilt)] : patternMix(note, tilt)
   const shown = mixes.map((m) => [m.base, m.blend > 0 ? m.next : m.base, m.current])
-  const fill = { direction: thread.direction, thicknessPx: thickness, lengthPx: length, gapPx: (thread.imageGapMm ?? 0) * scale }
+  const fill = { direction: thread.direction, scale, thicknessMm: thread.widthMm, lengthMm, repeatMm: repeat, offsetMm: 0 }
 
   /** A rect of copy `k`, in px within the strip */
   const place = (r: Rect, k: number) => {
@@ -322,7 +322,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
         onDoubleClick={onDoubleClick}
       >
         <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: thread.backgroundColor, ...EMPTY }}>
-          <ThreadArt note={note} shown={shown} blends={mixes.map((m) => m.blend)} fill={fill} lengthMm={lengthMm} scale={scale} />
+          <ThreadArt note={note} shown={shown} blends={mixes.map((m) => m.blend)} fill={fill} />
         </div>
 
         <svg className="pointer-events-none absolute inset-0 overflow-visible" width={width} height={height} aria-hidden>

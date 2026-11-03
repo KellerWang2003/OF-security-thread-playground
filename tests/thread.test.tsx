@@ -4,7 +4,9 @@ import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { migrateWindows, windowEdges } from '../src/lib/thread'
 import { FrameFill, NoteView } from '../src/components/NoteView'
+import { copyStarts, imageBox, settleArtwork } from '../src/lib/artwork'
 import { createNote, createProject, migrateProject } from '../src/lib/notes'
+import { presetPattern } from '../src/lib/patternPresets'
 import type { Frame } from '../src/lib/types'
 
 vi.mock('../src/lib/images', () => ({ useImageUrl: (id?: string) => id ? `blob:${id}` : undefined }))
@@ -22,28 +24,37 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-describe('whole image repeats', () => {
+describe('an image in the repeat', () => {
+  const layout = (direction: 'vertical' | 'horizontal', offsetMm = 0) => ({ direction, scale: 2, thicknessMm: 10, lengthMm: 90, repeatMm: 25, offsetMm })
+  const starts = (container: HTMLElement, direction: 'vertical' | 'horizontal') =>
+    [...container.querySelectorAll('img')].map((img) => parseFloat(direction === 'vertical' ? img.style.top : img.style.left) / 2)
+
   it.each([
-    { direction: 'vertical' as const, imageLength: 20, copies: 8 },
-    { direction: 'horizontal' as const, imageLength: 5, copies: 20 },
-  ])('fills the thickness and covers the full $direction thread with gaps', async ({ direction, imageLength, copies }) => {
-    const { container } = render(<FrameFill frame={image} direction={direction} thicknessPx={10} lengthPx={180} gapPx={4} />)
-    await waitFor(() => expect(container.firstElementChild?.children.length).toBe(copies))
-    const strip = container.firstElementChild as HTMLElement
-    expect(strip.style.gap).toBe('4px')
-    const tile = strip.firstElementChild as HTMLElement
-    expect(tile.style.width).toBe(direction === 'vertical' ? '100%' : `${imageLength}px`)
-    expect(tile.style.height).toBe(direction === 'vertical' ? `${imageLength}px` : '100%')
-    // The repeat pattern covers the edge, which can land in an image or its gap.
-    expect((copies - 1) * (imageLength + 4)).toBeLessThan(180)
-    expect(copies * (imageLength + 4)).toBeGreaterThanOrEqual(180)
+    { direction: 'vertical' as const, along: 20, first: 2.5 },
+    { direction: 'horizontal' as const, along: 5, first: 10 },
+  ])('shows once per repeat on a $direction thread, upright, fitted and centred', async ({ direction, along, first }) => {
+    const { container } = render(<FrameFill frame={image} {...layout(direction)} />)
+    await waitFor(() => expect(container.querySelectorAll('img')).toHaveLength(4))
+    expect(starts(container, direction)).toEqual([0, 1, 2, 3].map((k) => first + 25 * k))
+    const copy = container.querySelector('img')!
+    expect(copy.style.width).toBe(direction === 'vertical' ? '20px' : `${2 * along}px`)
+    expect(copy.style.height).toBe(direction === 'vertical' ? `${2 * along}px` : '20px')
   })
 
-  it.each(['vertical', 'horizontal'] as const)('uses uninterrupted native repetition for a zero gap, %s', (direction) => {
-    const { container } = render(<FrameFill frame={image} direction={direction} thicknessPx={10} lengthPx={180} gapPx={0} />)
-    const strip = container.firstElementChild as HTMLElement
-    expect(strip.style.backgroundRepeat).toBe(direction === 'vertical' ? 'repeat-y' : 'repeat-x')
-    expect(strip.style.backgroundSize).toBe(direction === 'vertical' ? '100%' : 'auto 100%')
+  it('sits where its place puts it, carried on past the repeat’s end, and moves with the repeat’s start', async () => {
+    const placed: Frame = { ...image, aspect: 2, place: { alongMm: 20, across: 0.25, size: 0.5 } }
+    const { container, rerender } = render(<FrameFill frame={placed} {...layout('vertical')} />)
+    expect(starts(container, 'vertical')).toEqual([-5, 20, 45, 70])
+    expect(container.querySelector('img')!.style.left).toBe('5px')
+    rerender(<FrameFill frame={placed} {...layout('vertical', 3)} />)
+    expect(starts(container, 'vertical')).toEqual([-2, 23, 48, 73])
+  })
+
+  it('fills the thread with a colour, and leaves an empty frame to the background', () => {
+    const { container, rerender } = render(<FrameFill frame={{ ...image, kind: 'color', color: '#ff0088' }} {...layout('vertical')} />)
+    expect((container.firstElementChild as HTMLElement).style.backgroundColor).toBe('rgb(255, 0, 136)')
+    rerender(<FrameFill frame={{ ...image, kind: 'none' }} {...layout('vertical')} />)
+    expect(container.firstElementChild).toBeNull()
   })
 
   it('keeps the optional background beneath images and inside the window mask', () => {
@@ -88,15 +99,52 @@ describe('whole image repeats', () => {
     expect(windowEdges(thread, 30)).toEqual([])
   })
 
-  it('loads old cropping settings as whole artwork with zero gap and preserves new settings on reload', () => {
+  it('keeps an old thread’s gap until its images are read, and gives a new thread none', () => {
     const note = makeNote()
-    const { imageGapMm: _gap, ...oldThread } = note.thread
-    const old = { ...createProject('Legacy'), notes: [{ ...note, thread: { ...oldThread, tileMm: 2 } }] }
-    const migrated = migrateProject(old)
+    expect(note.thread).not.toHaveProperty('imageGapMm')
+    // Saved before thread patterns, with the cropping length from before gaps
+    const { pattern: _pattern, ...old } = note
+    const migrated = migrateProject({ ...createProject('Legacy'), notes: [{ ...old, thread: { ...old.thread, tileMm: 2 } }] })
     expect(migrated.notes[0].thread.imageGapMm).toBe(0)
     expect(migrated.notes[0].thread).not.toHaveProperty('tileMm')
     migrated.notes[0].thread.imageGapMm = 2.5
     migrated.notes[0].thread.backgroundColor = '#abcdef'
     expect(migrateProject(JSON.parse(JSON.stringify(migrated))).notes[0].thread).toEqual(migrated.notes[0].thread)
+    // A banknote made now loads without one
+    expect(migrateProject(JSON.parse(JSON.stringify({ ...createProject('New'), notes: [note] }))).notes[0].thread).not.toHaveProperty('imageGapMm')
+  })
+})
+
+describe('banknotes from before images sat in the repeat', () => {
+  const legacy = () => {
+    const note = makeNote()
+    return { ...note, frames: [image, { ...image, id: 'wide', imageId: 'wide' }], thread: { ...note.thread, imageGapMm: 1.5 } }
+  }
+
+  it('take an untouched thread’s repeat from the first image and the old gap, so their images sit where they did', () => {
+    const settled = settleArtwork(legacy(), new Map([['portrait', 2], ['wide', 0.5]]))
+    expect(settled.thread).not.toHaveProperty('imageGapMm')
+    expect(settled.frames.map((f) => f.aspect)).toEqual([2, 0.5])
+    // 4 mm thick and twice as tall as wide: 8 mm of image and 1.5 mm of gap
+    expect(settled.pattern!.repeatMm).toBe(9.5)
+    expect(settled.frames.map((f) => f.place)).toEqual([0, 1].map(() => ({ alongMm: 0, across: 0, size: 1 })))
+    const box = imageBox(settled.frames[0].place, 2, 9.5, 4, 'vertical')
+    expect(copyStarts(box, 9.5, 0, 40)).toEqual([0, 9.5, 19, 28.5, 38])
+  })
+
+  it('keep the repeat of a thread with sections, fitting their images to it', () => {
+    const note = legacy()
+    const pattern = presetPattern(note, 'split')
+    const settled = settleArtwork({ ...note, pattern }, new Map([['portrait', 2]]))
+    expect(settled.pattern).toBe(pattern)
+    expect(settled.thread).not.toHaveProperty('imageGapMm')
+    expect(settled.frames.every((f) => f.place === undefined)).toBe(true)
+  })
+
+  it('leave banknotes made now as they are, apart from reading their images', () => {
+    const note = { ...makeNote(), frames: [image] }
+    const settled = settleArtwork(note, new Map([['portrait', 2]]))
+    expect(settled.pattern).toBe(note.pattern)
+    expect(settled.frames[0]).toEqual({ ...image, aspect: 2 })
   })
 })

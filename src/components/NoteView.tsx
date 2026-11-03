@@ -4,8 +4,9 @@ import { SHADE_DEG, TILT_LIMIT } from '../lib/frames'
 import { lensMix } from '../lib/lens'
 import { watermarkOpacity, watermarkReveal } from '../lib/light'
 import { useImageUrl } from '../lib/images'
-import { patternMix, preparePattern, sectionClip, shownLabel } from '../lib/pattern'
-import { imageTiles, threadWindowMask, windowEdges } from '../lib/thread'
+import { copyStarts, imageBox } from '../lib/artwork'
+import { patternMix, patternOf, preparePattern, sectionClip, shownLabel } from '../lib/pattern'
+import { threadWindowMask, windowEdges } from '../lib/thread'
 import type { Frame, Note } from '../lib/types'
 import { paintRelief, reliefPixels, useRelief } from '../lib/relief'
 import { useTilt } from '../tilt/tilt'
@@ -31,59 +32,59 @@ function useImageAspect(url: string | undefined) {
   return aspect
 }
 
-/** Complete, upright images fit the thread's thickness and repeat with optional spacing. */
+/**
+ * How a stretch of thread lays out its artwork, at `scale` px per mm: which way it runs, its thickness and length, and
+ * its repeat, starting `offsetMm` from the stretch's start, in which each frame's image sits once.
+ */
 export interface FillLayout {
   direction: Note['thread']['direction']
-  thicknessPx: number
-  lengthPx: number
-  gapPx: number
+  scale: number
+  thicknessMm: number
+  lengthMm: number
+  repeatMm: number
+  offsetMm: number
 }
 
+/**
+ * One frame's artwork along the thread: its colour over the whole of it, or its image once in every repeat, upright,
+ * where its place puts it (`imageBox`); nothing for an empty frame, so the thread's background shows.
+ */
 export function FrameFill({
   frame,
   direction,
-  thicknessPx,
-  lengthPx,
-  gapPx,
+  scale,
+  thicknessMm,
+  lengthMm,
+  repeatMm,
+  offsetMm,
   opacity = 1,
 }: FillLayout & {
   frame: Frame
   opacity?: number
 }) {
-  const url = useImageUrl(frame.imageId)
-  const aspect = useImageAspect(url)
-  if (frame.kind === 'color' || !url) {
-    return <div className="absolute inset-0" style={{ opacity, backgroundColor: frame.kind === 'color' ? frame.color : undefined }} />
-  }
+  const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
+  const measured = useImageAspect(frame.aspect ? undefined : url)
+  const aspect = frame.aspect ?? measured
+  if (frame.kind === 'color') return <div className="absolute inset-0" style={{ opacity, backgroundColor: frame.color }} />
+  if (frame.kind !== 'image' || !url || !aspect) return null
+  const box = imageBox(frame.place, aspect, repeatMm, thicknessMm, direction)
   const vertical = direction === 'vertical'
-  const image: CSSProperties = {
-    backgroundImage: `url(${url})`,
-    backgroundSize: vertical ? '100% auto' : 'auto 100%',
-    backgroundPosition: 'left top',
-  }
-  const { naturalPx, starts } = imageTiles(thicknessPx, lengthPx, gapPx, aspect ?? 0, direction)
-
-  if (!naturalPx || gapPx <= 0) {
-    return <div className="absolute inset-0" style={{ ...image, opacity, backgroundRepeat: vertical ? 'repeat-y' : 'repeat-x' }} />
-  }
   return (
-    <div className={cn('absolute inset-0 flex overflow-hidden', vertical ? 'flex-col' : 'flex-row')} style={{ opacity, gap: gapPx }}>
-      {starts.map((start) => (
-        <div
-          key={start}
-          className="shrink-0"
-          style={{ ...image, backgroundRepeat: 'no-repeat', ...(vertical ? { height: naturalPx, width: '100%' } : { width: naturalPx, height: '100%' }) }}
-        />
+    <div className="absolute inset-0" style={{ opacity }}>
+      {copyStarts(box, repeatMm, offsetMm, lengthMm).map((start) => (
+        <img key={start} src={url} alt="" draggable={false} className="absolute max-w-none" style={vertical
+          ? { left: box.across * scale, top: start * scale, width: box.acrossSize * scale, height: box.alongSize * scale }
+          : { left: start * scale, top: box.across * scale, width: box.alongSize * scale, height: box.acrossSize * scale }} />
       ))}
     </div>
   )
 }
 
-/** A frame as a thumbnail: the uploaded image whole, or its colour */
+/** A frame as a thumbnail: the uploaded image whole, or its colour; an empty one shows the thread's background */
 export function FrameThumb({ frame, backgroundColor }: { frame: Frame; backgroundColor?: string }) {
-  const url = useImageUrl(frame.imageId)
-  if (frame.kind === 'color' || !url) {
-    return <div className="absolute inset-0" style={{ backgroundColor: frame.kind === 'color' ? frame.color : undefined }} />
+  const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
+  if (frame.kind !== 'image' || !url) {
+    return <div className="absolute inset-0" style={{ backgroundColor: frame.kind === 'color' ? frame.color : backgroundColor }} />
   }
   return (
     <div className="absolute inset-0" style={{ backgroundColor }}>
@@ -136,20 +137,18 @@ const blendsAt = (note: Note, angle: number, angleX: number) =>
   preparePattern(note).plain ? [lensMix(note, { x: angleX, y: angle }).blend] : patternMix(note, { x: angleX, y: angle }).map((mix) => mix.blend)
 
 /**
- * What a stretch of thread `lengthMm` long shows: the frames each section of the pattern shows (`shown`, base and
- * next per section), through that section's areas repeated along it from `offsetMm`. Fading frames take their
- * opacity from `blends`, or live views write it onto `[data-tilt="blend"]` themselves (`data-section` says whose).
- * A thread from before patterns is drawn exactly as it always was.
+ * What a stretch of thread shows: the frames each section of the pattern shows (`shown`, base and next per section),
+ * through that section's areas repeated along it from the fill's offset, as the frames' images are. Fading frames
+ * take their opacity from `blends`, or live views write it onto `[data-tilt="blend"]` themselves (`data-section`
+ * says whose). A plain thread (one section playing the banknote's lens) is drawn without clipping.
  */
-export function ThreadArt({ note, shown, blends, fill, lengthMm, scale, offsetMm = 0 }: {
+export function ThreadArt({ note, shown, blends, fill }: {
   note: Note
   shown: number[][]
   blends?: number[]
   fill: FillLayout
-  lengthMm: number
-  scale: number
-  offsetMm?: number
 }) {
+  const { lengthMm, scale, offsetMm } = fill
   const { frames } = note
   const prepared = preparePattern(note)
   if (prepared.plain) {
@@ -279,7 +278,7 @@ export function NoteView({
     ? { left: 0, top: mm(thread.positionMm - thread.widthMm / 2), width: mm(lengthMm), height: mm(thread.widthMm) }
     : { left: mm(thread.positionMm - thread.widthMm / 2), top: 0, width: mm(thread.widthMm), height: mm(lengthMm) }
 
-  const fill = { direction: thread.direction, thicknessPx: mm(thread.widthMm), lengthPx: mm(lengthMm), gapPx: mm(thread.imageGapMm ?? 0) }
+  const fill = { direction: thread.direction, scale, thicknessMm: thread.widthMm, lengthMm, repeatMm: patternOf(note).repeatMm, offsetMm }
 
   const windowMask = threadWindowMask(thread, scale)
   // Static notes (thumbnails, tests) are drawn from props; live ones leave these to apply()
@@ -288,7 +287,7 @@ export function NoteView({
   const part = (name: TiltPart, style: CSSProperties = {}) => ({ 'data-tilt': name, style: { ...style, ...still?.parts[name] } })
   const watermarkBox: CSSProperties | undefined = watermark && { left: mm(watermark.xMm), top: mm(watermark.yMm), width: mm(watermark.widthMm), height: mm(watermark.heightMm) }
   const boxOf = (target: 'thread' | 'watermark' | undefined) => (target === 'thread' ? strip : target === 'watermark' ? watermarkBox : undefined)
-  const art =<ThreadArt note={note} shown={shown} blends={blends} fill={fill} lengthMm={lengthMm} scale={scale} offsetMm={offsetMm} />
+  const art = <ThreadArt note={note} shown={shown} blends={blends} fill={fill} />
 
   return (
     <div

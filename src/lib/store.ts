@@ -94,6 +94,13 @@ export const findNote = (projectId: string, noteId: string) =>
 export const updateNote = (projectId: string, noteId: string, change: (note: Note) => Note) =>
   updateProject(projectId, (p) => ({ ...p, notes: p.notes.map((n) => (n.id === noteId ? change(n) : n)) }))
 
+/** Changes a note without an undo step: for bringing older data up to date, never for an edit */
+export function settleNote(projectId: string, noteId: string, change: (note: Note) => Note) {
+  const project = editorProject(projectId)
+  if (!project?.notes.some((n) => n.id === noteId)) return
+  putProject({ ...project, notes: project.notes.map((n) => (n.id === noteId ? change(n) : n)) })
+}
+
 export const addNote = (projectId: string, note: Note) =>
   updateProject(projectId, (p) => ({ ...p, notes: [...p.notes, note] }))
 

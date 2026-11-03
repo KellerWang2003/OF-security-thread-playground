@@ -58,7 +58,7 @@ export function createNote({
     heightMm,
     background: 'solid',
     color,
-    thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, imageGapMm: 0, windows: migrateWindows(undefined, heightMm) },
+    thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, windows: migrateWindows(undefined, heightMm) },
     frames: [colorFrame(0), colorFrame(1)],
     tilt: DEFAULT_TILT,
     pattern: defaultPattern(),
@@ -140,8 +140,9 @@ export function migrateProject(raw: unknown): Project {
         widthMm: raw.thread.widthMm,
         direction: raw.thread.direction ?? 'vertical',
         positionMm: raw.thread.positionMm ?? (raw.thread as { xMm?: number }).xMm ?? raw.widthMm / 2,
-        // Retire the old cropping length; existing artwork now repeats whole, with no gap.
-        imageGapMm: Math.max(0, raw.thread.imageGapMm ?? 0),
+        // Images now sit once per repeat: a thread from before keeps its old gap (none from before gaps, which retired
+        // the cropping length) until its images are read and the gap becomes part of its repeat (`settleArtwork`)
+        ...(raw.thread.imageGapMm !== undefined || raw.pattern === undefined ? { imageGapMm: Math.max(0, raw.thread.imageGapMm ?? 0) } : {}),
         windows: migrateWindows(raw.thread.windows, threadLength({ ...raw, thread: { direction: raw.thread.direction ?? 'vertical' } })),
       },
       // Banknotes from before patterns are one section over the whole thread with their own lens, drawn as before

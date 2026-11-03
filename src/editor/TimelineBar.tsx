@@ -316,7 +316,7 @@ function FrameTrack({ note, noteRef, sectionId }: { note: Note; noteRef: NoteRef
               <button
                 type="button"
                 aria-label="Add frame"
-                disabled={frames.length >= MAX_FRAMES && !frames.every((f) => f.kind === 'color')}
+                disabled={frames.length >= MAX_FRAMES && !frames.every((f) => f.kind !== 'image')}
                 className="flex w-10 shrink-0 items-center justify-center rounded-lg border border-dashed text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
               />
             }

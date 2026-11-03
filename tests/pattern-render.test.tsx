@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NoteView } from '../src/components/NoteView'
 import { drawExportFrame, drawFace, playbackTilts, type NoteAssets } from '../src/lib/exportRender'
+import { settleArtwork } from '../src/lib/artwork'
 import type { Tilt2 } from '../src/lib/lens'
 import { DEFAULT_TILT, createNote, migrateProject } from '../src/lib/notes'
 import { patternMix, playbackLens, preparePattern } from '../src/lib/pattern'
@@ -57,8 +58,8 @@ describe('banknotes from before thread patterns', () => {
     }
   })
 
-  it('draw exactly as before on the canvas at every tilt', () => {
-    const before = legacyNotes(), after = migrated(before)
+  it('draw colour frames exactly as before on the canvas at every tilt', () => {
+    const before = legacyNotes().filter(colourOnly), after = migrated(before)
     const drawn: string[] = []
     before.forEach((legacy, i) => {
       for (const { x, y } of TILTS) {
@@ -67,14 +68,13 @@ describe('banknotes from before thread patterns', () => {
         drawn.push(old)
       }
     })
-    // The comparison covered images, fades between frames and window cuts
-    expect(drawn.some((html) => html.includes('url(blob:test/'))).toBe(true)
+    // The comparison covered fades between frames and window cuts
     expect(drawn.some((html) => /data-tilt="blend" style="opacity:0\.\d/.test(html))).toBe(true)
     expect(drawn.some((html) => html.includes('data-window-cuts'))).toBe(true)
   })
 
-  it('draw exactly as before while following the live tilt', () => {
-    const before = legacyNotes(), after = migrated(before)
+  it('draw colour frames exactly as before while following the live tilt', () => {
+    const before = legacyNotes().filter(colourOnly), after = migrated(before)
     before.forEach((legacy, i) => {
       const old = render(<LegacyNoteView note={legacy} scale={2} live {...FLAGS} />)
       const now = render(<NoteView note={after[i]} scale={2} live {...FLAGS} />)
@@ -87,17 +87,20 @@ describe('banknotes from before thread patterns', () => {
     })
   })
 
-  it('export exactly as before, call for call', () => {
-    const before = legacyNotes(), after = migrated(before)
+  it('export exactly as before, call for call, once their images have been read', () => {
+    // Frames whose images share their proportions, as one artwork's frames do: the first image sets the repeat
+    const before = legacyNotes(), after = migrated(before).map((note) => settleArtwork(note, new Map(note.frames.map((f) => [f.imageId ?? '', SAME.naturalHeight / SAME.naturalWidth]))))
     const ops = new Set<unknown>()
     before.forEach((legacy, i) => {
+      // The print's offset moves images with the sections now; colour frames never show it
+      const offsetMm = colourOnly(legacy) ? 1.7 : 0
       for (const t of TILTS) {
         for (const frameNumbers of [false, true]) {
           const options = { sheen: true, perspective: true, frameNumbers }
           const old = recorder(), now = recorder()
-          legacyDrawFace(old.ctx, legacy, assetsFor(legacy), 4, t, options)
-          drawFace(now.ctx, after[i], assetsFor(after[i]), 4, t, { ...options, offsetMm: 1.7 })
-          expect(now.log).toEqual(old.log)
+          legacyDrawFace(old.ctx, legacy, sameAssets(legacy), 4, t, options)
+          drawFace(now.ctx, after[i], sameAssets(after[i]), 4, t, { ...options, offsetMm })
+          expect(tidyLog(now.log)).toEqual(tidyLog(old.log))
           for (const op of old.log) ops.add(op[0] === '=' && op[1] === 'globalAlpha' && op[2] !== 1 ? 'fade' : op[0])
         }
       }
@@ -234,6 +237,16 @@ function recorder() {
 }
 
 /** Stand-in images for a banknote's image frames */
+/** Banknotes with no image frames */
+const colourOnly = (note: Note) => note.frames.every((f) => f.kind !== 'image')
+/** Every image frame's image the same size */
+const SAME = { naturalWidth: 120, naturalHeight: 100 }
+function sameAssets(note: Note): NoteAssets {
+  return { frames: new Map(note.frames.flatMap((f) => (f.kind === 'image' ? [[f.id, SAME as HTMLImageElement] as const] : []))) }
+}
+/** A drawing log with float noise rounded away: image copies are now placed in mm, then scaled */
+const tidyLog = (log: unknown[][]) => log.map((op) => op.map((v) => (typeof v === 'number' ? Math.round(v * 1e6) / 1e6 : v)))
+
 function assetsFor(note: Note): NoteAssets {
   const frames = new Map<string, HTMLImageElement>()
   for (const f of note.frames) if (f.kind === 'image') frames.set(f.id, { naturalWidth: 120, naturalHeight: 90 + f.length } as HTMLImageElement)

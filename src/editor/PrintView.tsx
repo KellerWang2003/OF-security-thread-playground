@@ -3,7 +3,8 @@ import { reportError } from '../cloud/notices'
 import { loadArtwork } from '../lib/exportRender'
 import { patternMix, preparePattern } from '../lib/pattern'
 import { cutPattern, printedAt, type CutSource } from '../lib/print'
-import { imageTiles, threadLength } from '../lib/thread'
+import { copyStarts, imageBox } from '../lib/artwork'
+import { threadLength } from '../lib/thread'
 import type { Note } from '../lib/types'
 import { useTilt } from '../tilt/tilt'
 
@@ -11,7 +12,7 @@ import { useTilt } from '../tilt/tilt'
 const DIM = 0.45
 /** Ridge lines darken the print this much */
 const RIDGE_LINE = 0.35
-/** The print shows at most this many thread widths of length: a whole image copy, without shrinking the weave away */
+/** The print shows at most this many thread widths of length, so two repeats never shrink the weave away */
 const MAX_LENGTH = 3
 /** A pixel no section covers */
 const NONE = 0xffff
@@ -36,19 +37,12 @@ export function PrintCanvas({ note, ridges, sizePx }: { note: Note; ridges: numb
   const current = useTilt((s) => patternMix(note, { x: s.angleX, y: s.angle }).map((m) => m.slot).join(','))
   const { thread, frames } = note
   const vertical = thread.direction === 'vertical'
-  const gapMm = thread.imageGapMm ?? 0
+  const { repeatMm } = prepared.pattern
   const dpr = Math.min(2, window.devicePixelRatio || 1)
 
-  // Across the thread's full width, and along it far enough for the longest image copy, or two repeats of a pattern
+  // Across the thread's full width, and along it for two repeats, where the frames' images sit once each
   const across = thread.widthMm
-  const copies = frames.map((f) => {
-    const img = images.get(f.id)
-    if (f.kind !== 'image' || !img?.naturalWidth) return 0
-    const aspect = img.naturalHeight / img.naturalWidth
-    return (vertical ? across * aspect : across / aspect) + gapMm
-  })
-  const repeats = prepared.plain ? 0 : 2 * prepared.pattern.repeatMm
-  const along = Math.min(threadLength(note), Math.max(across, Math.min(MAX_LENGTH * across, Math.max(0, repeats, ...copies))))
+  const along = Math.min(threadLength(note), Math.max(across, Math.min(MAX_LENGTH * across, 2 * repeatMm)))
   const scale = (sizePx * dpr) / Math.max(across, along)
   const w = Math.max(1, Math.round((vertical ? across : along) * scale))
   const h = Math.max(1, Math.round((vertical ? along : across) * scale))
@@ -81,14 +75,13 @@ export function PrintCanvas({ note, ridges, sizePx }: { note: Note; ridges: numb
       if (frame.kind === 'color') {
         ctx.fillStyle = frame.color
         ctx.fillRect(0, 0, w, h)
-      } else {
+      } else if (frame.kind === 'image') {
         const img = images.get(frame.id)
         if (img?.naturalWidth) {
-          const thickness = vertical ? w : h
-          const { naturalPx, starts } = imageTiles(thickness, vertical ? h : w, gapMm * scale, img.naturalHeight / img.naturalWidth, thread.direction)
-          for (const start of starts) {
-            if (vertical) ctx.drawImage(img, 0, start, thickness, naturalPx)
-            else ctx.drawImage(img, start, 0, naturalPx, thickness)
+          const box = imageBox(frame.place, frame.aspect ?? img.naturalHeight / img.naturalWidth, repeatMm, across, thread.direction)
+          for (const start of copyStarts(box, repeatMm, 0, along)) {
+            if (vertical) ctx.drawImage(img, box.across * scale, start * scale, box.acrossSize * scale, box.alongSize * scale)
+            else ctx.drawImage(img, start * scale, box.across * scale, box.alongSize * scale, box.acrossSize * scale)
           }
         }
       }
@@ -116,7 +109,7 @@ export function PrintCanvas({ note, ridges, sizePx }: { note: Note; ridges: numb
       }
     }
     return { data, owner }
-  }, [cut, frames, images, thread.backgroundColor, thread.direction, gapMm, vertical, across, ridges, w, h, scale, dpr])
+  }, [cut, frames, images, thread.backgroundColor, thread.direction, repeatMm, along, vertical, across, ridges, w, h, scale, dpr])
 
   useEffect(() => {
     const ctx = canvas.current?.getContext('2d')

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { exportLayout, exportSize, perspectiveFor, playbackAngles, projectRow, sourceRow, tiltedBounds } from '../src/lib/exportRender'
 import { createNote } from '../src/lib/notes'
-import { imageTiles } from '../src/lib/thread'
+import { copyStarts, imageBox } from '../src/lib/artwork'
 
 vi.mock('../src/lib/images', () => ({ loadImageUrl: async () => undefined }))
 
@@ -82,14 +82,25 @@ describe('layout', () => {
   })
 })
 
-describe('image tiles', () => {
-  it('repeats complete images with a gap to the end of the thread', () => {
-    const { naturalPx, starts } = imageTiles(10, 100, 5, 2, 'vertical')
-    expect(naturalPx).toBe(20)
-    expect(starts).toEqual([0, 25, 50, 75])
+describe('an image in the repeat', () => {
+  it('fits the repeat and the thread by default, centred, and its copies fall one repeat apart', () => {
+    // Twice as tall as wide on a 10 mm vertical thread: 20 mm long, centred in a 25 mm repeat
+    const box = imageBox(undefined, 2, 25, 10, 'vertical')
+    expect(box).toEqual({ along: 2.5, across: 0, alongSize: 20, acrossSize: 10 })
+    expect(copyStarts(box, 25, 0, 90)).toEqual([2.5, 27.5, 52.5, 77.5])
+    // A repeat shorter than the image shrinks it to fit, centred across
+    expect(imageBox(undefined, 2, 10, 10, 'vertical')).toEqual({ along: 0, across: 2.5, alongSize: 10, acrossSize: 5 })
   })
 
   it('keeps images upright on horizontal threads', () => {
-    expect(imageTiles(10, 100, 0, 2, 'horizontal').naturalPx).toBe(5)
+    expect(imageBox(undefined, 2, 25, 10, 'horizontal').alongSize).toBe(5)
+  })
+
+  it('carries a copy that runs past the repeat on into the next, and follows the repeat’s start', () => {
+    const box = imageBox({ alongMm: 20, across: 0.25, size: 0.5 }, 2, 25, 10, 'vertical')
+    expect(box).toEqual({ along: 20, across: 2.5, alongSize: 10, acrossSize: 5 })
+    // The copy from before the stretch shows its last 5 mm at the start
+    expect(copyStarts(box, 25, 0, 90)).toEqual([-5, 20, 45, 70])
+    expect(copyStarts(box, 25, 3, 90)).toEqual([-2, 23, 48, 73])
   })
 })
