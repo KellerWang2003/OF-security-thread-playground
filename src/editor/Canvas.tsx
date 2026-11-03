@@ -83,6 +83,7 @@ export function Canvas({
   projectId,
   notes,
   selectedId,
+  layer = 'note',
   onSelect,
   onSelectLayer,
   focus,
@@ -99,6 +100,8 @@ export function Canvas({
   projectId: string
   notes: Note[]
   selectedId: string | undefined
+  /** The selected banknote's part that is picked, outlined on the canvas: the banknote itself, its thread or its watermark */
+  layer?: Layer
   /** Selects a banknote itself, or nothing */
   onSelect: (noteId: string | undefined) => void
   /** A press on a banknote's thread or watermark picks that layer only */
@@ -125,6 +128,8 @@ export function Canvas({
   const [activeMode, setActiveMode] = useState<Gesture['mode']>()
   const [dropping, setDropping] = useState(false)
   const [guides, setGuides] = useState<Guide[]>([])
+  // What a click would pick under the pointer, outlined lightly: a banknote itself (or its label), its thread or its watermark
+  const [hover, setHover] = useState<{ noteId: string; part: Layer }>()
   // Not the angles themselves: each NoteView follows the tilt on its own, so the canvas doesn't re-render
   // every animation frame while tilting or playing
   const source = useTilt((s) => s.source)
@@ -302,7 +307,18 @@ export function Canvas({
   const noteAt = (target: EventTarget, attribute: 'data-note-label' | 'data-note-body') =>
     (target as HTMLElement).closest(`[${attribute}]`)?.getAttribute(attribute) ?? undefined
 
+  /** Follows the pointer between gestures; the window and watermark editors count as the part they edit */
+  const hoverOver = (target: EventTarget) => {
+    const element = target as HTMLElement
+    const noteId = noteAt(target, 'data-note-label') ?? noteAt(target, 'data-note-body')
+    const part: Layer = element.closest('[data-thread], [data-window-editor]') ? 'thread'
+      : element.closest('[data-watermark], [data-watermark-editor]') ? 'watermark' : 'note'
+    setHover((h) => (!noteId ? undefined : h?.noteId === noteId && h.part === part ? h : { noteId, part }))
+  }
+
   const grid = gridStep(scale)
+  // Selection outlines step back while banknotes play or are dragged, so they never get in the way of the motion
+  const quiet = source === 'wobble' || activeMode === 'tilt' || activeMode === 'move'
 
   return (
     <div
@@ -326,6 +342,7 @@ export function Canvas({
         const v = viewRef.current
         // Only the left and middle buttons drag; a right-click's menu would swallow the release
         if (!v || e.button > 1) return
+        setHover(undefined)
         // A click on the banknote outside the thread's windows (or the watermark's box) ends editing and tilts as usual
         if (editingWindows && noteAt(e.target, 'data-note-body') === selectedId) onExitWindows?.()
         if (placingWatermark && noteAt(e.target, 'data-note-body') === selectedId) onExitPlacing?.()
@@ -374,7 +391,7 @@ export function Canvas({
       }}
       onPointerMove={(e) => {
         const g = gesture.current
-        if (!g) return
+        if (!g) return hoverOver(e.target)
         // A release that never reached us: stop following the pointer
         if (e.buttons === 0) {
           endGesture()
@@ -450,6 +467,7 @@ export function Canvas({
       }}
       onPointerCancel={endGesture}
       onLostPointerCapture={endGesture}
+      onPointerLeave={() => setHover(undefined)}
       onDoubleClick={(e) => {
         const target = e.target as HTMLElement
         const noteId = noteAt(target, 'data-note-body')
@@ -477,6 +495,9 @@ export function Canvas({
           const isSelected = note.id === selectedId
           const editingThis = isSelected && editingWindows
           const placingThis = isSelected && placingWatermark && note.watermark !== undefined
+          // Only what is picked is outlined, the banknote itself or one of its parts; what a click would pick is outlined lightly
+          const picked = isSelected ? layer : undefined
+          const hovered = hover?.noteId === note.id && hover.part !== picked ? hover.part : undefined
           const ref: NoteRef = { projectId, noteId: note.id }
           return (
             <div
@@ -503,13 +524,14 @@ export function Canvas({
                 style={{ perspective: 2.2 * Math.max(note.widthMm, note.heightMm) * scale, borderRadius: 1.5 * scale }}
                 className={cn(
                   'outline-offset-4 transition-[outline-color] duration-150 cursor-ns-resize',
-                  isSelected ? 'outline-2' : 'outline-0',
-                  source === 'wobble' || activeMode === 'tilt' || activeMode === 'move' ? 'outline-primary/5' : 'outline-primary/25',
+                  picked === 'note' ? 'outline-2' : hovered === 'note' ? 'outline-1' : 'outline-0',
+                  quiet ? 'outline-primary/5' : 'outline-primary/25',
                 )}
               >
                 {/* Editing windows shows the banknote flat with its watermark faint; placing the watermark, flat with it clear */}
                 <NoteView note={note} scale={scale} live perspective={perspective && !editingThis && !placingThis} sheen={sheen}
-                  reveal={editingThis ? 0 : placingThis ? 1 : undefined} showWindowCuts={editingThis} showFrameNumber={frameNumbers} offsetMm={offsets[note.id]} />
+                  reveal={editingThis ? 0 : placingThis ? 1 : undefined} showWindowCuts={editingThis} showFrameNumber={frameNumbers} offsetMm={offsets[note.id]}
+                  selected={picked === 'note' || editingThis || placingThis || quiet ? undefined : picked} hovered={hovered === 'note' ? undefined : hovered} />
                 {placingThis && (
                   <WatermarkEditor note={note} watermark={note.watermark!} scale={scale} onChange={(next) => updateWatermark(ref, () => next)} />
                 )}

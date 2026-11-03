@@ -176,6 +176,67 @@ describe('username workspace editor', () => {
     expect(width()).toBe('150')
     expect(saves).not.toHaveBeenCalled()
   })
+  it('outlines what a click would pick under the pointer, and only what is picked', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      callback: ResizeObserverCallback
+      constructor(callback: ResizeObserverCallback) { this.callback = callback }
+      observe() { this.callback([{ contentRect: { width: 1280, height: 720 } } as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      unobserve() {} disconnect() {}
+    })
+    for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
+    }
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'hover-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const demo = useProjects.getState().demoPreview!
+    act(() => addNote(demo.id, createNote({ name: 'Other', x: 200, y: 0, widthMm: 100, heightMm: 50, color: '#654321' })))
+    act(() => updateNote(demo.id, demo.notes[0].id, (n) => ({ ...n, watermark: { ...newWatermark(n), imageId: 'fixture-watermark' } })))
+    const body = (i: number) => document.querySelectorAll<HTMLElement>('[data-note-body]')[i]
+    const thread = () => body(0).querySelector<HTMLElement>('[data-thread]')!
+    const watermark = () => body(0).querySelector<HTMLElement>('[data-watermark]')!
+    const outline = (kind: 'hover' | 'selected') => body(0).querySelector<HTMLElement>(`[data-outline="${kind}"]`)
+    // Where an outline sits, to tell the thread's from the watermark's
+    const box = (element: HTMLElement | null) => element && [element.style.left, element.style.top, element.style.width, element.style.height]
+    const banknote = (i: number) => ['outline-0', 'outline-1', 'outline-2'].find((c) => body(i).classList.contains(c))
+    const move = (target: Element) => fireEvent.pointerMove(target, { pointerId: 1, buttons: 0 })
+    const click = (target: Element) => {
+      fireEvent.pointerDown(target, { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
+      fireEvent.pointerUp(target, { button: 0, pointerId: 1, clientX: 100, clientY: 100 })
+    }
+
+    // The banknote itself is picked from its row; over its thread or its watermark, that part is outlined lightly
+    expect(banknote(0)).toBe('outline-2')
+    move(thread())
+    expect(box(outline('hover'))).toEqual(box(thread()))
+    move(watermark())
+    expect(box(outline('hover'))).toEqual(box(watermark()))
+    // Over the other banknote, that banknote is, and leaving the canvas clears it
+    move(body(1))
+    expect(outline('hover')).toBeNull()
+    expect(banknote(1)).toBe('outline-1')
+    fireEvent.pointerLeave(body(1).parentElement!.parentElement!.parentElement!)
+    expect(banknote(1)).toBe('outline-0')
+
+    // A click on the thread outlines the thread instead of the banknote, and the pointer over it adds nothing more
+    click(thread())
+    expect(box(outline('selected'))).toEqual(box(thread()))
+    expect(banknote(0)).toBe('outline-0')
+    move(thread())
+    expect(outline('hover')).toBeNull()
+    // Over the banknote around it, the banknote is outlined lightly, the thread still firmly
+    move(body(0))
+    expect(banknote(0)).toBe('outline-1')
+    expect(box(outline('selected'))).toEqual(box(thread()))
+
+    // Another banknote picked: only it is outlined
+    click(body(1))
+    expect(banknote(1)).toBe('outline-2')
+    expect(outline('selected')).toBeNull()
+    expect(saves).not.toHaveBeenCalled()
+  })
   it('pans and zooms the canvas as one layer, then redraws the banknotes at the new view', async () => {
     vi.stubGlobal('ResizeObserver', class {
       callback: ResizeObserverCallback

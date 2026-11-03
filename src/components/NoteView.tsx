@@ -202,6 +202,8 @@ export function NoteView({
   showWindowCuts = false,
   showFrameNumber = false,
   offsetMm = 0,
+  selected,
+  hovered,
 }: {
   note: Note
   scale: number
@@ -221,6 +223,10 @@ export function NoteView({
   showFrameNumber?: boolean
   /** Where along the thread the pattern's repeat starts, mm: a preview of where the print may land */
   offsetMm?: number
+  /** On the canvas, the part picked, outlined firmly */
+  selected?: 'thread' | 'watermark'
+  /** On the canvas, the part a click would pick, outlined lightly */
+  hovered?: 'thread' | 'watermark'
 }) {
   const { thread, frames, watermark } = note
   const root = useRef<HTMLDivElement>(null)
@@ -271,7 +277,8 @@ export function NoteView({
   const still = blends && tiltStyle(angle, angleX, blends[0] ?? 0, depth, revealOf({ angle, angleX, light: 0 }))
   const part = (name: TiltPart, style: CSSProperties = {}) => ({ 'data-tilt': name, style: { ...style, ...still?.parts[name] } })
   const watermarkBox: CSSProperties | undefined = watermark && { left: mm(watermark.xMm), top: mm(watermark.yMm), width: mm(watermark.widthMm), height: mm(watermark.heightMm) }
-  const art = <ThreadArt note={note} shown={shown} blends={blends} fill={fill} lengthMm={lengthMm} scale={scale} offsetMm={offsetMm} />
+  const boxOf = (target: 'thread' | 'watermark' | undefined) => (target === 'thread' ? strip : target === 'watermark' ? watermarkBox : undefined)
+  const art =<ThreadArt note={note} shown={shown} blends={blends} fill={fill} lengthMm={lengthMm} scale={scale} offsetMm={offsetMm} />
 
   return (
     <div
@@ -353,6 +360,11 @@ export function NoteView({
           <div className="pointer-events-none absolute inset-0" {...part('shade-down', { background: `linear-gradient(180deg, ${SIDE_DARK}, ${SIDE_LIGHT})` })} />
         </>
       )}
+
+      {/* Canvas only, never exported. Outside the part, so a thin thread keeps its artwork in view, edged in the background
+          colour so the line shows on any design, and over everything, so the watermark's crosses the thread */}
+      {boxOf(selected) && <div aria-hidden="true" data-outline="selected" className="pointer-events-none absolute ring-2 ring-primary shadow-[0_0_0_3px_var(--background)]" style={boxOf(selected)} />}
+      {boxOf(hovered) && <div aria-hidden="true" data-outline="hover" className="pointer-events-none absolute ring-1 ring-primary shadow-[0_0_0_2px_var(--background)]" style={boxOf(hovered)} />}
     </div>
   )
 }
