@@ -1,9 +1,10 @@
 import { reportError } from '../cloud/notices'
 import { Banknote, Columns2, Droplet, ImageUp, RectangleHorizontal, RectangleVertical, Rows2, Share, Shuffle, Trash2, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { create } from 'zustand'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ColorField, Group, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
+import { ColorField, Drawer, Group, IconButton, Labeled, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
@@ -14,7 +15,7 @@ import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
 import { fitWatermark, moveWatermarkTo } from '../lib/watermark'
-import { EffectSection, LensMenu, ThreadPrint, type SetLens } from './EffectSection'
+import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
 import { PanelResizer } from './PanelResizer'
 import { WatermarkPanel } from './WatermarkPanel'
 import { WindowsCard } from './WindowsCard'
@@ -31,17 +32,17 @@ const TAB = "h-7 flex-none rounded-md px-2.5 text-[13px] font-medium text-muted-
 
 /**
  * Right: the selected banknote, one tab per part, as the Banknotes list has its layers: the banknote itself (size,
- * background), its security thread (placement, artwork, and its lens with the way into the thread editor) and its
- * watermark once it has one. The tab is the part picked: a click on the canvas or in the list turns to it, and turning
- * to a tab picks that part. One part at a time, so the panel never grows with features.
+ * background), its security thread (placement, artwork and its lens, with the lens's preview in a drawer at the foot;
+ * Thread Studio opens from the button under the thread on the canvas) and its watermark once it has one. The tab is the
+ * part picked: a click on the canvas or in the list turns to it, and turning to a tab picks that part. One part at a
+ * time, so the panel never grows with features. Every control has a small label over it (`Labeled`) unless a word in
+ * it or beside it already says what it is.
  */
-export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onWindowSelect, onExport, onEditThread, onPlaceWatermark, onRemoveWatermark }: {
+export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onWindowSelect, onExport, onPlaceWatermark, onRemoveWatermark }: {
   note: Note
   /** Picks a part of the banknote, as its row in the list does */
   onLayer: (layer: Layer) => void
   onExport: () => void
-  /** Opens the thread editor, where the lens and the thread's sections are edited */
-  onEditThread: () => void
   noteRef: NoteRef
   layer: Layer
   selectedWindowId?: string
@@ -117,23 +118,31 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
       <TabsContent value="note" className="min-h-0 overflow-y-auto">
       <Group>
       <Section nested>
-        <Segmented
-          value={portrait ? 'portrait' : 'landscape'}
-          options={[
-            { value: 'portrait', label: <RectangleVertical className="size-3.5" aria-label="Portrait" /> },
-            { value: 'landscape', label: <RectangleHorizontal className="size-3.5" aria-label="Landscape" /> },
-          ]}
-          onChange={(next) => {
-            if ((next === 'portrait') !== portrait) flipOrientation()
-          }}
-        />
+        <Labeled label="Orientation">
+          <Segmented
+            value={portrait ? 'portrait' : 'landscape'}
+            options={[
+              { value: 'portrait', label: <RectangleVertical className="size-3.5" aria-label="Portrait" /> },
+              { value: 'landscape', label: <RectangleHorizontal className="size-3.5" aria-label="Landscape" /> },
+            ]}
+            onChange={(next) => {
+              if ((next === 'portrait') !== portrait) flipOrientation()
+            }}
+          />
+        </Labeled>
         <div className="grid grid-cols-2 gap-2">
-          <ScrubField label="W" value={note.widthMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} unit="mm" onChange={(w) => setSize(w, note.heightMm)} />
-          <ScrubField label="H" value={note.heightMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} unit="mm" onChange={(h) => setSize(note.widthMm, h)} />
+          <Labeled label="Width">
+            <ScrubField label="W" value={note.widthMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} unit="mm" onChange={(w) => setSize(w, note.heightMm)} />
+          </Labeled>
+          <Labeled label="Height">
+            <ScrubField label="H" value={note.heightMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} unit="mm" onChange={(h) => setSize(note.widthMm, h)} />
+          </Labeled>
         </div>
       </Section>
 
       <Section nested>
+        <Labeled label="Background">
+        <div className="flex flex-col gap-2">
         <Segmented
           value={note.background}
           options={[
@@ -173,6 +182,8 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
             )}
           </div>
         )}
+        </div>
+        </Labeled>
       </Section>
       </Group>
       </TabsContent>
@@ -180,15 +191,18 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
       <TabsContent value="thread" className="min-h-0 overflow-y-auto">
       <Group>
       <Section nested>
-        <Segmented
-          value={thread.direction}
-          options={[
-            { value: 'vertical', label: 'Vertical' },
-            { value: 'horizontal', label: 'Horizontal' },
-          ]}
-          onChange={setDirection}
-        />
+        <Labeled label="Direction">
+          <Segmented
+            value={thread.direction}
+            options={[
+              { value: 'vertical', label: 'Vertical' },
+              { value: 'horizontal', label: 'Horizontal' },
+            ]}
+            onChange={setDirection}
+          />
+        </Labeled>
         <div className="grid grid-cols-2 gap-2">
+          <Labeled label="Thickness">
           <ScrubField
             label="T"
             title="Thread width vertically, or height horizontally"
@@ -199,6 +213,8 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
             unit="mm"
             onChange={(widthMm) => setThread({ widthMm })}
           />
+          </Labeled>
+          <Labeled label="Position">
           <ScrubField
             label={thread.direction === 'vertical' ? 'X' : 'Y'}
             title={thread.direction === 'vertical' ? 'Thread position from the left edge' : 'Thread position from the top edge'}
@@ -209,6 +225,7 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
             unit="mm"
             onChange={(positionMm) => setThread({ positionMm })}
           />
+          </Labeled>
         </div>
         <WindowsCard note={note} noteRef={noteRef} selectedWindowId={selectedWindowId} onWindowSelect={onWindowSelect} />
       </Section>
@@ -234,7 +251,7 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
         />
       </Section>
 
-      <LensEffect note={note} noteRef={noteRef} onEditThread={onEditThread} />
+      <LensEffect note={note} noteRef={noteRef} />
       <PrintOffset note={note} onWindowSelect={onWindowSelect} />
       </Group>
       </TabsContent>
@@ -244,6 +261,7 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
           <WatermarkPanel note={note} watermark={note.watermark} noteRef={noteRef} onPlace={onPlaceWatermark} />
         </TabsContent>
       )}
+      {layer === 'thread' && <PreviewDrawer note={note} />}
       </Tabs>
     </Panel>
     </>
@@ -293,22 +311,31 @@ function TabStrip({ active, children }: { active: string; children: ReactNode })
 }
 
 /**
- * The thread's lens, a section of the thread: Edit thread first, into the thread editor, then the lens's basic
- * controls and its preview (the tilt map, or the print), as in the thread editor. With mixed angles there is no one
- * lens to show, so the print of every section together.
+ * The thread's lens, a section of the thread: its basic controls, as in the thread editor, its preview in the drawer at
+ * the panel's foot. With mixed angles each section has its own lens, edited in Thread Studio, so nothing here.
  */
-function LensEffect({ note, noteRef, onEditThread }: { note: Note; noteRef: NoteRef; onEditThread: () => void }) {
+function LensEffect({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const set: SetLens = (patch) => updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, tilt: { ...n.tilt, ...patch } }))
-  const edit = <Button size="sm" onClick={onEditThread}>Edit thread</Button>
-  if (patternOf(note).mixed) {
-    return (
-      <Section nested title="Lens effect" action={<span className="text-[11px] text-muted-foreground" title="Mixed angles is on: each section plays its own lens">Mixed</span>}>
-        {edit}
-        <ThreadPrint note={note} />
-      </Section>
-    )
-  }
-  return <EffectSection note={note} set={set} title="Lens effect" action={<LensMenu note={note} set={set} />}>{edit}</EffectSection>
+  if (patternOf(note).mixed) return null
+  return <EffectSection note={note} set={set} title="Lens effect" action={<LensMenu note={note} set={set} />} preview={false} />
+}
+
+/** Whether the preview drawer is open, kept as you go from banknote to banknote (the panel is rebuilt for each) */
+const usePreviewDrawer = create<{ open: boolean }>(() => ({ open: false }))
+
+/**
+ * The thread's preview at the panel's foot, as in the thread editor: the lens angle and cycle, the frames each tilt shows
+ * and the tilt map, or the print; with mixed angles, the print of every section together
+ */
+function PreviewDrawer({ note }: { note: Note }) {
+  const open = usePreviewDrawer((s) => s.open)
+  const mixed = patternOf(note).mixed
+  return (
+    <Drawer title="Preview" open={open} onOpenChange={(next) => usePreviewDrawer.setState({ open: next })}
+      action={mixed ? <span className="text-[11px] text-muted-foreground" title="Mixed angles is on: each section plays its own lens">Mixed</span> : undefined}>
+      {mixed ? <ThreadPrint note={note} /> : <LensPreview note={note} />}
+    </Drawer>
+  )
 }
 
 /**

@@ -1,7 +1,7 @@
 import { ImageUp, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
-import { Group, IconButton, ScrubField, Section, SwitchField } from '../components/controls'
+import { Group, IconButton, Labeled, ScrubField, Section, SwitchField } from '../components/controls'
 import { reportError } from '../cloud/notices'
 import { pickFiles, useImageUrl } from '../lib/images'
 import { useReading } from '../lib/relief'
@@ -33,6 +33,7 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace }: {
   return (
     <Group>
       <Section nested>
+        <Labeled label="Image">
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -63,6 +64,7 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace }: {
             </IconButton>
           )}
         </div>
+        </Labeled>
         {watermark.imageId && (
           <>
             <SwitchField label="Invert" checked={watermark.invert === true} onChange={(on) => change((w) => ({ ...w, invert: on }))} />
@@ -76,14 +78,22 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace }: {
 
       <Section nested>
         <div className="grid grid-cols-2 gap-2">
-          <ScrubField label="X" title="Watermark position from the left edge" value={watermark.xMm} min={0} max={Math.max(0, note.widthMm - watermark.widthMm)}
-            step={WATERMARK_STEP} unit="mm" onChange={(xMm) => change((w) => ({ ...w, xMm }))} />
-          <ScrubField label="Y" title="Watermark position from the top edge" value={watermark.yMm} min={0} max={Math.max(0, note.heightMm - watermark.heightMm)}
-            step={WATERMARK_STEP} unit="mm" onChange={(yMm) => change((w) => ({ ...w, yMm }))} />
-          <ScrubField label="W" title="Watermark width; its height follows the image" value={Math.round(watermark.widthMm * 100) / 100} min={WATERMARK_MIN_MM}
-            max={maxWatermarkWidth(watermark, note)} step={WATERMARK_STEP} unit="mm" onChange={(widthMm) => change((w, n) => resizeWatermark(w, widthMm, n))} />
-          <ScrubField label="Depth" title="How strongly the watermark shows held to the light" value={Math.round(watermark.depth * 100)} min={0} max={100}
-            step={5} unit="%" onChange={(depth) => change((w) => ({ ...w, depth: depth / 100 }))} />
+          <Labeled label="From left">
+            <ScrubField label="X" title="Watermark position from the left edge" value={watermark.xMm} min={0} max={Math.max(0, note.widthMm - watermark.widthMm)}
+              step={WATERMARK_STEP} unit="mm" onChange={(xMm) => change((w) => ({ ...w, xMm }))} />
+          </Labeled>
+          <Labeled label="From top">
+            <ScrubField label="Y" title="Watermark position from the top edge" value={watermark.yMm} min={0} max={Math.max(0, note.heightMm - watermark.heightMm)}
+              step={WATERMARK_STEP} unit="mm" onChange={(yMm) => change((w) => ({ ...w, yMm }))} />
+          </Labeled>
+          <Labeled label="Width">
+            <ScrubField label="W" title="Watermark width; its height follows the image" value={Math.round(watermark.widthMm * 100) / 100} min={WATERMARK_MIN_MM}
+              max={maxWatermarkWidth(watermark, note)} step={WATERMARK_STEP} unit="mm" onChange={(widthMm) => change((w, n) => resizeWatermark(w, widthMm, n))} />
+          </Labeled>
+          <Labeled label="Depth">
+            <ScrubField label="D" title="How strongly the watermark shows held to the light" value={Math.round(watermark.depth * 100)} min={0} max={100}
+              step={5} unit="%" onChange={(depth) => change((w) => ({ ...w, depth: depth / 100 }))} />
+          </Labeled>
         </div>
       </Section>
     </Group>

@@ -200,7 +200,7 @@ describe('username workspace editor', () => {
     expect(body(0).classList.contains('outline-2')).toBe(true)
     expect(saves).not.toHaveBeenCalled()
   })
-  it('shows one tab per part, the thread’s with its lens: basic controls and preview under Edit thread', async () => {
+  it('shows one tab per part, labels every control, and the thread’s lens with its preview in a drawer at the foot', async () => {
     const user = userEvent.setup()
     localStorage.setItem('of-thread-workspace', 'panel-lens-ui-test')
     render(<TooltipProvider><App /></TooltipProvider>)
@@ -216,13 +216,21 @@ describe('username workspace editor', () => {
     expect(screen.getByText('W', { exact: true })).toBeDefined()
     await user.click(screen.getByRole('tab', { name: 'Thread' }))
 
-    // The lens's controls and its tilt map, edited for this banknote right here
+    // Small labels say what each control is
+    for (const label of ['Direction', 'Thickness', 'Position', 'Effect', 'Seen flat']) expect(screen.getByText(label, { exact: true })).toBeDefined()
+
+    // The lens's controls, edited for this banknote right here; Thread Studio opens from the canvas, not the panel
     expect(screen.getByRole('combobox', { name: 'Effect' })).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Tilt map' })).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Edit thread' })).toBeNull()
     fireEvent.change(screen.getByText('Cycle', { exact: true }).closest('div')!.querySelector('input')!, { target: { value: '41' } })
     expect(note().tilt.cycleDeg).toBe(41)
+    // Its preview sits in a drawer at the panel's foot
+    const preview = screen.getByRole('button', { name: 'Preview' })
+    if (preview.getAttribute('aria-expanded') !== 'true') await user.click(preview)
+    expect(screen.getByRole('button', { name: 'Tilt map' })).toBeDefined()
+    expect(screen.getByText('Frames seen', { exact: true })).toBeDefined()
 
-    // With mixed angles there is no one lens: the whole print instead
+    // With mixed angles there is no one lens: the drawer shows the whole print instead
     const demo = useProjects.getState().demoPreview!
     act(() => updateNote(demo.id, demo.notes[0].id, (n) => ({ ...n, pattern: { ...presetPattern(n, 'split'), mixed: true } })))
     expect(screen.getByText('Mixed', { exact: true })).toBeDefined()
@@ -338,9 +346,7 @@ describe('username workspace editor', () => {
     // The copy is selected, its layers open under it
     await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
     const before = useProjects.getState().demoPreview!.notes.map((n) => n.tilt.cycleDeg)
-    // The lens is edited in the thread editor
-    // The lens shows in the panel too; the full one is in the thread editor
-    await user.click(screen.getAllByRole('button', { name: 'Edit thread', exact: true }).find((button) => !button.closest('[data-edit-thread]'))!)
+    // The lens is edited in the panel (and in Thread Studio)
     const cycle = screen.getByText('Cycle', { exact: true }).closest('label, div')!.querySelector('input')!
     fireEvent.change(cycle, { target: { value: '47' } })
     fireEvent.blur(cycle)

@@ -548,7 +548,7 @@ export function Canvas({
                 // Just under the picked thread (under the banknote for a vertical one), the way into the thread editor. It
                 // keeps its size while a zoom is under way, as the labels do, and takes its own clicks
                 <div data-edit-thread="" data-keep-size="" className="absolute origin-top -translate-x-1/2 pt-2" style={threadButtonAt(note, scale)} onPointerDown={(e) => e.stopPropagation()}>
-                  <Button size="sm" className="shadow-panel" onClick={() => onEditThread(note.id)}>Edit thread</Button>
+                  <Button size="sm" className="shadow-panel" onClick={() => onEditThread(note.id)}>Edit in Thread Studio</Button>
                 </div>
               )}
             </div>

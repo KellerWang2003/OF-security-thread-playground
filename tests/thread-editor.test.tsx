@@ -51,13 +51,13 @@ async function openDemo(workspace: string) {
   render(<TooltipProvider><App /></TooltipProvider>)
   await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
   await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
-  // The banknote's row shows the banknote itself; Edit thread is on its Security thread layer
+  // The banknote's row shows the banknote itself; the way into Thread Studio shows once its Security thread is picked
   await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
   return user
 }
 
-/** The panel's Edit thread; the canvas shows another just under the selected thread */
-const editThread = () => screen.getAllByRole('button', { name: 'Edit thread', exact: true }).find((button) => !button.closest('[data-edit-thread]'))!
+/** The way into Thread Studio, just under the selected thread on the canvas */
+const editThread = () => within(document.querySelector<HTMLElement>('[data-edit-thread]')!).getByRole('button', { name: 'Edit in Thread Studio' })
 
 /** The magnified thread, and its scale: the demo thread is 4 mm wide, and the strip's coordinates are client coordinates (jsdom lays nothing out) */
 function strip() {
@@ -143,11 +143,11 @@ describe('thread editor', () => {
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('region', { name: 'Thread editor' })).toBeNull()
 
-    // Back on the canvas, the banknote's thread is still selected, with Edit thread to go back in, in the panel and under the thread
+    // Back on the canvas, the banknote's thread is still selected, with the way back in just under it (not in the panel)
     expect(screen.getByRole('button', { name: 'Export', exact: true })).toBeDefined()
     expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Thread')
-    expect(screen.getAllByRole('button', { name: 'Edit thread', exact: true })).toHaveLength(2)
-    await user.click(within(document.querySelector<HTMLElement>('[data-edit-thread]')!).getByRole('button', { name: 'Edit thread' }))
+    expect(screen.queryByRole('button', { name: 'Edit thread' })).toBeNull()
+    await user.click(editThread())
     expect(screen.getByRole('region', { name: 'Thread editor' })).toBeDefined()
     // Nothing of the canvas's under it
     expect(document.querySelector('[data-edit-thread]')).toBeNull()

@@ -14,7 +14,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { ScrubField, Section, Segmented } from '../components/controls'
+import { Labeled, ScrubField, Section, Segmented } from '../components/controls'
 import { clamp } from '../lib/frames'
 import {
   LENS_EFFECTS,
@@ -127,7 +127,9 @@ export function EffectSection({ note, set, printNote = note, title, action, chil
     <>
     <Section nested title={title} action={action}>
       {children}
-      <EffectPicker note={note} lens={lens} onChoose={chooseEffect} />
+      <Labeled label="Effect">
+        <EffectPicker note={note} lens={lens} onChoose={chooseEffect} />
+      </Labeled>
 
       {/* The main controls first: which tilt hides frames, where flat sits and how far each tilt reaches, the wobble
           allowance. The cycles they work out come after. */}
@@ -139,11 +141,13 @@ export function EffectSection({ note, set, printNote = note, title, action, chil
             </div>
           </div>
       )}
-      <Explain caption={`Flat: ${flatLabel(flatStep(tilt, note.frames.length))}. ` + (lens.effect === 'reveal'
-        ? `Drag the pin to choose the frame seen straight on. Drag the band's ends to set how far the ${lens.revealAxis === 'y' ? '↔' : '↕'} tilt ever reaches: frames outside it stay hidden. Double-click to reset.`
-        : 'Drag the pin to choose the frame seen straight on; double-click to reset. The lines under it show how far each tilt reaches by 90°.')}>
-        <FlatStrip note={note} lens={lens} set={set} />
-      </Explain>
+      <Labeled label="Seen flat">
+        <Explain caption={`Flat: ${flatLabel(flatStep(tilt, note.frames.length))}. ` + (lens.effect === 'reveal'
+          ? `Drag the pin to choose the frame seen straight on. Drag the band's ends to set how far the ${lens.revealAxis === 'y' ? '↔' : '↕'} tilt ever reaches: frames outside it stay hidden. Double-click to reset.`
+          : 'Drag the pin to choose the frame seen straight on; double-click to reset. The lines under it show how far each tilt reaches by 90°.')}>
+          <FlatStrip note={note} lens={lens} set={set} />
+        </Explain>
+      </Labeled>
       {lens.effect === 'reveal' && (
           <Explain
             picture={<WobblePreview note={note} lens={lens} />}
@@ -159,7 +163,7 @@ export function EffectSection({ note, set, printNote = note, title, action, chil
         cycleField('y', 'Cycle')
       )}
       {lens.effect === 'reveal' && (
-        <>
+        <Labeled label="Cycle">
           <div className="grid grid-cols-2 gap-2">
             {cycleField(lens.revealAxis)}
             {lens.revealSafe ? (
@@ -174,28 +178,34 @@ export function EffectSection({ note, set, printNote = note, title, action, chil
               </div>
             )}
           </div>
-        </>
+        </Labeled>
       )}
       {lens.effect === 'custom' && (
         <>
-          <Segmented value={setBy} options={[{ value: 'tilt', label: 'By tilt' }, { value: 'lens', label: 'By lens' }]} onChange={setSetBy} />
+          <Labeled label="Set by">
+            <Segmented value={setBy} options={[{ value: 'tilt', label: 'By tilt' }, { value: 'lens', label: 'By lens' }]} onChange={setSetBy} />
+          </Labeled>
           {setBy === 'tilt' ? (
-            <>
+            <Labeled label="Cycle">
               <AxisCycle axis="y" lens={lens} tilt={tilt} set={set} />
               <AxisCycle axis="x" lens={lens} tilt={tilt} set={set} />
-            </>
+            </Labeled>
           ) : (
             <div className="grid grid-cols-2 gap-2">
+              <Labeled label="Lens angle">
               <ScrubField label="∠" title="Ridge angle from the banknote's horizontal" value={round(Math.abs(lensAngle(lens)), 1)} min={0} max={90} step={0.5} unit="°"
                 onChange={(angle) => {
                   const c = cyclesFromLens(angle, lensCycle(lens))
                   set({ yOn: c.cycleY != null, cycleDeg: c.cycleY == null ? tilt.cycleDeg : round(clamp(c.cycleY, CYCLE_LIMITS.min, CYCLE_LIMITS.max)), cycleXDeg: c.cycleX == null ? null : round(clamp(c.cycleX, CYCLE_LIMITS.min, CYCLE_LIMITS.max)) })
                 }} />
+              </Labeled>
+              <Labeled label="Lens cycle">
               <ScrubField label="C" title="Degrees of tilt across the ridges for one full cycle" value={round(lensCycle(lens))} min={CYCLE_LIMITS.min} max={CYCLE_LIMITS.max} unit="°"
                 onChange={(cycle) => {
                   const c = cyclesFromLens(lensAngle(lens), cycle)
                   set({ yOn: c.cycleY != null, cycleDeg: c.cycleY == null ? tilt.cycleDeg : round(clamp(c.cycleY, CYCLE_LIMITS.min, CYCLE_LIMITS.max)), cycleXDeg: c.cycleX == null ? null : round(clamp(c.cycleX, CYCLE_LIMITS.min, CYCLE_LIMITS.max)) })
                 }} />
+              </Labeled>
             </div>
           )}
         </>
@@ -228,11 +238,13 @@ export function LensPreview({ note, printNote = note }: { note: Note; printNote?
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        {(['y', 'x'] as const).filter((a) => respondsTo(lens, a)).map((axis) => (
-          <FramesRow key={axis} axis={axis} note={note} lens={lens} />
-        ))}
-      </div>
+      <Labeled label="Frames seen">
+        <div className="flex flex-col gap-1.5">
+          {(['y', 'x'] as const).filter((a) => respondsTo(lens, a)).map((axis) => (
+            <FramesRow key={axis} axis={axis} note={note} lens={lens} />
+          ))}
+        </div>
+      </Labeled>
 
       <TiltMap note={note} lens={lens} printNote={printNote} />
     </>
@@ -480,36 +492,38 @@ function TiltMap({ note, lens, printNote }: { note: Note; lens: LensState; print
 
   return (
     <div className="flex flex-col gap-2">
-      <Explain caption={print
-        ? 'The print, magnified: every frame cut into strips under the ridges. The lit strips show at this tilt. Click for the tilt map.'
-        : 'Which frame shows at each tilt. Click to see the print.'}>
-        <div
-          ref={box}
-          role="button"
-          tabIndex={0}
-          aria-label={print ? 'Print' : 'Tilt map'}
-          aria-pressed={print}
-          className={cn('relative aspect-square w-full cursor-pointer overflow-hidden rounded-md border border-border/60 outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50',
-            print && 'bg-muted/60')}
-          onClick={flip}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter' && e.key !== ' ') return
-            e.preventDefault()
-            flip()
-          }}
-        >
-          <canvas ref={canvas} width={MAP_RES} height={MAP_RES} className={cn('absolute inset-0 size-full [image-rendering:pixelated] opacity-80', print && 'invisible')} />
-          {print ? (
-            size && <PrintCanvas note={printNote} ridges={ridges} sizePx={size.width} />
-          ) : (
-            <>
-              <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-foreground/20" />
-              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-foreground/20" />
-              <TiltMapDot range={range} />
-            </>
-          )}
-        </div>
-      </Explain>
+      <Labeled label={print ? 'Print' : 'Tilt map'}>
+        <Explain caption={print
+          ? 'The print, magnified: every frame cut into strips under the ridges. The lit strips show at this tilt. Click for the tilt map.'
+          : 'Which frame shows at each tilt. Click to see the print.'}>
+          <div
+            ref={box}
+            role="button"
+            tabIndex={0}
+            aria-label={print ? 'Print' : 'Tilt map'}
+            aria-pressed={print}
+            className={cn('relative aspect-square w-full cursor-pointer overflow-hidden rounded-md border border-border/60 outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50',
+              print && 'bg-muted/60')}
+            onClick={flip}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return
+              e.preventDefault()
+              flip()
+            }}
+          >
+            <canvas ref={canvas} width={MAP_RES} height={MAP_RES} className={cn('absolute inset-0 size-full [image-rendering:pixelated] opacity-80', print && 'invisible')} />
+            {print ? (
+              size && <PrintCanvas note={printNote} ridges={ridges} sizePx={size.width} />
+            ) : (
+              <>
+                <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-foreground/20" />
+                <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-foreground/20" />
+                <TiltMapDot range={range} />
+              </>
+            )}
+          </div>
+        </Explain>
+      </Labeled>
       {print && <RidgesField ridges={ridges} />}
     </div>
   )

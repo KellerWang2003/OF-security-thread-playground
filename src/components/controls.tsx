@@ -1,6 +1,8 @@
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useState, type ComponentProps, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
@@ -20,8 +22,9 @@ export function Panel({ className, children }: { className?: string; children: R
 
 /**
  * A Figma-style number field: a short label inside the field that you can drag sideways to scrub the
- * value, and a number you can type. Commits while typing only when the value is in range. Its fill is solid: a
- * banknote seen through the panel tints the panel, and a see-through fill all but vanished (Keller noticed W and H).
+ * value, and a number you can type. Commits while typing only when the value is in range. Its fill is all but solid
+ * (98%): a banknote seen through the panel tints the panel, and a see-through fill all but vanished (Keller noticed W
+ * and H), while a hint of it still shows (Keller).
  */
 export function ScrubField({
   label,
@@ -60,7 +63,7 @@ export function ScrubField({
     <div
       title={title}
       className={cn(
-        'flex min-w-0 items-center rounded-md border border-transparent bg-muted focus-within:border-ring hover:border-border',
+        'flex min-w-0 items-center rounded-md border border-transparent bg-muted/98 focus-within:border-ring hover:border-border',
         sm ? 'h-7' : 'h-8',
         className,
       )}
@@ -137,6 +140,43 @@ export function Section({ title, action, nested = false, children }: { title?: s
       )}
       {children}
     </section>
+  )
+}
+
+/**
+ * A control in a side panel with a small label over it saying what it is, always shown, like Figma's property labels
+ * (Keller), so nobody has to guess what T or a picture strip means
+ */
+export function Labeled({ label, title, className, children }: { label: string; title?: string; className?: string; children: ReactNode }) {
+  return (
+    <div className={cn('flex min-w-0 flex-col gap-1.5', className)} title={title}>
+      <span className="text-[11px] leading-none text-muted-foreground">{label}</span>
+      {children}
+    </div>
+  )
+}
+
+/** A part of a side panel fixed at its foot, as the thread editor's Preview: its title stays put under what scrolls above, and it opens upwards */
+export function Drawer({ title, action, open, onOpenChange, children }: {
+  title: string
+  action?: ReactNode
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  children: ReactNode
+}) {
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange} className="flex shrink-0 flex-col border-t border-border">
+      <div className="flex h-9 items-center justify-between pr-2.5 pl-4">
+        <CollapsibleTrigger render={<Button variant="ghost" size="xs" className="-ml-1.5 gap-1 px-1.5 text-[13px] font-semibold" />}>
+          {title}
+          {open ? <ChevronDown className="text-muted-foreground" /> : <ChevronUp className="text-muted-foreground" />}
+        </CollapsibleTrigger>
+        {action}
+      </div>
+      <CollapsibleContent className="max-h-[50vh] overflow-y-auto px-4 pb-3">
+        <div className="flex flex-col gap-3">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
