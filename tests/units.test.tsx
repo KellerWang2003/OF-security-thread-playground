@@ -6,7 +6,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event'
 import App from '../src/App'
 import { TooltipProvider } from '../src/components/ui/tooltip'
-import { createNote } from '../src/lib/notes'
+import { LengthField } from '../src/components/controls'
+import { NOTE_SIZE, createNote } from '../src/lib/notes'
 import { useHistory } from '../src/lib/history'
 import { checkPattern } from '../src/lib/patternRules'
 import { updateNote, useProjects } from '../src/lib/store'
@@ -74,7 +75,7 @@ describe('length units', () => {
   })
 
   it('accepts the number shown at a limit, and keeps what it gives within the limits', () => {
-    // A banknote's 20 to 250 mm reads 0.787 to 9.843 in
+    // Limits of 20 to 250 mm read 0.787 to 9.843 in
     const field = lengthField('in', { value: 150, min: 20, max: 250, step: 0.5 })
     expect(field.format(field.min)).toBe('0.787')
     expect(field.format(field.max)).toBe('9.843')
@@ -168,14 +169,20 @@ describe('the unit menu', () => {
     fireEvent.keyDown(field('W'), { key: 'ArrowDown', shiftKey: true })
     expect(note().widthMm).toBe(147.574)
 
-    // The number shown at a limit can be typed; past it, nothing changes
-    fireEvent.change(field('W'), { target: { value: '9.843' } })
+    // The number shown at a limit can be typed; past it, nothing is taken, and the field keeps it and says why, in inches
+    fireEvent.change(field('W'), { target: { value: '0.787' } })
     fireEvent.blur(field('W'))
-    expect(note().widthMm).toBe(250)
-    fireEvent.change(field('W'), { target: { value: '9.9' } })
+    expect(note().widthMm).toBe(20)
+    fireEvent.change(field('W'), { target: { value: '80' } })
+    fireEvent.blur(field('W'))
+    expect(note().widthMm).toBe(20)
+    expect(field('W').value).toBe('80')
+    expect(screen.getByRole('alert').textContent).toBe('Max 78.74 in')
+    fireEvent.change(field('W'), { target: { value: '250mm' } })
     fireEvent.blur(field('W'))
     expect(note().widthMm).toBe(250)
     expect(field('W').value).toBe('9.843')
+    expect(screen.queryByRole('alert')).toBeNull()
 
     // The thread's lengths and its windows follow
     await user.click(screen.getByRole('tab', { name: 'Thread' }))
@@ -235,5 +242,97 @@ describe('the unit menu', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Add', exact: true }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(useProjects.getState().demoPreview!.notes.at(-1)!.widthMm).toBe(155.956)
+  })
+})
+
+describe('a banknote’s size', () => {
+  it('runs up to 2 m, and keeps a size typed past a limit, marked with the limit, taking nothing past it', () => {
+    expect(NOTE_SIZE).toEqual({ min: 20, max: 2000 })
+    const changes: number[] = []
+    function Size() {
+      const [mm, setMm] = React.useState(150)
+      const set = (next: number) => {
+        changes.push(next)
+        setMm(next)
+      }
+      return (
+        <>
+          <LengthField label="W" value={mm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} strict onChange={set} />
+          <button type="button" onClick={() => setMm(100)}>To 100</button>
+          <button type="button" onClick={() => setMm(20)}>To 20</button>
+        </>
+      )
+    }
+    render(<Size />)
+    const input = screen.getByRole('textbox') as HTMLInputElement
+    const alert = () => screen.queryByRole('alert')?.textContent
+
+    // Typing takes 25 and 250 on the way to 2500, then puts back the 150 from before as soon as it passes the limit
+    for (const text of ['2', '25', '250', '2500']) fireEvent.change(input, { target: { value: text } })
+    expect(changes).toEqual([25, 250, 150])
+    expect(input.value).toBe('2500')
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+    expect(alert()).toBe('Max 2000 mm')
+    expect(input.getAttribute('aria-describedby')).toBe(screen.getByRole('alert').id)
+    // Enter keeps it to be fixed, without sending a form; so does leaving the field
+    expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(false)
+    fireEvent.blur(input)
+    expect(input.value).toBe('2500')
+    expect(alert()).toBe('Max 2000 mm')
+    expect(changes).toEqual([25, 250, 150])
+
+    // Fixed, it is taken and the error goes
+    fireEvent.change(input, { target: { value: '680' } })
+    fireEvent.blur(input)
+    expect(changes.at(-1)).toBe(680)
+    expect(input.value).toBe('680')
+    expect(alert()).toBeUndefined()
+
+    // Under the minimum only once Enter is pressed or the field is left, as typing 150 passes 1 and 15
+    fireEvent.change(input, { target: { value: '5' } })
+    expect(alert()).toBeUndefined()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(alert()).toBe('Min 20 mm')
+    expect(changes.at(-1)).toBe(680)
+    // The arrow keys step back within the limits
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(changes.at(-1)).toBe(20)
+    expect(input.value).toBe('20')
+    expect(alert()).toBeUndefined()
+
+    // The value changing some other way (a scrub, an undo) drops what was kept, even once it comes back
+    fireEvent.change(input, { target: { value: '9999' } })
+    fireEvent.blur(input)
+    expect(alert()).toBe('Max 2000 mm')
+    fireEvent.click(screen.getByRole('button', { name: 'To 100' }))
+    expect(input.value).toBe('100')
+    expect(alert()).toBeUndefined()
+    fireEvent.click(screen.getByRole('button', { name: 'To 20' }))
+    expect(input.value).toBe('20')
+    expect(alert()).toBeUndefined()
+  })
+
+  it('adds no banknote while a size in New banknote is past the limit', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'size-limit-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Add banknote', exact: true }))
+    const dialog = await screen.findByRole('dialog')
+    const width = within(dialog).getByText('Width', { exact: true }).parentElement!.querySelector('input')!
+    const notes = () => useProjects.getState().demoPreview!.notes
+    fireEvent.change(width, { target: { value: '2500' } })
+    expect(within(dialog).getByRole('alert').textContent).toBe('Max 2000 mm')
+    await user.click(within(dialog).getByRole('button', { name: 'Add', exact: true }))
+    expect(screen.getByRole('dialog')).toBe(dialog)
+    expect(document.activeElement).toBe(width)
+    expect(notes()).toHaveLength(1)
+
+    fireEvent.change(width, { target: { value: '2000' } })
+    expect(within(dialog).queryByRole('alert')).toBeNull()
+    await user.click(within(dialog).getByRole('button', { name: 'Add', exact: true }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(notes()).toHaveLength(2)
+    expect(notes()[1]).toMatchObject({ widthMm: 2000, heightMm: 70 })
   })
 })

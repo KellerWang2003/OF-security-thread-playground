@@ -14,7 +14,12 @@ export const LENGTH_LIMITS = { min: 1, max: 100 }
 export const CYCLE_LIMITS = { min: 2, max: 1200 }
 export const DEFAULT_TILT: TiltSettings = { ...DEFAULT_PLAYBACK, cycleDeg: 30, transition: 0, effect: 'updown', runY: 'down', runX: 'right' }
 export const THREAD_WIDTH = { min: 3, max: 6, step: 0.5 }
-export const NOTE_SIZE = { min: 20, max: 250 }
+/**
+ * A banknote's width and height, mm: up to 2 m, as large ones run to (Keller, 3 November; it was 250 mm). The canvas
+ * stays smooth at it, as export and the watermark's light layer are drawn at capped sizes; a size typed past it shows
+ * an error instead of being taken
+ */
+export const NOTE_SIZE = { min: 20, max: 2000 }
 export const FRAME_COLORS = ['#D9A441', '#2E9C8F', '#C2456B', '#4A6FD1', '#7C4DBA']
 export const DEFAULT_NOTE = { widthMm: 150, heightMm: 70, color: '#5B6B8C' }
 /** Space left between notes when they are placed on the canvas */

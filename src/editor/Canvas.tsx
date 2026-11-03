@@ -28,7 +28,8 @@ import { useElementSize } from './useElementSize'
 
 /** CSS pixels per millimetre at 100% zoom, so 100% is roughly true size */
 const PX_PER_MM = 96 / 25.4
-const MIN_ZOOM = 0.1
+/** Far enough out to fit a few banknotes of the largest size (2 m) side by side */
+const MIN_ZOOM = 0.02
 const MAX_ZOOM = 8
 /** Room kept clear of the floating panels when fitting notes into view: the Banknotes panel is 224 px wide */
 const FIT = { left: 260, right: 284, top: 48, bottom: 128 }
@@ -36,8 +37,8 @@ const FIT = { left: 260, right: 284, top: 48, bottom: 128 }
 const SNAP_PX = 6
 /** How long a pan or zoom pauses before banknotes are redrawn at the new view */
 const COMMIT_MS = 120
-/** Background dot spacing at `scale` px per mm */
-const gridStep = (scale: number) => scale * (scale * 10 < 12 ? 50 : 10)
+/** Background dot spacing at `scale` px per mm: every 10 mm, else 50 mm, else 500 mm, at least 12 px apart */
+const gridStep = (scale: number) => scale * (scale * 10 >= 12 ? 10 : scale * 50 >= 12 ? 50 : 500)
 
 /** Zoom level and where the canvas origin (0, 0 mm) sits on screen, in px */
 interface View {

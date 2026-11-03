@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronUp } from 'lucide-react'
-import { useEffect, useRef, useState, type ChangeEvent, type ComponentProps, type KeyboardEvent, type ReactNode } from 'react'
+import { ChevronDown, ChevronUp, CircleAlert } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type ChangeEvent, type ComponentProps, type KeyboardEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -19,7 +19,7 @@ import { TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { LENGTH_UNITS, lengthField, setLengthUnit, useLengthUnit, type LengthUnit } from '../lib/units'
+import { LENGTH_UNITS, formatLength, lengthField, setLengthUnit, useLengthUnit, type LengthUnit } from '../lib/units'
 
 // Playground-specific compositions of the shadcn primitives in components/ui
 
@@ -47,42 +47,84 @@ interface NumberInput {
    * when it isn't a value. Such a field takes text, and steps with the arrow keys itself.
    */
   parse?: (text: string) => number | undefined
+  /**
+   * What to say about a value typed past a limit, for a field that keeps it, marked as an error, until it is fixed,
+   * rather than dropping it once it is left (Keller, for a banknote's size): `over` as soon as it is typed, `under` once
+   * Enter is pressed or the field is left, as typing 150 passes 1 and 15 on the way. Nothing past a limit is taken, and
+   * what typing took on the way there (25 and 250 on the way to 2500) goes back to the value from before.
+   */
+  limitErrors?: { under: string; over: string }
 }
 
 /**
  * A number field's input: it commits while typing only when the value is in range, so a half-typed number never jumps,
- * and shows the value again once you leave it. A field that reads its own text (`parse`) steps on ↑ and ↓ itself, as
- * a number input does, to the next multiple of its step (ten steps on with Shift).
+ * and shows the value again once you leave it (or, with `limitErrors`, keeps one typed past a limit and says what is
+ * wrong with it, until it is fixed or the value changes some other way). A field that reads its own text (`parse`)
+ * steps on ↑ and ↓ itself, as a number input does, to the next multiple of its step (ten steps on with Shift).
  */
-function useNumberInput({ value, onChange, min, max, step, format = twoDecimals, parse }: NumberInput) {
-  const [draft, setDraft] = useState<string | null>(null)
+function useNumberInput({ value, onChange, min, max, step, format = twoDecimals, parse, limitErrors }: NumberInput) {
+  // What's typed and the value from before it; one kept past a limit stays only while that value does, and goes for
+  // good once it changes some other way (a scrub, an undo), so coming back to it doesn't bring it back
+  const [draft, setDraft] = useState<{ text: string; from: number; kept?: boolean } | null>(null)
+  if (draft?.kept && draft.from !== value) setDraft(null)
+  const shown = draft && (!draft.kept || draft.from === value) ? draft : null
   const snap = (v: number) => clampValue(Math.round(v / step) * step, min, max)
   const read = (text: string) => {
     if (parse) return parse(text)
     const next = Number(text)
     return text !== '' && Number.isFinite(next) ? next : undefined
   }
+  const typed = shown ? read(shown.text) : undefined
+  const error = !limitErrors || typed === undefined ? undefined
+    : typed > max ? limitErrors.over
+    : typed < min && shown?.kept ? limitErrors.under
+    : undefined
+  /** Keeps what's typed if it is past a limit, with `limitErrors`, putting back the value from before it; else lets it go */
+  const leave = () => {
+    if (!shown || !limitErrors || typed === undefined || (typed >= min && typed <= max)) return false
+    setDraft({ ...shown, kept: true })
+    if (value !== shown.from) onChange(shown.from)
+    return true
+  }
   const input = {
     ...(parse ? { type: 'text', autoComplete: 'off', spellCheck: false } : { type: 'number', min, max, step }),
-    value: draft ?? format(value),
+    value: shown?.text ?? format(value),
+    'aria-invalid': error ? true : undefined,
     onChange: (e: ChangeEvent<HTMLInputElement>) => {
-      setDraft(e.target.value)
+      const from = shown?.from ?? value
+      setDraft({ text: e.target.value, from })
       const next = read(e.target.value)
       if (next !== undefined && next >= min && next <= max) onChange(next)
+      else if (limitErrors && next !== undefined && next > max && value !== from) onChange(from)
     },
-    onBlur: () => setDraft(null),
+    onBlur: () => {
+      if (!leave()) setDraft(null)
+    },
     onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter') e.currentTarget.blur()
-      else if (parse && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      if (e.key === 'Enter') {
+        // Past a limit it stays in the field to be fixed, and doesn't send its form
+        if (leave()) e.preventDefault()
+        else e.currentTarget.blur()
+      } else if (parse && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault()
-        const at = ((draft === null ? undefined : read(draft)) ?? value) / step
+        const at = (typed ?? value) / step
         const steps = e.shiftKey ? 10 : 1
         onChange(clampValue((e.key === 'ArrowUp' ? Math.floor(at + 1e-9) + steps : Math.ceil(at - 1e-9) - steps) * step, min, max))
         setDraft(null)
       }
     },
   }
-  return { input, snap }
+  return { input, snap, error }
+}
+
+/** What's wrong with a value typed into a field, under it in red */
+function FieldError({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <p id={id} role="alert" className="flex items-center gap-1 text-xs text-destructive">
+      <CircleAlert className="size-3.5 shrink-0" />
+      {children}
+    </p>
+  )
 }
 
 /**
@@ -100,6 +142,7 @@ export function ScrubField({
   step = 1,
   format,
   parse,
+  limitErrors,
   unit,
   title,
   size = 'default',
@@ -119,14 +162,16 @@ export function ScrubField({
   className?: string
 }) {
   const [scrub, setScrub] = useState<{ x: number; start: number } | null>(null)
-  const { input, snap } = useNumberInput({ value, onChange, min, max, step, format, parse })
+  const { input, snap, error } = useNumberInput({ value, onChange, min, max, step, format, parse, limitErrors })
+  const errorId = useId()
   const sm = size === 'sm'
 
-  return (
+  const field = (
     <div
       title={title}
       className={cn(
         'flex min-w-0 items-center rounded-md border border-transparent bg-muted/98 focus-within:border-ring hover:border-border',
+        error && 'border-destructive focus-within:border-destructive hover:border-destructive',
         sm ? 'h-7' : 'h-8',
         className,
       )}
@@ -149,6 +194,7 @@ export function ScrubField({
       </span>
       <input
         {...input}
+        aria-describedby={error ? errorId : undefined}
         className={cn(
           'h-full w-full min-w-0 bg-transparent tabular-nums outline-none [&::-webkit-inner-spin-button]:appearance-none',
           sm ? 'pl-0.5 text-xs' : 'text-sm',
@@ -158,6 +204,13 @@ export function ScrubField({
         ? <span className={cn('text-xs text-muted-foreground', sm ? (trailing ? 'pr-0.5' : 'pr-1.5') : 'pr-2')}>{unit}</span>
         : unit && <span className={cn('flex shrink-0 items-center', sm ? 'pr-0.5' : 'pr-1')}>{unit}</span>}
       {trailing}
+    </div>
+  )
+  if (!limitErrors) return field
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      {field}
+      {error && <FieldError id={errorId}>{error}</FieldError>}
     </div>
   )
 }
@@ -200,18 +253,25 @@ type LengthProps = {
   step: number
   /** Steps exactly `step`, converted, as a section's twelfths of the thread */
   exactStep?: boolean
+  /** A length typed past a limit stays, marked as an error with the limit, until it is fixed (a banknote's size) */
+  strict?: boolean
 }
+
+/** What a strict length field says about a length typed past its limits, in the unit it reads in */
+const lengthLimitErrors = (min: number, max: number, unit: LengthUnit) =>
+  ({ under: `Min ${formatLength(min, unit)}`, over: `Max ${formatLength(max, unit)}` })
 
 /**
  * A ScrubField for a length: it takes and gives mm, and shows, reads and steps in the unit picked from the menu on its
  * unit, rounded to that unit's decimals. A unit typed after the number (6.14in, 6.14", 15.6cm, 442pt) converts without
  * switching. The number shown at a limit can always be typed.
  */
-export function LengthField({ value, onChange, min, max, step, exactStep, ...field }: LengthProps &
-  Omit<ComponentProps<typeof ScrubField>, keyof LengthProps | 'format' | 'parse' | 'unit'>) {
+export function LengthField({ value, onChange, min, max, step, exactStep, strict, ...field }: LengthProps &
+  Omit<ComponentProps<typeof ScrubField>, keyof LengthProps | 'format' | 'parse' | 'unit' | 'limitErrors'>) {
   const unit = useLengthUnit((s) => s.unit)
   const { toMm, ...length } = lengthField(unit, { value, min, max, step, exactStep })
-  return <ScrubField {...field} {...length} onChange={(typed) => onChange(toMm(typed))} unit={<UnitMenu unit={unit} />} />
+  return <ScrubField {...field} {...length} limitErrors={strict ? lengthLimitErrors(min, max, unit) : undefined}
+    onChange={(typed) => onChange(toMm(typed))} unit={<UnitMenu unit={unit} />} />
 }
 
 const clampValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
@@ -378,6 +438,7 @@ export function NumberField({
   step = 1,
   format,
   parse,
+  limitErrors,
   unit,
   className,
 }: Omit<NumberInput, 'step'> & {
@@ -386,11 +447,13 @@ export function NumberField({
   unit?: ReactNode
   className?: string
 }) {
-  const { input } = useNumberInput({ value, onChange, min, max, step, format, parse })
-  return (
+  const { input, error } = useNumberInput({ value, onChange, min, max, step, format, parse, limitErrors })
+  const errorId = useId()
+  const field = (
     <div className={cn('relative', className)}>
       <Input
         {...input}
+        aria-describedby={error ? errorId : undefined}
         className={cn('h-8 text-right tabular-nums [&::-webkit-inner-spin-button]:appearance-none', unit && (typeof unit === 'string' ? 'pr-7' : 'pr-8'))}
       />
       {typeof unit === 'string' ? (
@@ -400,13 +463,21 @@ export function NumberField({
       ) : unit && <span className="absolute inset-y-0 right-1 flex items-center">{unit}</span>}
     </div>
   )
+  if (!limitErrors) return field
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      {field}
+      {error && <FieldError id={errorId}>{error}</FieldError>}
+    </div>
+  )
 }
 
 /** A NumberField for a length, as `LengthField`: mm in and out, shown and typed in the unit picked from its unit menu */
-export function LengthNumberField({ value, onChange, min, max, step, exactStep, className }: LengthProps & { className?: string }) {
+export function LengthNumberField({ value, onChange, min, max, step, exactStep, strict, className }: LengthProps & { className?: string }) {
   const unit = useLengthUnit((s) => s.unit)
   const { toMm, ...length } = lengthField(unit, { value, min, max, step, exactStep })
-  return <NumberField {...length} className={className} onChange={(typed) => onChange(toMm(typed))} unit={<UnitMenu unit={unit} />} />
+  return <NumberField {...length} className={className} limitErrors={strict ? lengthLimitErrors(min, max, unit) : undefined}
+    onChange={(typed) => onChange(toMm(typed))} unit={<UnitMenu unit={unit} />} />
 }
 
 export function RangeField({

@@ -121,12 +121,13 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
             }}
           />
         </Labeled>
-        <div className="grid grid-cols-2 gap-2">
+        {/* A size typed past the limits shows an error under its field and isn't taken (Keller) */}
+        <div className="grid grid-cols-2 items-start gap-2">
           <Labeled label="Width">
-            <LengthField label="W" value={note.widthMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} onChange={(w) => setSize(w, note.heightMm)} />
+            <LengthField label="W" value={note.widthMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} strict onChange={(w) => setSize(w, note.heightMm)} />
           </Labeled>
           <Labeled label="Height">
-            <LengthField label="H" value={note.heightMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} onChange={(h) => setSize(note.widthMm, h)} />
+            <LengthField label="H" value={note.heightMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} strict onChange={(h) => setSize(note.widthMm, h)} />
           </Labeled>
         </div>
       </Section>
