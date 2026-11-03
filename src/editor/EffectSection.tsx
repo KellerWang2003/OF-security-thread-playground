@@ -196,7 +196,7 @@ export function EffectSection({ note, set, printNote = note }: { note: Note; set
       <div className="grid grid-cols-2 gap-2 rounded-md bg-muted/40 p-2 text-xs">
         <div title="Ridge angle from the banknote's horizontal">
           <div className="text-muted-foreground">Lens angle</div>
-          <div className="text-sm font-medium tabular-nums">{round(Math.abs(lensAngle(lens)), 1)}° {lensAngle(lens) < 0 ? '\\' : lensAngle(lens) > 0 && lensAngle(lens) < 90 ? '/' : ''}</div>
+          <div className="text-sm font-medium tabular-nums">{round(Math.abs(lensAngle(lens)), 1)}° {lensAngle(lens) < 0 ? '/' : lensAngle(lens) > 0 && lensAngle(lens) < 90 ? '\\' : ''}</div>
         </div>
         <div title="Degrees of tilt across the ridges for one full cycle">
           <div className="text-muted-foreground">Lens cycle</div>

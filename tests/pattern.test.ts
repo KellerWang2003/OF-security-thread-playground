@@ -237,7 +237,7 @@ describe('presets', () => {
 
   it('Chevron lock: arms at ±45° step together up and down and opposite ways side to side', () => {
     const note = withPreset('chevron')
-    expect(preparePattern(note).sections.map((s) => s.angle)).toEqual([45, -45])
+    expect(preparePattern(note).sections.map((s) => s.angle)).toEqual([-45, 45])
     const [a, b] = patternMix(note, { x: 0, y: 8 })
     expect(a.current).toBe(b.current)
     expect(a.current).not.toBe(2)

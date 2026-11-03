@@ -34,7 +34,7 @@ export function PatternPicture({ note, pattern = note.pattern, width = 56, heigh
       className={cn('shrink-0 overflow-hidden rounded-[3px] bg-muted', className)}>
       <defs>
         {sections.map((s, i) => (
-          <pattern key={s.section.id} id={`${uid}-${i}`} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform={`rotate(${-s.angle})`}>
+          <pattern key={s.section.id} id={`${uid}-${i}`} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform={`rotate(${s.angle})`}>
             <line x1="0" y1="2" x2="4" y2="2" stroke="currentColor" strokeWidth="1.3" />
           </pattern>
         ))}

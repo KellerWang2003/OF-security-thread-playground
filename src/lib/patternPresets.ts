@@ -58,11 +58,11 @@ export function presetPattern(note: PresetNote, kind: PresetKind): ThreadPattern
       ] }
     }
     case 'chevron': {
-      // Ridges lean one way when 1 → 5 runs the same way on both tilts (`lensAngle`): one arm each way
+      // Ridges lean \ when 1 → 5 runs the same way on both tilts (`lensAngle`), / when they run opposite ways
       const down = lensState(note.tilt, note.frames).dirY < 0
       return { repeatMm: repeat, mixed: true, sections: [
-        { id: id(), name: 'Arm /', ...lanes, acrossStart: 0, acrossEnd: 0.5, lens: lensFor(note, 'both', { runX: down ? 'left' : 'right' }) },
-        { id: id(), name: 'Arm \\', ...lanes, acrossStart: 0.5, acrossEnd: 1, lens: lensFor(note, 'both', { runX: down ? 'right' : 'left' }) },
+        { id: id(), name: 'Arm /', ...lanes, acrossStart: 0, acrossEnd: 0.5, lens: lensFor(note, 'both', { runX: down ? 'right' : 'left' }) },
+        { id: id(), name: 'Arm \\', ...lanes, acrossStart: 0.5, acrossEnd: 1, lens: lensFor(note, 'both', { runX: down ? 'left' : 'right' }) },
       ] }
     }
     default:

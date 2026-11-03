@@ -125,6 +125,13 @@ describe('the print of a thread with sections', () => {
     // The two arms lean opposite ways
     const [a, b] = sections.map((p) => Math.sign((p.lens.cycleX ?? 0) * p.lens.dirY * (p.lens.cycleY ?? 0) * p.lens.dirX))
     expect(a).toBe(-b)
+    // Each the way its name says: / rises to the right, and y runs down the thread
+    expect(sections.map((p) => p.section.name)).toEqual(['Arm /', 'Arm \\'])
+    sections.forEach((p, i) => {
+      const rise = i === 0 ? -1 : 1
+      const w = weave(p.lens, n.frames, 0.4)
+      for (let t = 0.2; t < 2; t += 0.3) expect(ridgePhase(w, 1 + t, 4 + rise * t)).toBeCloseTo(ridgePhase(w, 1, 4), 9)
+    })
   })
 
   it('shows each section the frames its own track gives, and nothing in a gap', () => {

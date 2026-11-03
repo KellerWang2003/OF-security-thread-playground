@@ -188,7 +188,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
         <svg className="pointer-events-none absolute inset-0 overflow-visible" width={width} height={height} aria-hidden>
           <defs>
             {prepared.sections.map((p, i) => (
-              <pattern key={p.section.id} id={`${uid}-${i}`} width="9" height="9" patternUnits="userSpaceOnUse" patternTransform={`rotate(${-p.angle})`}>
+              <pattern key={p.section.id} id={`${uid}-${i}`} width="9" height="9" patternUnits="userSpaceOnUse" patternTransform={`rotate(${p.angle})`}>
                 <line x1="0" y1="5" x2="9" y2="5" stroke="black" strokeOpacity="0.35" strokeWidth="1" />
                 <line x1="0" y1="4" x2="9" y2="4" stroke="white" strokeOpacity="0.75" strokeWidth="1" />
               </pattern>

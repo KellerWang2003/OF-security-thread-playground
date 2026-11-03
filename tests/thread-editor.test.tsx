@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../src/App'
+import { preparePattern } from '../src/lib/pattern'
 import { usePatternOffsets } from '../src/lib/patternOffset'
+import { ridgePhase, weave } from '../src/lib/print'
 import { addNote, updateNote, useProjects } from '../src/lib/store'
 import { createNote } from '../src/lib/notes'
 import { setTilt } from '../src/tilt/tilt'
@@ -322,5 +324,31 @@ describe('thread editor', () => {
     expect(within(editor).getByRole('heading', { name: 'Lane ↕' })).toBeDefined()
     await user.keyboard('{Delete}')
     expect(sections().map((s) => s.name)).toEqual(['Lane ↔'])
+  })
+
+  it('draws every section\'s ridges the way the print cuts them', async () => {
+    const user = await openDemo('thread-ridges-ui-test')
+    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    const editor = screen.getByRole('region', { name: 'Thread editor' })
+    await user.click(within(editor).getByRole('button', { name: /^Chevron lock/ }))
+    await user.click(within(editor).getByRole('button', { name: 'Ridges', exact: true }))
+    // A hatch's lines run at its rotation, which SVG turns clockwise (y down, as on the print)
+    const runs = (hatch: Element) => {
+      const turn = (Number(/rotate\((-?[\d.]+)\)/.exec(hatch.getAttribute('patternTransform')!)![1]) * Math.PI) / 180
+      return { x: Math.cos(turn), y: Math.sin(turn) }
+    }
+    const onThread = [...strip().element.querySelectorAll('pattern')]
+    const inList = sections().map((s) => within(editor).getByRole('button', { name: s.name, exact: true }).querySelector('pattern')!)
+    const inPreset = [...within(editor).getByRole('button', { name: /^Chevron lock/ }).querySelectorAll('pattern')]
+    preparePattern(note()).sections.forEach((p, i) => {
+      const w = weave(p.lens, note().frames, 0.4)
+      for (const d of [onThread[i], inList[i], inPreset[i]].map(runs)) {
+        for (let t = 0.2; t < 2; t += 0.3) expect(ridgePhase(w, 1 + t * d.x, 4 + t * d.y)).toBeCloseTo(ridgePhase(w, 1, 4), 9)
+      }
+    })
+    // Arm / rises to the right, and the lens panel says so
+    const arm = runs(onThread[0])
+    expect(arm.x * arm.y).toBeLessThan(0)
+    expect(within(editor).getByText('Lens angle').nextElementSibling!.textContent).toBe('45° /')
   })
 })
