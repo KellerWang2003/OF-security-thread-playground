@@ -434,11 +434,6 @@ export function nameAfter(pattern: ThreadPattern, source: Pick<ThreadSection, 'n
 
 const newId = () => crypto.randomUUID()
 
-export function addSection(pattern: ThreadPattern, rect: Rect): { pattern: ThreadPattern; id: string } {
-  const id = newId()
-  return { pattern: { ...pattern, sections: [...pattern.sections, { id, name: nextName(pattern), ...rectOf(rect) }] }, id }
-}
-
 /** One section cut in two, along the thread or across it; the new half keeps its lens and track and is named after it. Undefined when it's too small to cut */
 export function splitSection(pattern: ThreadPattern, id: string, direction: 'along' | 'across', name?: string): { pattern: ThreadPattern; id: string } | undefined {
   const s = pattern.sections.find((x) => x.id === id)
@@ -499,13 +494,13 @@ export function freeRect(pattern: ThreadPattern): Rect | undefined {
 }
 
 /**
- * A new section: a plain one (the banknote's lens, every frame) over the largest empty area, or else cut from
+ * A new section: over the largest empty area, looking like the section beside it (`placeSection`), or else cut from
  * `fromId` (or the largest section) along its longer side, keeping that section's lens and track so the thread still
  * looks the same, and named after it. Undefined when there's no room.
  */
 export function addBlankSection(pattern: ThreadPattern, widthMm: number, fromId?: string): { pattern: ThreadPattern; id: string } | undefined {
   const free = freeRect(pattern)
-  if (free) return addSection(pattern, free)
+  if (free) return placeSection(pattern, free, widthMm)
   const largest = pattern.sections.reduce((a, b) => (area(b) > area(a) ? b : a))
   const from = pattern.sections.find((s) => s.id === fromId) ?? largest
   return splitLonger(pattern, from.id, widthMm, nameAfter(pattern, from)) ?? (from === largest ? undefined : splitLonger(pattern, largest.id, widthMm, nameAfter(pattern, largest)))
@@ -632,6 +627,21 @@ export function neighbourLook(pattern: ThreadPattern, rect: Rect, widthMm: numbe
   return best
 }
 
+/**
+ * A new section over `rect`, an empty area of the repeat, carrying on the thread around it: the lens and track of
+ * the section `neighbourLook` picks, and named after it. Plain (the banknote's lens, every frame, "Section N") only
+ * when it touches no section. Drawing, Add section and Fill all place new sections this way.
+ */
+export function placeSection(pattern: ThreadPattern, rect: Rect, widthMm: number): { pattern: ThreadPattern; id: string } {
+  const look = neighbourLook(pattern, rect, widthMm)
+  const id = newId()
+  const section: ThreadSection = {
+    id, name: look ? nameAfter(pattern, look) : nextName(pattern), ...rectOf(rect),
+    ...(look?.lens && { lens: look.lens }), ...(look?.track && { track: look.track }),
+  }
+  return { pattern: { ...pattern, sections: [...pattern.sections, section] }, id }
+}
+
 /** The section that `rect` would grow into one bigger rectangle: sharing one whole side with it, within the repeat (along the thread first) */
 function growInto(pattern: ThreadPattern, rect: Rect, widthMm: number): ThreadSection | undefined {
   return touches(pattern, rect, widthMm).filter((t) => t.exact && t.side !== 'seam').toSorted(closer).at(0)?.section
@@ -640,7 +650,7 @@ function growInto(pattern: ThreadPattern, rect: Rect, widthMm: number): ThreadSe
 /**
  * Every empty area of the repeat (or only the one around `at`) filled, so the thread carries on as it looks next to
  * it: a section that shares a whole side with the gap grows over it (a lane cut short runs on again), otherwise a
- * new section takes the lens and track of the one it sits in line with, else the one it borders most. The id is the
+ * new section is placed there (`placeSection`), like the one it sits in line with, else the one it borders most. The id is the
  * section over the largest gap, to select. Undefined when there's no gap.
  */
 export function fillGaps(pattern: ThreadPattern, widthMm: number, at?: PatternPoint): { pattern: ThreadPattern; id: string } | undefined {
@@ -655,9 +665,8 @@ export function fillGaps(pattern: ThreadPattern, widthMm: number, at?: PatternPo
       first ??= grow.id
       continue
     }
-    const look = neighbourLook(next, rect, widthMm)
-    const added = addSection(next, rect)
-    next = look ? updateSection(added.pattern, added.id, { ...(look.lens && { lens: look.lens }), ...(look.track && { track: look.track }) }) : added.pattern
+    const added = placeSection(next, rect, widthMm)
+    next = added.pattern
     first ??= added.id
   }
   return first === undefined ? undefined : { pattern: next, id: first }

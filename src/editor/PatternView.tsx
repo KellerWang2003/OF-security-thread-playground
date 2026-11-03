@@ -4,12 +4,12 @@ import { ThreadArt } from '../components/NoteView'
 import { clamp } from '../lib/frames'
 import { lensMix } from '../lib/lens'
 import {
-  addSection,
   drawRect,
   fillGaps,
   moveRect,
   patternMix,
   patternOf,
+  placeSection,
   preparePattern,
   resizeEdge,
   updateSection,
@@ -49,8 +49,9 @@ function layout(box: { width: number; height: number }, repeatMm: number, widthM
 /**
  * The centre of the thread editor: the thread magnified over two or three repeats, in its own direction, showing
  * the real artwork at the current tilt, with the repeat's ends, each section's outline and, optionally, its ridges.
- * Drag on empty thread to draw a section, drag a section to move it or its edges to resize it (snapping to 0.5 mm
- * along and twelfths across); a click selects, and a double-click on an empty area fills it with a new section.
+ * Drag on empty thread to draw a section (it takes the look of the section beside it, as Fill does, or plays plain
+ * when it touches none), drag a section to move it or its edges to resize it (snapping to 0.5 mm along and twelfths
+ * across); a click selects, and a double-click on an empty area fills it.
  */
 export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
   note: Note
@@ -161,7 +162,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
     setPreview(undefined)
     const rect = g.rect
     if (rect) {
-      const added = addSection(pattern, rect)
+      const added = placeSection(pattern, rect, thread.widthMm)
       write(added.pattern)
       onSelect(added.id)
     } else if (!g.moved) {

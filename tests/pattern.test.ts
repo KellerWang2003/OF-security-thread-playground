@@ -17,6 +17,7 @@ import {
   nameAfter,
   padTrack,
   patternMix,
+  placeSection,
   playbackLens,
   playbackTilt,
   preparePattern,
@@ -438,11 +439,11 @@ describe('editing sections', () => {
     expect(freeRect(typed)).toEqual({ startMm: 1.5, endMm: 4, acrossStart: 0, acrossEnd: 1 })
   })
 
-  it('adds a plain section in the largest gap, or cuts the selected section in two, keeping its look, when there is none', () => {
+  it('adds a section in the largest gap, like the one beside it, or cuts the selected section in two, keeping its look, when there is none', () => {
     const covered = lanes()
     const [side, updown] = covered.sections
     const filled = addBlankSection(removeSection(covered, updown.id), 4)!
-    expect(filled.pattern.sections[1]).toEqual({ id: filled.id, name: 'Section 2', startMm: 0, endMm: 4, acrossStart: 0.5, acrossEnd: 1 })
+    expect(filled.pattern.sections[1]).toEqual({ id: filled.id, name: 'Lane ↔ 2', startMm: 0, endMm: 4, acrossStart: 0.5, acrossEnd: 1, lens: side.lens, track: side.track })
     // No gap: the selected lane is cut along its longer side, and the new half keeps its lens and track, so the
     // thread looks the same until it's changed
     const cut = addBlankSection(covered, 4, side.id)!
@@ -517,10 +518,22 @@ describe('filling gaps', () => {
     const corner = fillGaps({ repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 1, acrossEnd: 0.5, track: ['f1'] })] }, 4)!
     // The largest gap gets a new section like the corner; the corner then grows over the strip beside it
     expect(corner.pattern.sections.map((s) => [s.name, s.startMm, s.endMm, s.acrossStart, s.acrossEnd, s.track])).toEqual([
-      ['S', 0, 1, 0, 1, ['f1']], ['Section 2', 1, 4, 0, 1, ['f1']],
+      ['S', 0, 1, 0, 1, ['f1']], ['S 2', 1, 4, 0, 1, ['f1']],
     ])
     expect(corner.id).toBe(corner.pattern.sections[1].id)
     expect(issues({ ...banknote(), pattern: corner.pattern }, 'gaps')).toEqual([])
+  })
+
+  it('places a new section in a gap like the one beside it, the same way Fill does, or plain when it touches none', () => {
+    const covered = lanes()
+    const [side, updown] = covered.sections
+    const gap = removeSection(covered, updown.id)
+    // Beside the ↔ lane, part of its length: its look and its name
+    const beside = placeSection(gap, { startMm: 1, endMm: 3, acrossStart: 0.5, acrossEnd: 0.75 }, 4)
+    expect(beside.pattern.sections[1]).toEqual({ id: beside.id, name: 'Lane ↔ 2', startMm: 1, endMm: 3, acrossStart: 0.5, acrossEnd: 0.75, lens: side.lens, track: side.track })
+    // Out in the middle of the gap: plain
+    const alone = placeSection(gap, { startMm: 1, endMm: 3, acrossStart: 0.75, acrossEnd: 11 / 12 }, 4)
+    expect(alone.pattern.sections[1]).toEqual({ id: alone.id, name: 'Section 2', startMm: 1, endMm: 3, acrossStart: 0.75, acrossEnd: 11 / 12 })
   })
 })
 

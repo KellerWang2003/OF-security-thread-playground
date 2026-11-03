@@ -236,9 +236,15 @@ describe('thread editor', () => {
     fireEvent.doubleClick(strip().element, at(7, 0.2))
     expect(sections()).toEqual([side, updown])
 
-    // A whole lane deleted: the other grows across the thread
+    // A whole lane deleted. A section drawn beside the other lane takes its look and its name
     await user.click(within(editor).getByRole('button', { name: 'Lane ↕', exact: true }))
     await user.keyboard('{Delete}')
+    drag(strip().element, { along: 0.6, across: 0.52 }, { along: 2.9, across: 0.95 })
+    expect(sections()[1]).toMatchObject({ name: 'Lane ↔ 2', startMm: 0.5, endMm: 3, acrossStart: 0.5, lens: side.lens })
+    expect(sections()[1].track).toEqual(side.track)
+    expect(within(editor).getByRole('heading', { name: 'Lane ↔ 2' })).toBeDefined()
+    // Undone, a double-click fills the gap instead: the lane grows across the thread
+    await user.click(within(editor).getByRole('button', { name: 'Undo', exact: true }))
     fireEvent.doubleClick(strip().element, at(5, 0.8))
     expect(sections()).toEqual([{ ...side, acrossEnd: 1 }])
     expect(within(editor).getByRole('heading', { name: 'Lane ↔' })).toBeDefined()
