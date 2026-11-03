@@ -1,0 +1,104 @@
+import { CircleCheck, TriangleAlert } from 'lucide-react'
+import { useEffect } from 'react'
+import { create } from 'zustand'
+import { cn } from '@/lib/utils'
+import { Drawer, Labeled, LengthField, Section, SwitchField } from '../components/controls'
+import { CUT_MM, designChecks, driftWithin, failingChecks, setCutDrift, useCutDrift, useDesign, type DesignCheck } from '../lib/continuous'
+import { useReading } from '../lib/relief'
+import { updateNote } from '../lib/store'
+import type { Note } from '../lib/types'
+import { useLengthUnit } from '../lib/units'
+import type { NoteRef } from './frameActions'
+import { Explain } from './LensVisuals'
+
+/**
+ * Under the banknote's background, for an uploaded design: the continuous check. On, the canvas shows the design's
+ * neighbours on the print sheet around the banknote, where its edges break and the cut tolerance's line, and the Checks
+ * drawer lists the breaks. Drift previews a cut landing that far off.
+ */
+export function ContinuousSection({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
+  const update = (change: (n: Note) => Note) => updateNote(noteRef.projectId, noteRef.noteId, change)
+  const check = note.continuous
+  return (
+    <Section nested>
+      <SwitchField label="Continuous" title="Check that the design carries on where its edges meet its neighbours' on the print sheet"
+        checked={check !== undefined}
+        onChange={(on) => update(({ continuous: _check, ...n }) => (on ? { ...n, continuous: { cutMm: CUT_MM.initial } } : n))} />
+      {check && (
+        <>
+          <Labeled label="Cut tolerance">
+            <LengthField label="±" title="How far either side of each edge the cut may land: the dashed line inside each edge"
+              value={check.cutMm} min={CUT_MM.min} max={CUT_MM.max} step={CUT_MM.step} onChange={(cutMm) => update((n) => ({ ...n, continuous: { cutMm } }))} />
+          </Labeled>
+          {check.cutMm > 0 && <DriftFields noteId={note.id} cutMm={check.cutMm} />}
+        </>
+      )}
+    </Section>
+  )
+}
+
+/**
+ * A cut landing up to the tolerance off, across and down: the design slides the other way and its neighbours come in at
+ * the edges. A way of looking, not saved or undone
+ */
+function DriftFields({ noteId, cutMm }: { noteId: string; cutMm: number }) {
+  const drift = driftWithin(useCutDrift((s) => s.drifts[noteId]), cutMm)
+  // Only while the tab shows it: closing the tab, the banknote or the check brings the cut back
+  useEffect(() => () => setCutDrift(noteId, undefined), [noteId])
+  return (
+    <Labeled label="Drift">
+      <div className="grid grid-cols-2 gap-2">
+        <LengthField label="X" title="Preview the cut landing this far right, or left below 0: not saved" value={drift.x} min={-cutMm} max={cutMm}
+          step={CUT_MM.step} onChange={(x) => setCutDrift(noteId, { ...drift, x })} />
+        <LengthField label="Y" title="Preview the cut landing this far down, or up below 0: not saved" value={drift.y} min={-cutMm} max={cutMm}
+          step={CUT_MM.step} onChange={(y) => setCutDrift(noteId, { ...drift, y })} />
+      </div>
+    </Labeled>
+  )
+}
+
+/** Whether the Checks drawer is open, kept from banknote to banknote as the Preview drawer is */
+const useChecksDrawer = create<{ open: boolean }>(() => ({ open: false }))
+
+/**
+ * At the Banknote tab's foot, for an uploaded design, as Thread Studio's Checks: with Continuous on, whether the design is
+ * at the banknote's size and its edges join; then whether the paper is light under the watermark and around the thread.
+ * Warnings only, closed by default, the number of checks with something to look at beside its title.
+ */
+export function ChecksDrawer({ note }: { note: Note }) {
+  const open = useChecksDrawer((s) => s.open)
+  const design = useDesign(note)
+  const reading = useReading(note.watermark)
+  const unit = useLengthUnit((s) => s.unit)
+  const checks = design ? designChecks(note, design, reading, unit) : []
+  const failing = failingChecks(checks)
+  return (
+    <Drawer title="Checks" open={open} onOpenChange={(next) => useChecksDrawer.setState({ open: next })}
+      action={failing > 0 ? <span className="text-xs text-amber-600 tabular-nums dark:text-amber-500">{failing}</span> : undefined}>
+      <CheckList checks={checks} />
+    </Drawer>
+  )
+}
+
+/** Every check as a line, ticked or with what breaks it, as Thread Studio lists its rules */
+function CheckList({ checks }: { checks: DesignCheck[] }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {checks.map((check) => {
+        const clear = check.issues.length === 0
+        const Icon = clear ? CircleCheck : TriangleAlert
+        return (
+          <div key={check.id} data-check={check.id} className="flex flex-col gap-0.5">
+            <div className={cn('flex items-center gap-1.5 text-xs', clear && 'text-muted-foreground')}>
+              <Icon className={cn('size-3.5 shrink-0', clear ? 'text-emerald-600 dark:text-emerald-500' : 'text-amber-600 dark:text-amber-500')} />
+              <Explain label={check.title} caption={check.explain} />
+            </div>
+            {check.issues.map((issue, k) => (
+              <p key={k} title={issue.title} className="py-1 pl-5 text-xs leading-snug text-muted-foreground">{issue.text}</p>
+            ))}
+          </div>
+        )
+      })}
+    </div>
+  )
+}

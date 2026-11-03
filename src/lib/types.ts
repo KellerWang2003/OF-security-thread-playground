@@ -171,6 +171,16 @@ export interface WatermarkLevels {
 }
 
 /**
+ * The continuous design check, on while present: the banknote's uploaded design should carry on where its edges meet
+ * its neighbours' on the print sheet, top into bottom and left into right (continuous.ts). A check only: it changes
+ * nothing about how the banknote looks or exports.
+ */
+export interface ContinuousDesign {
+  /** How far either side of each edge the cut may land, mm: the dashed line inside each edge */
+  cutMm: number
+}
+
+/**
  * Lens settings a section keeps for itself while mixed angles is on: the same fields as the banknote's lens. Any
  * left out take their defaults, not the banknote's, so a section's lens never shifts when the shared one changes.
  */
@@ -222,6 +232,8 @@ export interface Note {
   tilt: TiltSettings
   /** A sibling of the thread; absent until one is added */
   watermark?: Watermark
+  /** The continuous design check for an uploaded design; absent while it is off */
+  continuous?: ContinuousDesign
   /** The thread's sections; absent on banknotes from before patterns, which are one section with the banknote's lens */
   pattern?: ThreadPattern
 }

@@ -14,6 +14,7 @@ import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
 import { fitWatermark, moveWatermarkTo } from '../lib/watermark'
+import { ChecksDrawer, ContinuousSection } from './DesignChecks'
 import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
 import { PanelResizer } from './PanelResizer'
 import { WatermarkPanel } from './WatermarkPanel'
@@ -80,6 +81,8 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
     })
   const portrait = note.heightMm >= note.widthMm
   const background = useImageUrl(note.faceImageId)
+  // An uploaded design can be checked: whether it joins up at its edges, and is light where the brief asks
+  const hasDesign = note.background === 'image' && note.faceImageId !== undefined
 
   return (
     <>
@@ -170,6 +173,7 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
         </div>
         </Labeled>
       </Section>
+      {hasDesign && <ContinuousSection note={note} noteRef={noteRef} />}
       </Group>
       </TabsContent>
 
@@ -224,6 +228,7 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
         </TabsContent>
       )}
       {layer === 'thread' && <PreviewDrawer note={note} />}
+      {layer === 'note' && hasDesign && <ChecksDrawer note={note} />}
       </Tabs>
     </Panel>
     </>

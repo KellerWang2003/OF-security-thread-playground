@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { NoteView } from '../components/NoteView'
+import { driftWithin, useCutDrift } from '../lib/continuous'
 import { clamp } from '../lib/frames'
 import { lensState } from '../lib/lens'
 import { playbackPlan } from '../lib/moves'
@@ -17,6 +18,7 @@ import type { Note, Watermark } from '../lib/types'
 import { lengthIn, useLengthUnit } from '../lib/units'
 import { moveWatermark } from '../lib/watermark'
 import { setTilt, springToFlat, useTilt, useTiltLoop } from '../tilt/tilt'
+import { EdgeMarks, NeighbourRing } from './ContinuousView'
 import { addImageFrames, type NoteRef } from './frameActions'
 import { WatermarkEditor } from './WatermarkEditor'
 import { updateWatermark, type Layer } from './watermarkActions'
@@ -153,6 +155,7 @@ export function Canvas({
   const plan = useMemo(() => playbackPlan(reference ? playbackTilt(reference) : { cycleDeg: 30, transition: 0 }, loopLens), [reference, loopLens])
   useTiltLoop(plan, loopLens.viewDeg)
   const offsets = usePatternOffsets((s) => s.offsets)
+  const drifts = useCutDrift((s) => s.drifts)
   const unit = useLengthUnit((s) => s.unit)
 
   // Until the first pan or zoom, the view simply fits every note
@@ -506,12 +509,16 @@ export function Canvas({
           const picked = isSelected ? layer : undefined
           const hovered = hover?.noteId === note.id && hover.part !== picked ? hover.part : undefined
           const ref: NoteRef = { projectId, noteId: note.id }
+          // The continuous check shows around an uploaded design while the banknote itself is picked, with the drift it previews
+          const check = picked === 'note' && note.background === 'image' && note.faceImageId ? note.continuous : undefined
+          const drift = check ? driftWithin(drifts[note.id], check.cutMm) : undefined
           return (
             <div
               key={note.id}
               className="absolute"
               style={{ left: current.x + note.x * scale, top: current.y + note.y * scale }}
             >
+              {drift && <NeighbourRing note={note} scale={scale} drift={drift} quiet={quiet} />}
               <div
                 data-note-label={note.id}
                 className={cn(
@@ -538,7 +545,8 @@ export function Canvas({
                 {/* Editing windows shows the banknote flat with its watermark faint; placing the watermark, flat with it clear */}
                 <NoteView note={note} scale={scale} live perspective={perspective && !editingThis && !placingThis} sheen={sheen}
                   reveal={editingThis ? 0 : placingThis ? 1 : undefined} showWindowCuts={editingThis} showFrameNumber={frameNumbers} offsetMm={offsets[note.id]}
-                  selected={picked === 'note' || editingThis || placingThis || quiet ? undefined : picked} hovered={hovered === 'note' ? undefined : hovered} />
+                  selected={picked === 'note' || editingThis || placingThis || quiet ? undefined : picked} hovered={hovered === 'note' ? undefined : hovered}
+                  faceShiftMm={drift && (drift.x || drift.y) ? drift : undefined} />
                 {placingThis && (
                   <WatermarkEditor note={note} watermark={note.watermark!} scale={scale} onChange={(next) => updateWatermark(ref, () => next)} />
                 )}
@@ -547,6 +555,7 @@ export function Canvas({
                     onChange={(sections) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, windows: { ...n.thread.windows, sections } } }))} />
                 )}
               </div>
+              {drift && <EdgeMarks note={note} scale={scale} drift={drift} quiet={quiet} />}
               {picked === 'thread' && !quiet && onEditThread && (
                 // Just under the picked thread (under the banknote for a vertical one), the way into the thread editor. It
                 // keeps its size while a zoom is under way, as the labels do, and takes its own clicks

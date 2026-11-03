@@ -10,6 +10,7 @@ import { threadWindowMask, windowEdges } from '../lib/thread'
 import type { Frame, Note } from '../lib/types'
 import { paintRelief, reliefPixels, useRelief } from '../lib/relief'
 import { useTilt } from '../tilt/tilt'
+import { DesignTiles } from './DesignTiles'
 
 // Height ÷ width of each image, once loaded
 const aspects = new Map<string, number>()
@@ -204,6 +205,7 @@ export function NoteView({
   offsetMm = 0,
   selected,
   hovered,
+  faceShiftMm,
 }: {
   note: Note
   scale: number
@@ -227,6 +229,11 @@ export function NoteView({
   selected?: 'thread' | 'watermark'
   /** On the canvas, the part a click would pick, outlined lightly */
   hovered?: 'thread' | 'watermark'
+  /**
+   * On the canvas, a cut landing this far off the edges, mm (the continuous check's drift): the design moves the other
+   * way and its neighbours' copies come in at the edges. Never exported
+   */
+  faceShiftMm?: { x: number; y: number }
 }) {
   const { thread, frames, watermark } = note
   const root = useRef<HTMLDivElement>(null)
@@ -302,7 +309,9 @@ export function NoteView({
         willChange: live && perspective ? 'transform' : undefined,
       }}
     >
-      {face && <img src={face} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />}
+      {face && (faceShiftMm
+        ? <DesignTiles url={face} width={mm(note.widthMm)} height={mm(note.heightMm)} color={note.color} shift={{ x: mm(faceShiftMm.x), y: mm(faceShiftMm.y) }} />
+        : <img src={face} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />)}
 
       {watermarkBox && watermark?.imageId && (
         // Light through thinner paper (relief.ts, through its levels), colour-dodged over the design: it only ever

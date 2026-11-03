@@ -1,3 +1,4 @@
+import { fitContinuous } from './continuous'
 import { defaultPattern, migratePattern } from './pattern'
 import { DEFAULT_PLAYBACK, playbackSettings } from './playback'
 import { migrateWindows, threadLength } from './thread'
@@ -113,12 +114,15 @@ export function migrateProject(raw: unknown): Project {
       : []
   // Notes saved before the canvas had no position: lay them out in a row
   const placed: Note[] = []
-  for (const { watermark, ...raw } of notes) {
+  for (const { watermark, continuous, ...raw } of notes) {
+    const check = fitContinuous(continuous)
     // Older notes had no background mode; an uploaded face meant an image background
     const n: Note = {
       ...raw,
       // Only notes with a watermark have one; a damaged one is put back on its banknote
       ...(watermark && typeof watermark === 'object' ? { watermark: fitWatermark(watermark, raw) } : {}),
+      // The continuous check is on only while saved, its tolerance kept in range
+      ...(check ? { continuous: check } : {}),
       background: raw.background ?? (raw.faceImageId ? 'image' : 'solid'),
       // Older frames had degree spans, or split one shared range equally: keep their proportions and cycle
       frames: raw.frames.map((f) => ({ ...f, length: f.length ?? oldLength(raw.frames, f) })),
