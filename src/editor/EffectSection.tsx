@@ -131,8 +131,8 @@ export function EffectSection({ note, set, printNote = note, title, action, chil
         <EffectPicker note={note} lens={lens} onChoose={chooseEffect} />
       </Labeled>
 
-      {/* The main controls first: which tilt hides frames, where flat sits and how far each tilt reaches, the wobble
-          allowance. The cycles they work out come after. */}
+      {/* Which tilt hides frames, then the Cycle, above where flat sits and how far each tilt reaches (Keller put the
+          cycle first, 3 November), then the wobble allowance */}
       {lens.effect === 'reveal' && (
           <div className="flex items-center gap-3" title="The tilt that never shows the outer frames, at any angle; the other tilt plays every frame">
             <span className="shrink-0 text-xs text-muted-foreground">Hidden on</span>
@@ -141,22 +141,6 @@ export function EffectSection({ note, set, printNote = note, title, action, chil
             </div>
           </div>
       )}
-      <Labeled label="Seen flat">
-        <Explain caption={`Flat: ${flatLabel(flatStep(tilt, note.frames.length))}. ` + (lens.effect === 'reveal'
-          ? `Drag the pin to choose the frame seen straight on. Drag the band's ends to set how far the ${lens.revealAxis === 'y' ? '↔' : '↕'} tilt ever reaches: frames outside it stay hidden. Double-click to reset.`
-          : 'Drag the pin to choose the frame seen straight on; double-click to reset. The lines under it show how far each tilt reaches by 90°.')}>
-          <FlatStrip note={note} lens={lens} set={set} />
-        </Explain>
-      </Labeled>
-      {lens.effect === 'reveal' && (
-          <Explain
-            picture={<WobblePreview note={note} lens={lens} />}
-            caption={`Hidden frames stay hidden even if the hand drifts ${round(lens.wobble, 1)}° ${lens.revealAxis === 'y' ? 'up or down' : 'sideways'} while tilting ${lens.revealAxis === 'y' ? 'sideways' : 'up or down'}`}>
-            <ScrubField label="Wobble" title="Allowance for a hand that isn't perfectly straight" value={round(lens.wobble, 1)} min={0} max={20} step={0.5} unit="°"
-              onChange={(v) => set({ revealWobble: v })} />
-          </Explain>
-      )}
-
       {lens.effect === 'updown' && (cycleField('y', 'Cycle'))}
       {lens.effect === 'side' && (cycleField('x', 'Cycle'))}
       {lens.effect === 'both' && (
@@ -209,6 +193,22 @@ export function EffectSection({ note, set, printNote = note, title, action, chil
             </div>
           )}
         </>
+      )}
+
+      <Labeled label="Seen flat">
+        <Explain caption={`Flat: ${flatLabel(flatStep(tilt, note.frames.length))}. ` + (lens.effect === 'reveal'
+          ? `Drag the pin to choose the frame seen straight on. Drag the band's ends to set how far the ${lens.revealAxis === 'y' ? '↔' : '↕'} tilt ever reaches: frames outside it stay hidden. Double-click to reset.`
+          : 'Drag the pin to choose the frame seen straight on; double-click to reset. The lines under it show how far each tilt reaches by 90°.')}>
+          <FlatStrip note={note} lens={lens} set={set} />
+        </Explain>
+      </Labeled>
+      {lens.effect === 'reveal' && (
+          <Explain
+            picture={<WobblePreview note={note} lens={lens} />}
+            caption={`Hidden frames stay hidden even if the hand drifts ${round(lens.wobble, 1)}° ${lens.revealAxis === 'y' ? 'up or down' : 'sideways'} while tilting ${lens.revealAxis === 'y' ? 'sideways' : 'up or down'}`}>
+            <ScrubField label="Wobble" title="Allowance for a hand that isn't perfectly straight" value={round(lens.wobble, 1)} min={0} max={20} step={0.5} unit="°"
+              onChange={(v) => set({ revealWobble: v })} />
+          </Explain>
       )}
 
     </Section>
