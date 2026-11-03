@@ -1,14 +1,10 @@
 import { reportError } from '../cloud/notices'
-import { Columns2, Droplet, ImageUp, RectangleHorizontal, RectangleVertical, Rows2, Share, Shuffle, Trash2, TriangleAlert, X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { ImageUp, RectangleHorizontal, RectangleVertical, Share, Shuffle, Trash2, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cn } from '@/lib/utils'
-import { NoteView } from '../components/NoteView'
 import { ColorField, Group, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
-import { PANEL_OPTIONS, setPanelOption, usePanelOption } from '../lib/panelOption'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
 import { mod, patternOf } from '../lib/pattern'
 import { setPatternOffset, shufflePatternOffset, usePatternOffsets } from '../lib/patternOffset'
@@ -26,16 +22,11 @@ import type { Layer } from './watermarkActions'
 
 type Change = (note: Note) => Note
 
-/** A part's tab: full height, so its line lands on the header's divider */
-const TAB = 'h-full px-2 text-sm text-muted-foreground group-data-horizontal/tabs:after:bottom-[-1px]'
-
-/** One part of the banknote the panel can show: its value, short and long names, and its icon from the Banknotes list */
-interface Part {
-  value: Layer
-  label: string
-  name: string
-  icon: ReactNode
-}
+/**
+ * A part's tab, as Figma's Design and Prototype: the open one a filled pill in dark semibold text, the others plain grey
+ * text that darkens under the pointer
+ */
+const TAB = 'h-7 flex-none rounded-md px-2.5 text-[13px] font-medium text-muted-foreground hover:text-foreground data-active:bg-muted data-active:font-semibold data-active:text-foreground group-data-[variant=default]/tabs-list:data-active:shadow-none'
 
 /**
  * Right: the selected banknote, one tab per part, as the Banknotes list has its layers: the banknote itself (size,
@@ -95,47 +86,30 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
     })
   const portrait = note.heightMm >= note.widthMm
   const background = useImageUrl(note.faceImageId)
-  const option = usePanelOption((s) => s.option)
-  const parts: Part[] = [
-    { value: 'note', label: 'Banknote', name: 'Banknote', icon: portrait ? <RectangleVertical /> : <RectangleHorizontal /> },
-    { value: 'thread', label: 'Thread', name: 'Security thread', icon: thread.direction === 'vertical' ? <Columns2 /> : <Rows2 /> },
-    ...(note.watermark ? [{ value: 'watermark' as const, label: 'Watermark', name: 'Watermark', icon: <Droplet /> }] : []),
-  ]
-  const open = parts.find((p) => p.value === layer) ?? parts[0]
-  const exportButton = <Button variant="outline" size="sm" onClick={onExport}><Share />Export</Button>
-  const removeWatermark = layer === 'watermark' && note.watermark && (
-    <IconButton label="Remove watermark" size="icon-xs" className="-mr-1 text-muted-foreground" onClick={onRemoveWatermark}><Trash2 /></IconButton>
-  )
 
   return (
     <>
     <PanelResizer />
-    {/* The tabs hold the panel and, with folder tags, the tags beside it; they lay nothing out themselves */}
-    <Tabs value={layer} onValueChange={(next) => onLayer(next as Layer)} orientation={option === 'tabs' ? 'horizontal' : 'vertical'} className="contents">
-    {option === 'tags' && <FolderTags parts={parts} />}
     <Panel className="absolute top-3 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-hidden">
-      {option === 'tree' ? (
-        <TreeHeader note={note} parts={parts} action={<>{removeWatermark}{exportButton}</>} />
-      ) : (
-        // One roomy header: the banknote with Export, then its parts as tabs whose line sits on the divider, or the open
-        // part's name while the folder tags beside the panel switch them
-        <div className={cn('flex flex-col gap-2 border-b border-border/60 px-4 pt-4', option === 'tags' && 'pb-3')}>
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-[15px] font-semibold">{note.name}</span>
-            {exportButton}
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            {option === 'tabs' ? (
-              <TabsList variant="line" className="-mx-2 h-9 gap-1 p-0">
-                {parts.map((part) => <TabsTrigger key={part.value} value={part.value} className={TAB}>{part.label}</TabsTrigger>)}
-              </TabsList>
-            ) : (
-              <span className="flex h-6 items-center gap-1.5 text-[13px] font-medium text-muted-foreground [&_svg]:size-3.5">{open.icon}{open.name}</span>
-            )}
-            {removeWatermark}
-          </div>
+      <Tabs value={layer} onValueChange={(next) => onLayer(next as Layer)} className="min-h-0 flex-1 gap-0">
+      {/* One roomy header, as Figma's: the banknote with Export, then its parts as pill tabs */}
+      <div className="flex flex-col gap-3 border-b border-border/60 px-4 pt-4 pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-[15px] font-semibold">{note.name}</span>
+          <Button variant="outline" size="sm" onClick={onExport}><Share />Export</Button>
         </div>
-      )}
+        <div className="flex items-center justify-between gap-2">
+          {/* The first pill's text lines up with the name, its fill reaching out past it */}
+          <TabsList className="-ml-2.5 h-auto gap-1 bg-transparent p-0">
+            <TabsTrigger value="note" className={TAB}>Banknote</TabsTrigger>
+            <TabsTrigger value="thread" className={TAB}>Thread</TabsTrigger>
+            {note.watermark && <TabsTrigger value="watermark" className={TAB}>Watermark</TabsTrigger>}
+          </TabsList>
+          {layer === 'watermark' && note.watermark && (
+            <IconButton label="Remove watermark" size="icon-xs" className="-mr-1 text-muted-foreground" onClick={onRemoveWatermark}><Trash2 /></IconButton>
+          )}
+        </div>
+      </div>
 
       <TabsContent value="note" className="min-h-0 overflow-y-auto">
       <Group>
@@ -267,69 +241,9 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
           <WatermarkPanel note={note} watermark={note.watermark} noteRef={noteRef} onPlace={onPlaceWatermark} />
         </TabsContent>
       )}
-      <OptionSwitch />
+      </Tabs>
     </Panel>
-    </Tabs>
     </>
-  )
-}
-
-/**
- * Folder tags down the panel's left edge, one per part, its icon over its name read upwards; the open one sits forward,
- * joined to the panel
- */
-function FolderTags({ parts }: { parts: Part[] }) {
-  return (
-    <TabsList className="absolute top-16 right-[calc(var(--panel-w)+12px)] z-20 h-fit items-end gap-1 bg-transparent p-0">
-      {parts.map((part) => (
-        <TabsTrigger key={part.value} value={part.value} title={part.name} className={cn(
-          'h-auto flex-none flex-col gap-1.5 rounded-l-lg rounded-r-none border border-r-0 border-border/70 bg-muted px-0 py-2.5 text-xs text-muted-foreground [&_svg]:size-3.5',
-          'group-data-vertical/tabs:w-7 group-data-vertical/tabs:justify-center',
-          'data-active:-mr-px data-active:bg-background/95 data-active:text-foreground data-active:backdrop-blur group-data-vertical/tabs:data-active:w-8 group-data-[variant=default]/tabs-list:data-active:shadow-panel',
-        )}>
-          {part.icon}
-          <span className="rotate-180 [writing-mode:vertical-rl]">{part.label}</span>
-        </TabsTrigger>
-      ))}
-    </TabsList>
-  )
-}
-
-/** A row of the tree, built like the Banknotes list's rows: the open part is highlighted */
-const ROW = 'h-auto flex-none justify-start gap-2 rounded-lg border-0 px-1.5 py-1 text-sm font-normal text-foreground not-data-active:hover:bg-muted/50 data-active:bg-muted group-data-[variant=default]/tabs-list:data-active:shadow-none'
-
-/** The banknote heading its parts, nested under it as in the Banknotes list; Export (and Remove watermark) on its row */
-function TreeHeader({ note, parts, action }: { note: Note; parts: Part[]; action: ReactNode }) {
-  return (
-    <div className="relative border-b border-border/60 p-2">
-      <TabsList className="h-fit w-full items-stretch gap-0.5 bg-transparent p-0">
-        {parts.map((part) => part.value === 'note' ? (
-          <TabsTrigger key={part.value} value={part.value} title={part.name} className={cn(ROW, 'pr-28')}>
-            <span className="flex size-7 shrink-0 items-center justify-center">
-              <NoteView note={note} scale={28 / Math.max(note.widthMm, note.heightMm)} />
-            </span>
-            <span className="min-w-0 flex-1 truncate text-left text-[15px] font-semibold">{note.name}</span>
-          </TabsTrigger>
-        ) : (
-          <TabsTrigger key={part.value} value={part.value} className={cn(ROW, 'ml-6 text-foreground')}>
-            <span className="flex size-7 shrink-0 items-center justify-center text-muted-foreground [&_svg]:size-4">{part.icon}</span>
-            <span className="min-w-0 flex-1 truncate text-left">{part.name}</span>
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      <div className="absolute top-2.5 right-2 flex items-center gap-1">{action}</div>
-    </div>
-  )
-}
-
-/** For now, while Keller compares them: how the panel switches between the banknote's parts */
-function OptionSwitch() {
-  const option = usePanelOption((s) => s.option)
-  return (
-    <div className="flex shrink-0 items-center gap-2 border-t border-border/60 px-4 py-2" title="Ways to switch between the banknote's parts, to compare">
-      <span className="shrink-0 text-[11px] text-muted-foreground">Try</span>
-      <Segmented value={option} options={PANEL_OPTIONS} onChange={setPanelOption} />
-    </div>
   )
 }
 
