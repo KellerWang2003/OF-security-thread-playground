@@ -19,8 +19,9 @@ function load(): Record<string, number> {
 
 export const usePatternOffsets = create<{ offsets: Record<string, number> }>(() => ({ offsets: load() }))
 
+/** Kept as typed, in any unit (to a millionth of a mm, without float dust) */
 export function setPatternOffset(noteId: string, mm: number) {
-  usePatternOffsets.setState((s) => ({ offsets: { ...s.offsets, [noteId]: Math.round(mm * 10) / 10 } }))
+  usePatternOffsets.setState((s) => ({ offsets: { ...s.offsets, [noteId]: Math.round(mm * 1e6) / 1e6 } }))
   try {
     localStorage.setItem(KEY, JSON.stringify(usePatternOffsets.getState().offsets))
   } catch { /* storage blocked: the offset lasts until reload */ }

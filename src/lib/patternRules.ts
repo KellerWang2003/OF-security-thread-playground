@@ -14,6 +14,7 @@ import {
 } from './pattern'
 import { fitSections, threadLength } from './thread'
 import type { Note } from './types'
+import { formatLength, lengthUnit, type LengthUnit } from './units'
 
 /**
  * The layout rules every pattern is checked against. They are warnings, never blockers: the designer decides.
@@ -183,8 +184,8 @@ export function windowReports(note: RuleNote, offsetMm = 0): WindowReport[] {
   })
 }
 
-/** Every rule, with what breaks it */
-export function checkPattern(note: RuleNote): PatternCheck[] {
+/** Every rule, with what breaks it; lengths in the text in `unit`, the one picked by default */
+export function checkPattern(note: RuleNote, unit: LengthUnit = lengthUnit()): PatternCheck[] {
   const pp = preparePattern(note)
   const { pattern, sections } = pp
   const name = (p: PreparedSection) => p.section.name || 'Section'
@@ -258,14 +259,14 @@ export function checkPattern(note: RuleNote): PatternCheck[] {
 
   checks.push({
     id: 'size', title: 'Minimum sizes', level: 'warn',
-    explain: `Each section at least ${MIN_SECTION_ALONG_MM} mm along and ${MIN_SECTION_ACROSS_MM} mm across, less ${DEAD_ZONE_MM} mm where two ridge angles meet.`,
+    explain: `Each section at least ${formatLength(MIN_SECTION_ALONG_MM, unit)} along and ${formatLength(MIN_SECTION_ACROSS_MM, unit)} across, less ${formatLength(DEAD_ZONE_MM, unit)} where two ridge angles meet.`,
     issues: sections.flatMap((p) => {
       const u = usable.get(p.section.id)
       if (!u) return []
       const out: PatternIssue[] = []
       const along = u.along[1] - u.along[0]
-      if (!u.continuous && along < MIN_SECTION_ALONG_MM - EPS) out.push({ text: `${name(p)}: ${round(Math.max(0, along), 2)} mm along`, sectionId: p.section.id })
-      if (u.acrossMm < MIN_SECTION_ACROSS_MM - EPS) out.push({ text: `${name(p)}: ${round(Math.max(0, u.acrossMm), 2)} mm across`, sectionId: p.section.id })
+      if (!u.continuous && along < MIN_SECTION_ALONG_MM - EPS) out.push({ text: `${name(p)}: ${formatLength(Math.max(0, along), unit)} along`, sectionId: p.section.id })
+      if (u.acrossMm < MIN_SECTION_ACROSS_MM - EPS) out.push({ text: `${name(p)}: ${formatLength(Math.max(0, u.acrossMm), unit)} across`, sectionId: p.section.id })
       return out
     }),
   })

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ColorField, Drawer, Group, IconButton, Labeled, Panel, ScrubField, Section, Segmented } from '../components/controls'
+import { ColorField, Drawer, Group, IconButton, Labeled, LengthField, Panel, Section, Segmented } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
@@ -132,10 +132,10 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
         </Labeled>
         <div className="grid grid-cols-2 gap-2">
           <Labeled label="Width">
-            <ScrubField label="W" value={note.widthMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} unit="mm" onChange={(w) => setSize(w, note.heightMm)} />
+            <LengthField label="W" value={note.widthMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} onChange={(w) => setSize(w, note.heightMm)} />
           </Labeled>
           <Labeled label="Height">
-            <ScrubField label="H" value={note.heightMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} unit="mm" onChange={(h) => setSize(note.widthMm, h)} />
+            <LengthField label="H" value={note.heightMm} min={NOTE_SIZE.min} max={NOTE_SIZE.max} step={0.5} onChange={(h) => setSize(note.widthMm, h)} />
           </Labeled>
         </div>
       </Section>
@@ -203,26 +203,24 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
         </Labeled>
         <div className="grid grid-cols-2 gap-2">
           <Labeled label="Thickness">
-          <ScrubField
+          <LengthField
             label="T"
             title="Thread width vertically, or height horizontally"
             value={thread.widthMm}
             min={THREAD_WIDTH.min}
             max={THREAD_WIDTH.max}
             step={THREAD_WIDTH.step}
-            unit="mm"
             onChange={(widthMm) => setThread({ widthMm })}
           />
           </Labeled>
           <Labeled label="Position">
-          <ScrubField
+          <LengthField
             label={thread.direction === 'vertical' ? 'X' : 'Y'}
             title={thread.direction === 'vertical' ? 'Thread position from the left edge' : 'Thread position from the top edge'}
             value={thread.positionMm}
             min={0}
             max={acrossOf(note, thread.direction)}
             step={0.5}
-            unit="mm"
             onChange={(positionMm) => setThread({ positionMm })}
           />
           </Labeled>
@@ -337,8 +335,8 @@ function PrintOffset({ note, onWindowSelect }: { note: Note; onWindowSelect: (id
   return (
     <Section nested>
       <div className="flex items-center gap-1">
-        <ScrubField className="flex-1" label="Offset" title="Where the print lands along the thread: a preview, not saved in the project"
-          value={Math.round(mod(saved, repeat) * 10) / 10} min={0} max={repeat} step={0.1} unit="mm" onChange={(mm) => setPatternOffset(note.id, mm)} />
+        <LengthField className="flex-1" label="Offset" title="Where the print lands along the thread: a preview, not saved in the project"
+          value={mod(saved, repeat)} min={0} max={repeat} step={0.1} onChange={(mm) => setPatternOffset(note.id, mm)} />
         <IconButton label="Shuffle the offset" onClick={() => shufflePatternOffset(note.id, repeat)}><Shuffle /></IconButton>
       </div>
       {misses.length > 0 && (

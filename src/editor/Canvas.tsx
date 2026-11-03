@@ -14,6 +14,7 @@ import { usePatternOffsets } from '../lib/patternOffset'
 import { type Guide, snapBox } from '../lib/snap'
 import { updateNote } from '../lib/store'
 import type { Note, Watermark } from '../lib/types'
+import { lengthIn, useLengthUnit } from '../lib/units'
 import { moveWatermark } from '../lib/watermark'
 import { setTilt, springToFlat, useTilt, useTiltLoop } from '../tilt/tilt'
 import { addImageFrames, type NoteRef } from './frameActions'
@@ -151,6 +152,7 @@ export function Canvas({
   const plan = useMemo(() => playbackPlan(reference ? playbackTilt(reference) : { cycleDeg: 30, transition: 0 }, loopLens), [reference, loopLens])
   useTiltLoop(plan, loopLens.viewDeg)
   const offsets = usePatternOffsets((s) => s.offsets)
+  const unit = useLengthUnit((s) => s.unit)
 
   // Until the first pan or zoom, the view simply fits every note
   const current = view ?? (size && notes.length ? fitView(notes, size) : undefined)
@@ -518,7 +520,7 @@ export function Canvas({
               >
                 <span className={cn('font-medium', isSelected ? 'text-foreground' : 'text-muted-foreground')}>{note.name}</span>
                 <span className="text-muted-foreground/70 tabular-nums">
-                  {note.widthMm} × {note.heightMm} mm
+                  {lengthIn(note.widthMm, unit)} × {lengthIn(note.heightMm, unit)} {unit}
                 </span>
               </div>
               <div

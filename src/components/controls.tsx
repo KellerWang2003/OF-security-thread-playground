@@ -1,8 +1,16 @@
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { useState, type ComponentProps, type ReactNode } from 'react'
+import { useState, type ChangeEvent, type ComponentProps, type KeyboardEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
@@ -10,21 +18,74 @@ import { Switch } from '@/components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { LENGTH_UNITS, lengthField, setLengthUnit, useLengthUnit, type LengthUnit } from '../lib/units'
 
 // Playground-specific compositions of the shadcn primitives in components/ui
 
 const round = (value: number) => Math.round(value * 100) / 100
+const twoDecimals = (value: number) => String(round(value))
 
 /** A floating panel over the canvas, see-through enough to show the banknotes under it (Keller); fields inside have solid fills instead */
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
   return <div className={cn('rounded-lg border border-border/70 bg-background/85 shadow-panel backdrop-blur', className)}>{children}</div>
 }
 
+interface NumberInput {
+  value: number
+  onChange: (value: number) => void
+  min: number
+  max: number
+  step: number
+  /** How the value shows; two decimals by default */
+  format?: (value: number) => string
+  /**
+   * Reads what's typed, for a field that takes more than a plain number (a length with a unit after it); undefined
+   * when it isn't a value. Such a field takes text, and steps with the arrow keys itself.
+   */
+  parse?: (text: string) => number | undefined
+}
+
+/**
+ * A number field's input: it commits while typing only when the value is in range, so a half-typed number never jumps,
+ * and shows the value again once you leave it. A field that reads its own text (`parse`) steps on ↑ and ↓ itself, as
+ * a number input does, to the next multiple of its step (ten steps on with Shift).
+ */
+function useNumberInput({ value, onChange, min, max, step, format = twoDecimals, parse }: NumberInput) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const snap = (v: number) => clampValue(Math.round(v / step) * step, min, max)
+  const read = (text: string) => {
+    if (parse) return parse(text)
+    const next = Number(text)
+    return text !== '' && Number.isFinite(next) ? next : undefined
+  }
+  const input = {
+    ...(parse ? { type: 'text', autoComplete: 'off', spellCheck: false } : { type: 'number', min, max, step }),
+    value: draft ?? format(value),
+    onChange: (e: ChangeEvent<HTMLInputElement>) => {
+      setDraft(e.target.value)
+      const next = read(e.target.value)
+      if (next !== undefined && next >= min && next <= max) onChange(next)
+    },
+    onBlur: () => setDraft(null),
+    onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') e.currentTarget.blur()
+      else if (parse && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault()
+        const at = ((draft === null ? undefined : read(draft)) ?? value) / step
+        const steps = e.shiftKey ? 10 : 1
+        onChange(clampValue((e.key === 'ArrowUp' ? Math.floor(at + 1e-9) + steps : Math.ceil(at - 1e-9) - steps) * step, min, max))
+        setDraft(null)
+      }
+    },
+  }
+  return { input, snap }
+}
+
 /**
  * A Figma-style number field: a short label inside the field that you can drag sideways to scrub the
  * value, and a number you can type. Commits while typing only when the value is in range. Its fill is all but solid
  * (98%): a banknote seen through the panel tints the panel, and a see-through fill all but vanished (Keller noticed W
- * and H), while a hint of it still shows (Keller).
+ * and H), while a hint of it still shows (Keller). A length is a `LengthField`.
  */
 export function ScrubField({
   label,
@@ -33,30 +94,28 @@ export function ScrubField({
   min,
   max,
   step = 1,
+  format,
+  parse,
   unit,
   title,
   size = 'default',
   trailing,
   className,
-}: {
+}: Omit<NumberInput, 'step'> & {
   label: ReactNode
   /** Tooltip naming what a terse label stands for */
   title?: string
-  value: number
-  onChange: (value: number) => void
-  min: number
-  max: number
   step?: number
-  unit?: string
+  /** After the number: its unit, or a control such as the unit menu */
+  unit?: ReactNode
   /** 'sm' is shorter, with a narrow label and smaller digits, for tight floating panels */
   size?: 'default' | 'sm'
   /** A small control after the unit, inside the field */
   trailing?: ReactNode
   className?: string
 }) {
-  const [draft, setDraft] = useState<string | null>(null)
   const [scrub, setScrub] = useState<{ x: number; start: number } | null>(null)
-  const snap = (v: number) => clampValue(Math.round(v / step) * step, min, max)
+  const { input, snap } = useNumberInput({ value, onChange, min, max, step, format, parse })
   const sm = size === 'sm'
 
   return (
@@ -85,29 +144,70 @@ export function ScrubField({
         {label}
       </span>
       <input
-        type="number"
+        {...input}
         className={cn(
           'h-full w-full min-w-0 bg-transparent tabular-nums outline-none [&::-webkit-inner-spin-button]:appearance-none',
           sm ? 'pl-0.5 text-xs' : 'text-sm',
         )}
-        value={draft ?? String(round(value))}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(e) => {
-          setDraft(e.target.value)
-          const next = Number(e.target.value)
-          if (e.target.value !== '' && Number.isFinite(next) && next >= min && next <= max) onChange(next)
-        }}
-        onBlur={() => setDraft(null)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur()
-        }}
       />
-      {unit && <span className={cn('text-xs text-muted-foreground', sm ? (trailing ? 'pr-0.5' : 'pr-1.5') : 'pr-2')}>{unit}</span>}
+      {typeof unit === 'string'
+        ? <span className={cn('text-xs text-muted-foreground', sm ? (trailing ? 'pr-0.5' : 'pr-1.5') : 'pr-2')}>{unit}</span>
+        : unit && <span className={cn('flex shrink-0 items-center', sm ? 'pr-0.5' : 'pr-1')}>{unit}</span>}
       {trailing}
     </div>
   )
+}
+
+/**
+ * The unit after a length, a menu that reads every length in the app in another unit: the same pick wherever it's
+ * opened, remembered per browser (`src/lib/units.ts`). It sits where the unit's text sat.
+ */
+function UnitMenu({ unit }: { unit: LengthUnit }) {
+  const name = LENGTH_UNITS.find((u) => u.unit === unit)?.name ?? unit
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button variant="ghost" size="xs" aria-label={`Unit: ${name}`} title="Unit for every length"
+          className="h-5 rounded px-1 font-normal text-muted-foreground hover:text-foreground aria-expanded:text-foreground" />}
+      >
+        {unit}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuRadioGroup value={unit} onValueChange={(next) => setLengthUnit(next as LengthUnit)}>
+          {LENGTH_UNITS.map((u) => (
+            <DropdownMenuRadioItem key={u.unit} value={u.unit} closeOnClick>
+              {u.name}
+              <DropdownMenuShortcut className="tracking-normal">{u.unit}</DropdownMenuShortcut>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+type LengthProps = {
+  /** All in mm, whatever the unit */
+  value: number
+  onChange: (mm: number) => void
+  min: number
+  max: number
+  /** Today's step in mm; the field steps the round number of its unit that isn't coarser (`stepIn`) */
+  step: number
+  /** Steps exactly `step`, converted, as a section's twelfths of the thread */
+  exactStep?: boolean
+}
+
+/**
+ * A ScrubField for a length: it takes and gives mm, and shows, reads and steps in the unit picked from the menu on its
+ * unit, rounded to that unit's decimals. A unit typed after the number (6.14in, 6.14", 15.6cm, 442pt) converts without
+ * switching. The number shown at a limit can always be typed.
+ */
+export function LengthField({ value, onChange, min, max, step, exactStep, ...field }: LengthProps &
+  Omit<ComponentProps<typeof ScrubField>, keyof LengthProps | 'format' | 'parse' | 'unit'>) {
+  const unit = useLengthUnit((s) => s.unit)
+  const { toMm, ...length } = lengthField(unit, { value, min, max, step, exactStep })
+  return <ScrubField {...field} {...length} onChange={(typed) => onChange(toMm(typed))} unit={<UnitMenu unit={unit} />} />
 }
 
 const clampValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
@@ -200,51 +300,44 @@ export function InlineField({ label, title, children }: { label: ReactNode; titl
   )
 }
 
-/** Commits while typing only when the value is in range, so a half-typed number never jumps */
+/** Commits while typing only when the value is in range, so a half-typed number never jumps. A length is a `LengthNumberField`. */
 export function NumberField({
   value,
   onChange,
   min,
   max,
   step = 1,
+  format,
+  parse,
   unit,
   className,
-}: {
-  value: number
-  onChange: (value: number) => void
-  min: number
-  max: number
+}: Omit<NumberInput, 'step'> & {
   step?: number
-  unit?: string
+  /** After the number: its unit, or a control such as the unit menu */
+  unit?: ReactNode
   className?: string
 }) {
-  const [draft, setDraft] = useState<string | null>(null)
+  const { input } = useNumberInput({ value, onChange, min, max, step, format, parse })
   return (
     <div className={cn('relative', className)}>
       <Input
-        type="number"
-        className={cn('h-8 text-right tabular-nums [&::-webkit-inner-spin-button]:appearance-none', unit && 'pr-7')}
-        value={draft ?? String(round(value))}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(e) => {
-          setDraft(e.target.value)
-          const next = Number(e.target.value)
-          if (e.target.value !== '' && Number.isFinite(next) && next >= min && next <= max) onChange(next)
-        }}
-        onBlur={() => setDraft(null)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur()
-        }}
+        {...input}
+        className={cn('h-8 text-right tabular-nums [&::-webkit-inner-spin-button]:appearance-none', unit && (typeof unit === 'string' ? 'pr-7' : 'pr-8'))}
       />
-      {unit && (
+      {typeof unit === 'string' ? (
         <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-muted-foreground">
           {unit}
         </span>
-      )}
+      ) : unit && <span className="absolute inset-y-0 right-1 flex items-center">{unit}</span>}
     </div>
   )
+}
+
+/** A NumberField for a length, as `LengthField`: mm in and out, shown and typed in the unit picked from its unit menu */
+export function LengthNumberField({ value, onChange, min, max, step, exactStep, className }: LengthProps & { className?: string }) {
+  const unit = useLengthUnit((s) => s.unit)
+  const { toMm, ...length } = lengthField(unit, { value, min, max, step, exactStep })
+  return <NumberField {...length} className={className} onChange={(typed) => onChange(toMm(typed))} unit={<UnitMenu unit={unit} />} />
 }
 
 export function RangeField({

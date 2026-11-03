@@ -3,13 +3,15 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { IconButton, ScrubField } from '../components/controls'
+import { IconButton, LengthField } from '../components/controls'
 import { updateNote } from '../lib/store'
 import { newWindow, sectionBounds, threadLength as lengthOf, WINDOW_STEP } from '../lib/thread'
-import type { Note } from '../lib/types'
+import type { Note, ThreadWindow } from '../lib/types'
+import { lengthIn, useLengthUnit, type LengthUnit } from '../lib/units'
 import type { NoteRef } from './frameActions'
 
-const format = (mm: number) => (Math.round(mm * 10) / 10).toString()
+/** Where a window runs, in the unit lengths are read in: "12.5–20.5 mm" */
+const span = (section: ThreadWindow, unit: LengthUnit) => `${lengthIn(section.startMm, unit)}–${lengthIn(section.endMm, unit)} ${unit}`
 
 /**
  * The thread's windows as a compact card: a switch (off = continuous), a strip showing where the windows sit
@@ -22,6 +24,7 @@ export function WindowsCard({ note, noteRef, selectedWindowId, onWindowSelect }:
   onWindowSelect: (id: string | undefined) => void
 }) {
   const [expanded, setExpanded] = useState(false)
+  const unit = useLengthUnit((s) => s.unit)
   const { windows } = note.thread
   const length = lengthOf(note)
   const setWindows = (patch: Partial<Note['thread']['windows']>) =>
@@ -78,7 +81,7 @@ export function WindowsCard({ note, noteRef, selectedWindowId, onWindowSelect }:
           {windows.sections.map((section, i) => {
             const on = section.id === selectedWindowId
             return (
-              <Button key={section.id} variant="ghost" aria-pressed={on} aria-label={`Window ${i + 1}, ${format(section.startMm)}–${format(section.endMm)} mm`}
+              <Button key={section.id} variant="ghost" aria-pressed={on} aria-label={`Window ${i + 1}, ${span(section, unit)}`}
                 className={cn('absolute inset-y-0.5 h-auto min-w-1 rounded-[3px] p-0 active:translate-y-0',
                   on ? 'bg-primary hover:bg-primary' : 'bg-foreground/25 hover:bg-foreground/40')}
                 style={{ left: `${(section.startMm / length) * 100}%`, width: `${((section.endMm - section.startMm) / length) * 100}%` }}
@@ -93,11 +96,11 @@ export function WindowsCard({ note, noteRef, selectedWindowId, onWindowSelect }:
           {windows.sections.map((section, i) => {
             const on = section.id === selectedWindowId
             return (
-              <Button key={section.id} variant="ghost" size="sm" aria-pressed={on} aria-label={`Window ${i + 1}: ${format(section.startMm)}–${format(section.endMm)} mm`}
+              <Button key={section.id} variant="ghost" size="sm" aria-pressed={on} aria-label={`Window ${i + 1}: ${span(section, unit)}`}
                 className={cn('h-7 justify-between px-1.5 font-normal', on ? 'bg-background hover:bg-background' : 'hover:bg-background/60')}
                 onClick={() => onWindowSelect(on ? undefined : section.id)}>
                 <span>Window {i + 1}</span>
-                <span className="text-muted-foreground tabular-nums">{format(section.startMm)}–{format(section.endMm)} mm</span>
+                <span className="text-muted-foreground tabular-nums">{span(section, unit)}</span>
               </Button>
             )
           })}
@@ -106,8 +109,8 @@ export function WindowsCard({ note, noteRef, selectedWindowId, onWindowSelect }:
 
       {windows.enabled && selected && (
         <div className="grid grid-cols-2 gap-1.5">
-            <ScrubField label="Start" title={`Window ${selectedIndex + 1}: visible section starts here`} value={selected.startMm} min={bounds.min} max={selected.endMm - minimum} step={WINDOW_STEP} unit="mm" onChange={(startMm) => updateSelected({ startMm })} />
-            <ScrubField label="End" title={`Window ${selectedIndex + 1}: visible section ends here`} value={selected.endMm} min={selected.startMm + minimum} max={bounds.max} step={WINDOW_STEP} unit="mm" onChange={(endMm) => updateSelected({ endMm })} />
+            <LengthField label="Start" title={`Window ${selectedIndex + 1}: visible section starts here`} value={selected.startMm} min={bounds.min} max={selected.endMm - minimum} step={WINDOW_STEP} onChange={(startMm) => updateSelected({ startMm })} />
+            <LengthField label="End" title={`Window ${selectedIndex + 1}: visible section ends here`} value={selected.endMm} min={selected.startMm + minimum} max={bounds.max} step={WINDOW_STEP} onChange={(endMm) => updateSelected({ endMm })} />
         </div>
       )}
     </div>

@@ -8,7 +8,7 @@ import type { Note, Watermark, WatermarkLevels } from './types'
 
 /** Default depth of a new watermark, 0 to 1 */
 export const WATERMARK_DEPTH = 0.6
-/** Position and width snap to this, in mm, as windows do */
+/** Drags, nudges and new watermarks snap position and width to this, in mm, as windows do; typed values are kept */
 export const WATERMARK_STEP = 0.5
 /** Smallest width or height, in mm */
 export const WATERMARK_MIN_MM = 2
@@ -45,9 +45,10 @@ const positive = (value: unknown, fallback: number) => (typeof value === 'number
 
 /**
  * Keeps a watermark on its banknote: both sides at least WATERMARK_MIN_MM and no bigger than the banknote (its
- * proportions kept either way), wholly inside it, with position snapped to WATERMARK_STEP and depth between 0
- * and 1, and levels in range. Also repairs a damaged save: Invert is kept only when it is on, levels only when they
- * are levels, and anything unknown is dropped.
+ * proportions kept either way), wholly inside it, with depth between 0 and 1, and levels in range. Its position is
+ * kept as it is (a typed one exact, in any unit); what drags, nudges or places it snaps to WATERMARK_STEP itself.
+ * Also repairs a damaged save: Invert is kept only when it is on, levels only when they are levels, and anything
+ * unknown is dropped.
  */
 export function fitWatermark(watermark: Watermark, note: Size): Watermark {
   let widthMm = positive(watermark.widthMm, 20)
@@ -56,8 +57,8 @@ export function fitWatermark(watermark: Watermark, note: Size): Watermark {
   const shrink = Math.min(1, note.widthMm / (widthMm * grow), note.heightMm / (heightMm * grow))
   widthMm *= grow * shrink
   heightMm *= grow * shrink
-  const xMm = clamp(snap(finite(watermark.xMm, 0)), 0, Math.max(0, note.widthMm - widthMm))
-  const yMm = clamp(snap(finite(watermark.yMm, 0)), 0, Math.max(0, note.heightMm - heightMm))
+  const xMm = clamp(finite(watermark.xMm, 0), 0, Math.max(0, note.widthMm - widthMm))
+  const yMm = clamp(finite(watermark.yMm, 0), 0, Math.max(0, note.heightMm - heightMm))
   const fitted: Watermark = { xMm, yMm, widthMm, heightMm, depth: clamp(finite(watermark.depth, WATERMARK_DEPTH), 0, 1) }
   if (watermark.invert === true) fitted.invert = true
   const levels = fitLevels(watermark.levels)
@@ -71,7 +72,7 @@ export function newWatermark(note: Size): Watermark {
   const landscape = note.widthMm >= note.heightMm
   const cx = landscape ? note.widthMm * 0.2 : note.widthMm / 2
   const cy = landscape ? note.heightMm / 2 : note.heightMm * 0.78
-  return fitWatermark({ xMm: cx - side / 2, yMm: cy - side / 2, widthMm: side, heightMm: side, depth: WATERMARK_DEPTH }, note)
+  return fitWatermark({ xMm: snap(cx - side / 2), yMm: snap(cy - side / 2), widthMm: side, heightMm: side, depth: WATERMARK_DEPTH }, note)
 }
 
 /** Height ÷ width */
@@ -106,17 +107,17 @@ export function dragWatermarkCorner(watermark: Watermark, corner: Corner, dx: nu
   const room = Math.min(sx > 0 ? note.widthMm - fx : fx, (sy > 0 ? note.heightMm - fy : fy) / aspect)
   const widthMm = clamp(snap(wanted), Math.min(WATERMARK_MIN_MM, room), Math.max(WATERMARK_MIN_MM, room))
   const heightMm = widthMm * aspect
-  return fitWatermark({ ...watermark, widthMm, heightMm, xMm: sx > 0 ? fx : fx - widthMm, yMm: sy > 0 ? fy : fy - heightMm }, note)
+  return fitWatermark({ ...watermark, widthMm, heightMm, xMm: snap(sx > 0 ? fx : fx - widthMm), yMm: snap(sy > 0 ? fy : fy - heightMm) }, note)
 }
 
 /** Moves a watermark by (dx, dy) mm from where it was, snapped and kept on the banknote */
 export const moveWatermark = (watermark: Watermark, dx: number, dy: number, note: Size): Watermark =>
-  fitWatermark({ ...watermark, xMm: watermark.xMm + dx, yMm: watermark.yMm + dy }, note)
+  fitWatermark({ ...watermark, xMm: snap(watermark.xMm + dx), yMm: snap(watermark.yMm + dy) }, note)
 
 /** A new image: its proportions set the height, keeping the width and the centre where they are; it starts on Auto levels */
 export function withWatermarkImage(watermark: Watermark, imageId: string, aspect: number | undefined, note: Size): Watermark {
   const heightMm = watermark.widthMm * (aspect && Number.isFinite(aspect) && aspect > 0 ? aspect : watermark.heightMm / watermark.widthMm || 1)
-  const yMm = watermark.yMm + (watermark.heightMm - heightMm) / 2
+  const yMm = snap(watermark.yMm + (watermark.heightMm - heightMm) / 2)
   const { levels: _byHand, ...rest } = watermark
   return fitWatermark({ ...rest, imageId, heightMm, yMm }, note)
 }
@@ -125,5 +126,5 @@ export function withWatermarkImage(watermark: Watermark, imageId: string, aspect
 export function moveWatermarkTo(watermark: Watermark, from: Size, to: Size): Watermark {
   const cx = ((watermark.xMm + watermark.widthMm / 2) / from.widthMm) * to.widthMm
   const cy = ((watermark.yMm + watermark.heightMm / 2) / from.heightMm) * to.heightMm
-  return fitWatermark({ ...watermark, xMm: cx - watermark.widthMm / 2, yMm: cy - watermark.heightMm / 2 }, to)
+  return fitWatermark({ ...watermark, xMm: snap(cx - watermark.widthMm / 2), yMm: snap(cy - watermark.heightMm / 2) }, to)
 }

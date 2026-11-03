@@ -3,7 +3,7 @@ import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { ColorField, Field, IconButton, NumberField } from '../components/controls'
+import { ColorField, Field, IconButton, LengthNumberField } from '../components/controls'
 import { DEFAULT_NOTE, NOTE_SIZE, createNote, nextNotePosition } from '../lib/notes'
 import { addNote } from '../lib/store'
 import type { Note } from '../lib/types'
@@ -59,12 +59,11 @@ export function AddNoteDialog({
           </Field>
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
             <Field label="Width">
-              <NumberField
+              <LengthNumberField
                 value={size.widthMm}
                 min={NOTE_SIZE.min}
                 max={NOTE_SIZE.max}
                 step={0.5}
-                unit="mm"
                 onChange={(widthMm) => setSize((s) => ({ ...s, widthMm }))}
               />
             </Field>
@@ -76,12 +75,11 @@ export function AddNoteDialog({
               <ArrowLeftRight />
             </IconButton>
             <Field label="Height">
-              <NumberField
+              <LengthNumberField
                 value={size.heightMm}
                 min={NOTE_SIZE.min}
                 max={NOTE_SIZE.max}
                 step={0.5}
-                unit="mm"
                 onChange={(heightMm) => setSize((s) => ({ ...s, heightMm }))}
               />
             </Field>
