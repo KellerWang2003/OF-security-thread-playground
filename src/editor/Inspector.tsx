@@ -22,6 +22,9 @@ import type { Layer } from './watermarkActions'
 
 type Change = (note: Note) => Note
 
+/** A part's tab: full height, so its line lands on the header's divider */
+const TAB = 'h-full px-2 text-sm text-muted-foreground group-data-horizontal/tabs:after:bottom-[-1px]'
+
 /**
  * Right: the selected banknote, one tab per part, as the Banknotes list has its layers: the banknote itself (size,
  * background), its security thread (placement, artwork, and its lens with the way into the thread editor) and its
@@ -85,21 +88,23 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
     <>
     <PanelResizer />
     <Panel className="absolute top-3 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-hidden">
-      <div className="flex items-center justify-between gap-2 border-b border-border/60 py-2 pr-2 pl-4">
-        <span className="truncate text-sm font-medium">{note.name}</span>
-        <Button variant="outline" size="sm" onClick={onExport}><Share />Export</Button>
-      </div>
-
       <Tabs value={layer} onValueChange={(next) => onLayer(next as Layer)} className="min-h-0 flex-1 gap-0">
-      <div className="flex items-center justify-between gap-2 border-b border-border/60 py-1.5 pr-2 pl-2.5">
-        <TabsList variant="line" className="h-7">
-          <TabsTrigger value="note" className="px-1.5 text-[13px]">Banknote</TabsTrigger>
-          <TabsTrigger value="thread" className="px-1.5 text-[13px]">Thread</TabsTrigger>
-          {note.watermark && <TabsTrigger value="watermark" className="px-1.5 text-[13px]">Watermark</TabsTrigger>}
-        </TabsList>
-        {layer === 'watermark' && note.watermark && (
-          <IconButton label="Remove watermark" size="icon-xs" className="text-muted-foreground" onClick={onRemoveWatermark}><Trash2 /></IconButton>
-        )}
+      {/* One roomy header: the banknote with Export, then its parts as tabs whose line sits on the divider */}
+      <div className="flex flex-col gap-2 border-b border-border/60 px-4 pt-4">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-[15px] font-semibold">{note.name}</span>
+          <Button variant="outline" size="sm" onClick={onExport}><Share />Export</Button>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <TabsList variant="line" className="-mx-2 h-9 gap-1 p-0">
+            <TabsTrigger value="note" className={TAB}>Banknote</TabsTrigger>
+            <TabsTrigger value="thread" className={TAB}>Thread</TabsTrigger>
+            {note.watermark && <TabsTrigger value="watermark" className={TAB}>Watermark</TabsTrigger>}
+          </TabsList>
+          {layer === 'watermark' && note.watermark && (
+            <IconButton label="Remove watermark" size="icon-xs" className="-mr-1 text-muted-foreground" onClick={onRemoveWatermark}><Trash2 /></IconButton>
+          )}
+        </div>
       </div>
 
       <TabsContent value="note" className="min-h-0 overflow-y-auto">
