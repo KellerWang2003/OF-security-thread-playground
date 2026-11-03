@@ -1,6 +1,8 @@
 # CLAUDE.md
 
-Design tool for previewing lenticular security threads on banknotes (Oberthur Fiduciaire x ArtCenter studio). See README.md for what it does and the code layout.
+Banknote Playground: a design tool for previewing lenticular security threads on banknotes (Oberthur Fiduciaire x ArtCenter studio). See README.md for what it does and the code layout.
+
+The app is called Banknote Playground wherever a user sees it (page title, sign-in page, project list). Only those changed in the rename: the folder, repo, package, Vercel project and URL (of-playground.vercel.app), Supabase ids and the `of-playground.*` browser storage keys keep their older names. Don't rename the storage keys, since that would reset what users' browsers remember.
 
 ## Commands
 

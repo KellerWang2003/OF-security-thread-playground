@@ -1,4 +1,4 @@
-# Security thread playground
+# Banknote Playground
 
 A design tool for previewing lenticular security threads on banknotes. Upload 2 to 5 frames per banknote and tilt it back and forth to see the thread animate.
 

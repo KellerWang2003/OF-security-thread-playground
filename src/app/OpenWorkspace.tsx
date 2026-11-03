@@ -17,7 +17,7 @@ export function OpenWorkspace() {
           <span className="relative h-14 w-24 rounded-md bg-foreground shadow-sm">
             <span className="absolute inset-y-0 left-[66%] w-1.5 bg-[repeating-linear-gradient(180deg,var(--background)_0_7px,transparent_7px_11px)]" />
           </span>
-          <h1 className="font-heading text-xl font-semibold">Security thread playground</h1>
+          <h1 className="font-heading text-xl font-semibold">Banknote Playground</h1>
         </div>
         <form
           className="flex flex-col gap-3"

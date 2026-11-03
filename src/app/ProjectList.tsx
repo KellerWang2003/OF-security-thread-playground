@@ -49,7 +49,7 @@ export function ProjectList() {
   return (
     <div className="flex h-full flex-col bg-muted/40">
       <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-background px-6">
-        <span className="font-heading text-sm font-semibold">Security thread playground</span>
+        <span className="font-heading text-sm font-semibold">Banknote Playground</span>
         <div className="flex items-center gap-3">
           <CloudStatus />
           <AccountMenu />
