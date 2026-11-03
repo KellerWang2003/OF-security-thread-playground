@@ -7,8 +7,11 @@ import { useImageUrl } from '../lib/images'
 import { copyStarts, imageBox } from '../lib/artwork'
 import { patternMix, patternOf, preparePattern, sectionClip, shownLabel } from '../lib/pattern'
 import { threadWindowMask, windowEdges } from '../lib/thread'
-import type { Frame, Note } from '../lib/types'
+import type { Frame, MagneticInk, Note } from '../lib/types'
 import { paintRelief, reliefPixels, useRelief } from '../lib/relief'
+import { useInkMask } from '../lib/inkMask'
+import { INK_BAR_LIGHT, barShift, inkRoll, inkShift } from '../lib/magneticInk'
+import type { PlacedLayer } from '../lib/layers'
 import { useTilt } from '../tilt/tilt'
 import { DesignTiles } from './DesignTiles'
 
@@ -97,18 +100,24 @@ export function FrameThumb({ frame, backgroundColor }: { frame: Frame; backgroun
 /** Light and shade reach full strength at SHADE_DEG; past it (up to TILT_LIMIT) they keep growing */
 const SHADE_MAX = TILT_LIMIT / SHADE_DEG
 
-type TiltPart = 'shade-up' | 'shade-down' | 'shade-left' | 'shade-right' | 'sheen' | 'blend' | 'watermark'
+type TiltPart = 'shade-up' | 'shade-down' | 'shade-left' | 'shade-right' | 'sheen' | 'blend' | 'watermark' | 'ink-shift' | 'ink-bar'
+
+/** The bar's look on magnetic ink */
+type InkBar = Pick<MagneticInk, 'barAxis' | 'barWidth'>
 
 /**
  * Everything about a tilt that changes continuously: the 3D turn, the light and shade overlays' opacity,
- * where the sheen sits, the fade between two frames and how clearly the watermark shows (its `depth` at `reveal`).
- * All of it is transform or opacity, which the GPU animates without repainting. Live notes write these straight
- * onto their elements every animation frame instead of re-rendering React.
+ * where the sheen sits, the fade between two frames, how clearly the watermark shows (its `depth` at `reveal`), and
+ * magnetic ink's Tilted colour and where its bar has rolled (`ink`). All of it is transform or opacity, which the GPU
+ * animates without repainting. Live notes write these straight onto their elements every animation frame instead of
+ * re-rendering React.
  */
-function tiltStyle(angle: number, angleX: number, blend: number, depth: number, reveal: number) {
+function tiltStyle(angle: number, angleX: number, blend: number, depth: number, reveal: number, ink?: InkBar) {
   const t = angle / SHADE_DEG
   const tx = angleX / SHADE_DEG
   const share = (v: number) => Math.min(Math.max(v, 0) / SHADE_MAX, 1)
+  const tilt = { x: angleX, y: angle }
+  const roll = ink ? barShift(ink, inkRoll(ink, tilt)) : 0
   const parts: Record<TiltPart, CSSProperties> = {
     'shade-up': { opacity: share(-t) },
     'shade-down': { opacity: share(t) },
@@ -117,8 +126,26 @@ function tiltStyle(angle: number, angleX: number, blend: number, depth: number, 
     sheen: { transform: `translateY(${t * 120}%)` },
     blend: { opacity: blend },
     watermark: { opacity: watermarkOpacity(depth, reveal) },
+    'ink-shift': { opacity: inkShift(tilt) },
+    'ink-bar': { transform: ink?.barAxis === 'x' ? `translateX(${roll}%)` : `translateY(${roll}%)` },
   }
   return { rotate: angleX ? `rotateX(${angle}deg) rotateY(${angleX}deg)` : `rotateX(${angle}deg)`, parts }
+}
+
+const CLEAR_WHITE = 'rgba(255,255,255,0)'
+
+/**
+ * Magnetic ink's bright bar at rest, across the middle of the shape: level when it rolls on ↕, upright on ↔, white in
+ * its middle fading out to either side. Its roll is a translate (`tiltStyle`).
+ */
+function inkBarBox(ink: InkBar, live: boolean): CSSProperties {
+  const along = `${ink.barWidth * 100}%`
+  const from = `${(0.5 - ink.barWidth / 2) * 100}%`
+  const light = (deg: number) => `linear-gradient(${deg}deg, ${CLEAR_WHITE}, rgba(255,255,255,${INK_BAR_LIGHT}) 50%, ${CLEAR_WHITE})`
+  const willChange = live ? 'transform' : undefined
+  return ink.barAxis === 'x'
+    ? { top: 0, bottom: 0, left: from, width: along, background: light(90), willChange }
+    : { left: 0, right: 0, top: from, height: along, background: light(180), willChange }
 }
 
 /**
@@ -189,7 +216,8 @@ type LiveState = { angle: number; angleX: number; light: number }
  * side `angleX`) through the note's lens, or with `live` from the shared tilt as it moves; with `perspective`
  * the note also turns in 3D, and `sheen` adds a highlight that travels along the thread. Its watermark, in the
  * note's own colours under the thread, is only a hint flat, comes out clearly as the note tilts, and shows flat
- * held to the light.
+ * held to the light. Its magnetic ink, over the watermark and under the thread, shifts colour as the note turns away
+ * and rolls its bright bar on one tilt.
  */
 export function NoteView({
   note,
@@ -226,16 +254,16 @@ export function NoteView({
   /** Where along the thread the pattern's repeat starts, mm: a preview of where the print may land */
   offsetMm?: number
   /** On the canvas, the part picked, outlined firmly */
-  selected?: 'thread' | 'watermark'
+  selected?: 'thread' | PlacedLayer
   /** On the canvas, the part a click would pick, outlined lightly */
-  hovered?: 'thread' | 'watermark'
+  hovered?: 'thread' | PlacedLayer
   /**
    * On the canvas, a cut landing this far off the edges, mm (the continuous check's drift): the design moves the other
    * way and its neighbours' copies come in at the edges. Never exported
    */
   faceShiftMm?: { x: number; y: number }
 }) {
-  const { thread, frames, watermark } = note
+  const { thread, frames, watermark, magneticInk } = note
   const root = useRef<HTMLDivElement>(null)
   const mm = (value: number) => value * scale
   const face = useImageUrl(note.background === 'image' ? note.faceImageId : undefined)
@@ -253,6 +281,9 @@ export function NoteView({
     if (light.current && relief && lightWidth * lightHeight > 0) paintRelief(light.current, relief)
   }, [relief, lightWidth, lightHeight])
   const depth = watermark?.depth ?? 0
+  const inkMask = useInkMask(magneticInk)
+  // Only its bar's look changes how it tilts
+  const inkBar: InkBar | undefined = magneticInk && { barAxis: magneticInk.barAxis, barWidth: magneticInk.barWidth }
   const revealOf = (state: LiveState) => reveal ?? watermarkReveal(state.light, { x: state.angleX, y: state.angle })
 
   // Live: write the continuous parts straight onto the elements, after every render and on every tilt change
@@ -263,7 +294,7 @@ export function NoteView({
       if (!live || !element) return
       const { angle, angleX } = state
       const blends = blendsAt(note, angle, angleX)
-      const style = tiltStyle(angle, angleX, blends[0] ?? 0, depth, revealOf(state))
+      const style = tiltStyle(angle, angleX, blends[0] ?? 0, depth, revealOf(state), inkBar)
       element.style.transform = perspective ? style.rotate : ''
       for (const part of element.querySelectorAll<HTMLElement>('[data-tilt]')) {
         const section = part.dataset.section
@@ -290,10 +321,15 @@ export function NoteView({
   const windowMask = threadWindowMask(thread, scale)
   // Static notes (thumbnails, tests) are drawn from props; live ones leave these to apply()
   const blends = live ? undefined : blendsAt(note, angle, angleX)
-  const still = blends && tiltStyle(angle, angleX, blends[0] ?? 0, depth, revealOf({ angle, angleX, light: 0 }))
+  const still = blends && tiltStyle(angle, angleX, blends[0] ?? 0, depth, revealOf({ angle, angleX, light: 0 }), inkBar)
   const part = (name: TiltPart, style: CSSProperties = {}) => ({ 'data-tilt': name, style: { ...style, ...still?.parts[name] } })
-  const watermarkBox: CSSProperties | undefined = watermark && { left: mm(watermark.xMm), top: mm(watermark.yMm), width: mm(watermark.widthMm), height: mm(watermark.heightMm) }
-  const boxOf = (target: 'thread' | 'watermark' | undefined) => (target === 'thread' ? strip : target === 'watermark' ? watermarkBox : undefined)
+  const placed = (box: { xMm: number; yMm: number; widthMm: number; heightMm: number }): CSSProperties =>
+    ({ left: mm(box.xMm), top: mm(box.yMm), width: mm(box.widthMm), height: mm(box.heightMm) })
+  const watermarkBox = watermark && placed(watermark)
+  const inkBox = magneticInk && placed(magneticInk)
+  const boxOf = (target: 'thread' | PlacedLayer | undefined) =>
+    target === 'thread' ? strip : target === 'watermark' ? watermarkBox : target === 'magneticInk' ? inkBox : undefined
+  const inkShape = inkMask && `url(${inkMask.url})`
   const art = <ThreadArt note={note} shown={shown} blends={blends} fill={fill} />
 
   return (
@@ -318,9 +354,22 @@ export function NoteView({
         // brightens it, in proportion, so it keeps the note's own colours and dark print stays dark. Its opacity is how
         // much of that light comes through. The thread lies over it, unchanged. On the canvas it takes a press, faint or
         // clear, so it drags as the thread does; not with no depth to show.
-        <canvas ref={light} data-watermark={note.id} width={lightWidth} height={lightHeight}
+        <canvas ref={light} data-watermark={note.id} data-placed="watermark" width={lightWidth} height={lightHeight}
           className={cn('absolute', live && depth > 0 ? 'cursor-move' : 'pointer-events-none')}
           {...part('watermark', { ...watermarkBox, mixBlendMode: 'color-dodge' })} />
+      )}
+
+      {inkBox && magneticInk?.imageId && inkShape && inkBar && (
+        // Magnetic ink, printed over the design and the watermark, under the thread: its Flat colour, the Tilted one fading
+        // in over it as the note turns away, and the bright bar rolling across on its tilt, all clipped to the shape by
+        // its mask (inkMask.ts). Like the watermark, it takes a press on the canvas anywhere in its box, to drag it
+        <div data-magnetic-ink={note.id} data-placed="magneticInk"
+          className={cn('absolute overflow-hidden', live ? 'cursor-move' : 'pointer-events-none')}
+          style={{ ...inkBox, maskImage: inkShape, WebkitMaskImage: inkShape, maskSize: '100% 100%', WebkitMaskSize: '100% 100%', maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }}>
+          <div className="absolute inset-0" style={{ backgroundColor: magneticInk.color }} />
+          <div className="absolute inset-0" {...part('ink-shift', { backgroundColor: magneticInk.tiltedColor })} />
+          <div className="absolute" {...part('ink-bar', inkBarBox(inkBar, live))} />
+        </div>
       )}
 
       {showWindowCuts && thread.windows.enabled && (

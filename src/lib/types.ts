@@ -182,6 +182,31 @@ export interface ContinuousDesign {
 }
 
 /**
+ * Magnetic ink printed in a shape, with the look of SICPA's SPARK Flow PRIME: its colour shifts from Flat to Tilted as
+ * the banknote turns away from the viewer, and a bright bar rolls across the shape on one tilt. The shape is whatever
+ * stands out from its image's background (`inkCoverage` in inkMask.ts); the magnetism itself isn't shown. Placed by its
+ * top-left corner in mm from the banknote's top-left; its height follows the image's proportions.
+ */
+export interface MagneticInk {
+  /** Absent until an image is uploaded */
+  imageId?: string
+  xMm: number
+  yMm: number
+  widthMm: number
+  heightMm: number
+  /** Ink round the shape instead of in it */
+  invert?: boolean
+  /** The ink's colour seen flat, #rrggbb */
+  color: string
+  /** Its colour turned away from the viewer, #rrggbb: all of it from INK_SHIFT_DEG on */
+  tiltedColor: string
+  /** The tilt that rolls the bar: up/down rolls a level bar up and down the shape, side to side an upright bar across it */
+  barAxis: 'y' | 'x'
+  /** How wide the bar is, as a share of the shape the way it rolls (INK_BAR) */
+  barWidth: number
+}
+
+/**
  * Lens settings a section keeps for itself while mixed angles is on: the same fields as the banknote's lens. Any
  * left out take their defaults, not the banknote's, so a section's lens never shifts when the shared one changes.
  */
@@ -235,6 +260,8 @@ export interface Note {
   watermark?: Watermark
   /** The continuous design check for an uploaded design; absent while it is off */
   continuous?: ContinuousDesign
+  /** A sibling of the thread and the watermark, drawn over the watermark and under the thread; absent until one is added */
+  magneticInk?: MagneticInk
   /** The thread's sections; absent on banknotes from before patterns, which are one section with the banknote's lens */
   pattern?: ThreadPattern
 }

@@ -41,6 +41,17 @@ vi.mock('../src/lib/relief', async (importOriginal) => {
     },
   }
 })
+// Nor can it work out magnetic ink's mask: a fixture's is ready straight away
+vi.mock('../src/lib/inkMask', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/lib/inkMask')>()
+  return {
+    ...actual,
+    useInkMask: (ink?: { imageId?: string }) => {
+      const mask = actual.useInkMask(ink)
+      return ink?.imageId?.startsWith('fixture-') ? { key: 'fixture', canvas: document.createElement('canvas'), url: 'data:image/png;base64,' } : mask
+    },
+  }
+})
 vi.mock('../src/cloud/repository', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/cloud/repository')>()
   return { ...actual, createRepository: () => ({
@@ -586,7 +597,6 @@ describe('username workspace editor', () => {
     expect(tab()).toBe('Watermark')
     expect(placing()).not.toBeNull()
     expect(screen.queryByRole('group', { name: 'Tilt' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Add layer' })).toBeNull()
     const { xMm } = watermark()!
     fireEvent.keyDown(placing()!, { key: 'ArrowRight' })
     expect(watermark()!.xMm).toBe(xMm + 0.5)
@@ -709,6 +719,144 @@ describe('username workspace editor', () => {
 
     await user.click(screen.getByRole('button', { name: 'Undo', exact: true }))
     expect(notes()[1].watermark).toEqual(original)
+    expect(saves).not.toHaveBeenCalled()
+  })
+
+  it('adds magnetic ink as a layer, places it as the watermark is placed, and sets its colours and bar', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      callback: ResizeObserverCallback
+      constructor(callback: ResizeObserverCallback) { this.callback = callback }
+      observe() { this.callback([{ contentRect: { width: 1280, height: 720 } } as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      unobserve() {} disconnect() {}
+    })
+    for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
+    }
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'magnetic-ink-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const placing = () => screen.queryByRole('group', { name: 'Place magnetic ink' })
+    const ink = () => useProjects.getState().demoPreview!.notes[0].magneticInk
+
+    // The + lists every layer the banknote doesn't have yet; adding the ink selects it and shows its box to place, the
+    // banknote laid flat and the tilt pad stepping aside, as for the watermark
+    await user.click(screen.getByRole('button', { name: 'Add layer' }))
+    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual(['Watermark', 'Magnetic ink'])
+    await user.click(screen.getByRole('menuitem', { name: 'Magnetic ink' }))
+    expect(ink()).toBeDefined()
+    expect(tab()).toBe('Magnetic ink')
+    expect(screen.getByRole('button', { name: 'Magnetic ink', exact: true }).classList.contains('bg-muted')).toBe(true)
+    expect(placing()).not.toBeNull()
+    expect(screen.queryByRole('group', { name: 'Tilt' })).toBeNull()
+
+    // Arrow keys nudge it, Shift ten steps; a corner resizes it from the opposite corner, its proportions kept
+    const start = ink()!
+    fireEvent.keyDown(placing()!, { key: 'ArrowLeft', shiftKey: true })
+    fireEvent.keyDown(placing()!, { key: 'ArrowUp' })
+    expect(ink()).toEqual({ ...start, xMm: start.xMm - 5, yMm: start.yMm - 0.5 })
+    const corner = screen.getByRole('button', { name: 'Resize magnetic ink from its bottom-right corner' })
+    fireEvent.pointerDown(corner, { button: 0, buttons: 1, pointerId: 1, clientX: 300, clientY: 300 })
+    fireEvent.pointerMove(corner, { buttons: 1, pointerId: 1, clientX: 340, clientY: 300 })
+    fireEvent.pointerUp(corner, { button: 0, pointerId: 1, clientX: 340, clientY: 300 })
+    const resized = ink()!
+    expect(resized.widthMm).toBeGreaterThan(start.widthMm)
+    expect(resized.widthMm % 0.5).toBe(0)
+    expect(resized).toEqual({ ...start, xMm: start.xMm - 5, yMm: start.yMm - 0.5, widthMm: resized.widthMm, heightMm: resized.widthMm })
+
+    // Its colour flat and tilted away, and the bar's tilt and width
+    const hex = (value: string) => screen.getAllByDisplayValue(value).find((input) => input.getAttribute('type') !== 'color')!
+    fireEvent.change(hex('#c9a227'), { target: { value: '#aa0000' } })
+    fireEvent.change(hex('#2e8b57'), { target: { value: '#0000aa' } })
+    await user.click(screen.getByRole('button', { name: 'Side to side' }))
+    fireEvent.change(screen.getByTitle('How wide the bright bar is, as a share of the shape the way it rolls').querySelector('input')!, { target: { value: '50' } })
+    expect(ink()).toEqual({ ...resized, color: '#aa0000', tiltedColor: '#0000aa', barAxis: 'x', barWidth: 0.5 })
+
+    // Escape ends placing and keeps it selected
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(placing()).toBeNull()
+    expect(tab()).toBe('Magnetic ink')
+
+    // Once it has an image it shows on the banknote, under the thread, and drags there as the watermark does: a press
+    // picks it, with its box, and a drag moves it in 0.5 mm steps instead of tilting the banknote
+    expect(screen.queryByRole('switch', { name: 'Invert' })).toBeNull()
+    const demo = useProjects.getState().demoPreview!
+    act(() => updateNote(demo.id, demo.notes[0].id, (n) => ({ ...n, magneticInk: { ...n.magneticInk!, imageId: 'fixture-ink' } })))
+    const hit = () => document.querySelector('[data-note-body] [data-magnetic-ink]')!
+    expect(hit().compareDocumentPosition(document.querySelector('[data-note-body] [data-thread]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const before = ink()!
+    const tilt = () => ({ y: useTilt.getState().target, x: useTilt.getState().targetX })
+    const tiltBefore = tilt()
+    fireEvent.pointerDown(hit(), { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
+    expect(placing()).not.toBeNull()
+    fireEvent.pointerMove(hit(), { buttons: 1, pointerId: 1, clientX: 101, clientY: 101 })
+    expect(ink()).toEqual(before)
+    fireEvent.pointerMove(hit(), { buttons: 1, pointerId: 1, clientX: 100, clientY: 60 })
+    fireEvent.pointerUp(hit(), { button: 0, pointerId: 1, clientX: 100, clientY: 60 })
+    const moved = ink()!
+    expect(moved.yMm).toBeLessThan(before.yMm)
+    expect(moved.yMm % 0.5).toBe(0)
+    expect(moved).toEqual({ ...before, yMm: moved.yMm })
+    expect(tilt()).toEqual(tiltBefore)
+    // A click elsewhere on the banknote ends placing; a click on the ink picks it again without moving it
+    fireEvent.pointerDown(document.querySelector('[data-note-body]')!, { button: 0, buttons: 1, pointerId: 1, clientX: 5, clientY: 5 })
+    fireEvent.pointerUp(document.querySelector('[data-note-body]')!, { button: 0, pointerId: 1, clientX: 5, clientY: 5 })
+    expect(placing()).toBeNull()
+    fireEvent.pointerDown(hit(), { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerUp(hit(), { button: 0, pointerId: 1, clientX: 100, clientY: 100 })
+    expect(placing()).not.toBeNull()
+    expect(ink()).toEqual(moved)
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    // Invert puts the ink round the shape instead; switched off, it is left unsaid
+    await user.click(screen.getByRole('switch', { name: 'Invert' }))
+    expect(ink()).toEqual({ ...moved, invert: true })
+    await user.click(screen.getByRole('switch', { name: 'Invert' }))
+    expect(ink()).toEqual(moved)
+    expect(saves).not.toHaveBeenCalled()
+  })
+
+  it('takes the + away once a banknote has every layer, keeps magnetic ink on a copy, and Delete removes it while placing', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'magnetic-ink-remove-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const notes = () => useProjects.getState().demoPreview!.notes
+    await user.click(screen.getByRole('button', { name: 'Add layer' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Magnetic ink' }))
+    await user.click(screen.getByRole('button', { name: 'Add layer' }))
+    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual(['Watermark'])
+    await user.click(screen.getByRole('menuitem', { name: 'Watermark' }))
+    expect(screen.queryByRole('button', { name: 'Add layer' })).toBeNull()
+    // Listed under the thread in the order they draw, as tabs in the same order
+    expect(within(screen.getByRole('list', { name: 'Layers of Demo banknote' })).getAllByRole('listitem').map((row) => row.textContent))
+      .toEqual(['Security thread', 'Watermark', 'Magnetic ink'])
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Banknote', 'Thread', 'Watermark', 'Magnetic ink'])
+    const original = notes()[0].magneticInk
+
+    await user.click(screen.getByRole('button', { name: 'Duplicate', exact: true }))
+    await waitFor(() => expect(notes()).toHaveLength(2))
+    expect(notes()[1].magneticInk).toEqual(original)
+
+    // On the copy: picking its ink places it, and Delete removes it, leaving the banknote itself selected and the original alone
+    await user.click(screen.getByRole('button', { name: 'Magnetic ink', exact: true }))
+    expect(tab()).toBe('Magnetic ink')
+    fireEvent.keyDown(window, { key: 'Delete' })
+    expect(notes()[1].magneticInk).toBeUndefined()
+    expect(notes()[0].magneticInk).toEqual(original)
+    expect(tab()).toBe('Banknote')
+    // The + is back, for the ink alone
+    await user.click(screen.getByRole('button', { name: 'Add layer' }))
+    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual(['Magnetic ink'])
+    await user.keyboard('{Escape}')
+
+    await user.click(screen.getByRole('button', { name: 'Undo', exact: true }))
+    expect(notes()[1].magneticInk).toEqual(original)
+    // The remove button beside the tabs names it
+    await user.click(screen.getByRole('button', { name: 'Magnetic ink', exact: true }))
+    expect(screen.getAllByRole('button', { name: 'Remove magnetic ink' })).toHaveLength(2)
     expect(saves).not.toHaveBeenCalled()
   })
 })

@@ -6,7 +6,7 @@ import { remapTracks } from './pattern'
 import type { Note, Project } from './types'
 
 const noteImageIds = (note: Note) =>
-  [note.faceImageId, note.watermark?.imageId, ...note.frames.map((f) => f.imageId)].filter((i) => i !== undefined)
+  [note.faceImageId, note.watermark?.imageId, note.magneticInk?.imageId, ...note.frames.map((f) => f.imageId)].filter((i) => i !== undefined)
 
 /** A copy of a note with fresh ids and its own copies of the images, so deleting one never breaks the other */
 async function copyNote(note: Note): Promise<Note> {
@@ -18,11 +18,12 @@ async function copyNote(note: Note): Promise<Note> {
     })),
   )
   const faceImageId = note.faceImageId ? await copyImage(note.faceImageId) : undefined
-  // The watermark is part of the banknote's design, so a copy keeps it, with its own image
+  // The watermark and magnetic ink are part of the banknote's design, so a copy keeps them, with their own images
   const watermark = note.watermark?.imageId ? { ...note.watermark, imageId: await copyImage(note.watermark.imageId) } : note.watermark
+  const magneticInk = note.magneticInk?.imageId ? { ...note.magneticInk, imageId: await copyImage(note.magneticInk.imageId) } : note.magneticInk
   // Section tracks name frames by id, so they follow the frames to their new ids
   const pattern = remapTracks(note.pattern, new Map(note.frames.map((f, i) => [f.id, frames[i].id])))
-  return { ...note, id: crypto.randomUUID(), faceImageId, frames, ...(watermark ? { watermark } : {}), ...(pattern ? { pattern } : {}) }
+  return { ...note, id: crypto.randomUUID(), faceImageId, frames, ...(watermark ? { watermark } : {}), ...(magneticInk ? { magneticInk } : {}), ...(pattern ? { pattern } : {}) }
 }
 
 // Keep the editor's existing actions while the cloud workspace owns persistence.

@@ -5,7 +5,7 @@ import { SaveConflict, type CachedProject, type CloudProject, type ProjectReposi
 import type { Project } from '../lib/types'
 
 export const projectImageIds = (project: Project) => [...new Set(project.notes.flatMap(
-  (note) => [note.faceImageId, note.watermark?.imageId, ...note.frames.map((f) => f.imageId)],
+  (note) => [note.faceImageId, note.watermark?.imageId, note.magneticInk?.imageId, ...note.frames.map((f) => f.imageId)],
 ).filter((id): id is string => !!id))]
 interface Row { data: Project; revision: string; deleted_at: string | null }
 const fromRow = (row: Row): CloudProject => ({ project: migrateProject(row.data), revision: row.revision, deleted: !!row.deleted_at })

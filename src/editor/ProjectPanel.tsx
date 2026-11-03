@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft, ChevronRight, Columns2, Copy, Droplet, Plus, Redo2, Rows2, Trash2, Undo2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Columns2, Copy, Droplet, Magnet, Plus, Redo2, Rows2, Trash2, Undo2 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import {
   AlertDialog,
@@ -22,14 +22,18 @@ import { runAction, reportError } from '../cloud/notices'
 import { NoteView } from '../components/NoteView'
 import { duplicateNote, removeNote, updateNote, updateProject, undoProject, redoProject } from '../lib/store'
 import { useHistory } from '../lib/history'
+import { LAYER_NAMES, PLACED_LAYERS, type PlacedLayer } from '../lib/layers'
 import type { Note, Project } from '../lib/types'
-import type { Layer } from './watermarkActions'
+import type { Layer } from './layerActions'
 
 const THUMB = 28
 
+/** Each placed layer's icon in the list and the + menu, as on its tab in the right panel */
+const LAYER_ICONS: Record<PlacedLayer, ReactNode> = { watermark: <Droplet />, magneticInk: <Magnet /> }
+
 /**
  * Top-left: back to the projects, the project's name, and its banknotes as a collapsible list. Each banknote opens
- * to its layers (Security thread, Watermark once added); the selected one opens by itself.
+ * to its layers (Security thread, then Watermark and Magnetic ink once added); the selected one opens by itself.
  */
 export function ProjectPanel({
   project,
@@ -38,8 +42,8 @@ export function ProjectPanel({
   layer,
   onSelect,
   onAdd,
-  onAddWatermark,
-  onRemoveWatermark,
+  onAddLayer,
+  onRemoveLayer,
   aboveTilt = false,
 }: {
   project: Project
@@ -50,8 +54,8 @@ export function ProjectPanel({
   /** A banknote row picks the banknote itself (no layer, or 'note'), a layer row that layer */
   onSelect: (noteId: string, layer?: Layer) => void
   onAdd: () => void
-  onAddWatermark: (noteId: string) => void
-  onRemoveWatermark: (noteId: string) => void
+  onAddLayer: (noteId: string, layer: PlacedLayer) => void
+  onRemoveLayer: (noteId: string, layer: PlacedLayer) => void
   /** The tilt pad sits under the panel, bottom left, so the list stops short of it */
   aboveTilt?: boolean
 }) {
@@ -109,8 +113,9 @@ export function ProjectPanel({
             {project.notes.map((note) => {
               const selected = note.id === selectedId
               const expanded = isOpen(note.id)
-              // Nothing more to add once a banknote has every kind of layer
-              const canAdd = !note.watermark
+              // The + lists only the layers the banknote doesn't have yet, and goes once it has them all
+              const addable = PLACED_LAYERS.filter((l) => !note[l])
+              const canAdd = addable.length > 0
               return (
               <li key={note.id}>
                 <div className="group relative">
@@ -168,10 +173,12 @@ export function ProjectPanel({
                           <TooltipContent>Add layer</TooltipContent>
                         </Tooltip>
                         <DropdownMenuContent className="w-40" align="start">
-                          <DropdownMenuItem onClick={() => onAddWatermark(note.id)}>
-                            <Droplet />
-                            Watermark
-                          </DropdownMenuItem>
+                          {addable.map((l) => (
+                            <DropdownMenuItem key={l} onClick={() => onAddLayer(note.id, l)}>
+                              {LAYER_ICONS[l]}
+                              {LAYER_NAMES[l]}
+                            </DropdownMenuItem>
+                          ))}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
@@ -201,15 +208,16 @@ export function ProjectPanel({
                       selected={selected && layer === 'thread'}
                       onSelect={() => onSelect(note.id, 'thread')}
                     />
-                    {note.watermark && (
+                    {PLACED_LAYERS.filter((l) => note[l]).map((l) => (
                       <LayerRow
-                        icon={<Droplet />}
-                        name="Watermark"
-                        selected={selected && layer === 'watermark'}
-                        onSelect={() => onSelect(note.id, 'watermark')}
-                        onRemove={() => onRemoveWatermark(note.id)}
+                        key={l}
+                        icon={LAYER_ICONS[l]}
+                        name={LAYER_NAMES[l]}
+                        selected={selected && layer === l}
+                        onSelect={() => onSelect(note.id, l)}
+                        onRemove={() => onRemoveLayer(note.id, l)}
                       />
-                    )}
+                    ))}
                   </ul>
                 )}
               </li>

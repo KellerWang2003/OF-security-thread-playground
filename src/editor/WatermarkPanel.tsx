@@ -1,16 +1,11 @@
-import { ImageUp, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
-import { Group, IconButton, Labeled, LengthField, ScrubField, Section, SwitchField } from '../components/controls'
-import { reportError } from '../cloud/notices'
-import { pickFiles, useImageUrl } from '../lib/images'
+import { Group, Labeled, ScrubField, Section, SwitchField } from '../components/controls'
 import { useReading } from '../lib/relief'
 import type { Note, Watermark, WatermarkLevels } from '../lib/types'
-import {
-  FULL_LEVELS, LEVELS_GAP, WATERMARK_MIN_MM, WATERMARK_STEP, gammaAt, maxWatermarkWidth, midtonesAt, resizeWatermark,
-} from '../lib/watermark'
+import { FULL_LEVELS, LEVELS_GAP, gammaAt, midtonesAt } from '../lib/watermark'
 import type { NoteRef } from './frameActions'
-import { setWatermarkImage, updateWatermark } from './watermarkActions'
+import { setWatermarkImage, updateWatermark } from './layerActions'
+import { LayerImage, PlaceFields } from './PlacedFields'
 
 /**
  * Right, under the Watermark tab: the selected banknote's watermark. One image, read only by brightness, as paper has no
@@ -24,7 +19,6 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace }: {
   /** Shows it on the canvas, flat and clear, to place it */
   onPlace: () => void
 }) {
-  const image = useImageUrl(watermark.imageId)
   const reading = useReading(watermark)
   // By hand, or Auto's for the image as read
   const levels = watermark.levels ?? reading?.auto
@@ -33,38 +27,13 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace }: {
   return (
     <Group>
       <Section nested>
-        <Labeled label="Image">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-[58px] flex-1 justify-start gap-2 overflow-hidden rounded-[calc(var(--radius-sm)+7px)] p-1.5"
-            onClick={async () => {
-              try {
-                const [file] = await pickFiles()
-                if (!file) return
-                await setWatermarkImage(noteRef, file)
-                onPlace()
-              } catch (error) { reportError(error) }
-            }}
-          >
-            {image ? (
-              // In greyscale, as only its brightness counts
-              <img src={image} alt="" className="h-11 w-11 shrink-0 rounded bg-muted object-contain grayscale" />
-            ) : (
-              <span className="flex size-11 shrink-0 items-center justify-center rounded bg-muted">
-                <ImageUp />
-              </span>
-            )}
-            {image ? 'Replace' : 'Upload image'}
-          </Button>
-          {watermark.imageId && (
-            <IconButton label="Remove image" onClick={() => void setWatermarkImage(noteRef, undefined)}>
-              <X />
-            </IconButton>
-          )}
-        </div>
-        </Labeled>
+        {/* In greyscale, as only its brightness counts */}
+        <LayerImage imageId={watermark.imageId} grayscale
+          onUpload={async (file) => {
+            await setWatermarkImage(noteRef, file)
+            onPlace()
+          }}
+          onRemove={() => void setWatermarkImage(noteRef, undefined)} />
         {watermark.imageId && (
           <>
             <SwitchField label="Invert" checked={watermark.invert === true} onChange={(on) => change((w) => ({ ...w, invert: on }))} />
@@ -77,24 +46,12 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace }: {
       </Section>
 
       <Section nested>
-        <div className="grid grid-cols-2 gap-2">
-          <Labeled label="From left">
-            <LengthField label="X" title="Watermark position from the left edge" value={watermark.xMm} min={0} max={Math.max(0, note.widthMm - watermark.widthMm)}
-              step={WATERMARK_STEP} onChange={(xMm) => change((w) => ({ ...w, xMm }))} />
-          </Labeled>
-          <Labeled label="From top">
-            <LengthField label="Y" title="Watermark position from the top edge" value={watermark.yMm} min={0} max={Math.max(0, note.heightMm - watermark.heightMm)}
-              step={WATERMARK_STEP} onChange={(yMm) => change((w) => ({ ...w, yMm }))} />
-          </Labeled>
-          <Labeled label="Width">
-            <LengthField label="W" title="Watermark width; its height follows the image" value={watermark.widthMm} min={WATERMARK_MIN_MM}
-              max={maxWatermarkWidth(watermark, note)} step={WATERMARK_STEP} onChange={(widthMm) => change((w, n) => resizeWatermark(w, widthMm, n))} />
-          </Labeled>
+        <PlaceFields note={note} box={watermark} name="Watermark" onChange={change}>
           <Labeled label="Depth">
             <ScrubField label="D" title="How strongly the watermark shows at its clearest, tilted or held to the light" value={Math.round(watermark.depth * 100)} min={0} max={100}
               step={5} unit="%" onChange={(depth) => change((w) => ({ ...w, depth: depth / 100 }))} />
           </Labeled>
-        </div>
+        </PlaceFields>
       </Section>
     </Group>
   )

@@ -3,7 +3,9 @@ import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NoteView } from '../src/components/NoteView'
 import { WATERMARK_TILTED, watermarkOpacity, watermarkReveal } from '../src/lib/light'
+import { INK_ROLL_DEG, INK_SHIFT_DEG, barShift, inkShift } from '../src/lib/magneticInk'
 import { createNote } from '../src/lib/notes'
+import type { MagneticInk } from '../src/lib/types'
 import { setTilt } from '../src/tilt/tilt'
 
 // The watermark's light layer is worked out from its image on a canvas, which jsdom lacks: each is named for what it
@@ -18,6 +20,12 @@ vi.mock('../src/lib/relief', () => ({
   },
   reliefPixels: (_relief: unknown, px: number) => ({ width: Math.min(400, Math.round(px)), height: Math.min(400, Math.round(px)) }),
   paintRelief: (canvas: HTMLCanvasElement, relief: { name: string }) => lights.painted.set(canvas, relief.name),
+}))
+
+// Magnetic ink's mask is read from its image on a canvas too: each is named for what it was read from
+vi.mock('../src/lib/inkMask', () => ({
+  useInkMask: (ink?: { imageId?: string; invert?: boolean }) =>
+    ink?.imageId ? { key: ink.imageId, canvas: undefined, url: `mask-${ink.imageId}${ink.invert ? '-inverted' : ''}.png` } : undefined,
 }))
 
 afterEach(() => {
@@ -163,5 +171,69 @@ describe("a NoteView's watermark", () => {
     const { container } = render(<NoteView note={withoutImage()} scale={1} live />)
     act(() => setTilt({ light: 1 }))
     expect(container.querySelector('[data-watermark]')).toBeNull()
+  })
+})
+
+describe("a NoteView's magnetic ink", () => {
+  const withInk = (change: Partial<MagneticInk> = {}) => ({
+    ...makeNote(),
+    magneticInk: { imageId: 'ink', xMm: 10, yMm: 10, widthMm: 30, heightMm: 20, color: '#c9a227', tiltedColor: '#2e8b57', barAxis: 'y', barWidth: 0.25, ...change } satisfies MagneticInk,
+  })
+  const ink = (container: HTMLElement) => container.querySelector<HTMLElement>('[data-magnetic-ink]')!
+  const shift = (container: HTMLElement) => Number(container.querySelector<HTMLElement>('[data-tilt="ink-shift"]')!.style.opacity)
+  const bar = (container: HTMLElement) => container.querySelector<HTMLElement>('[data-tilt="ink-bar"]')!
+  const shape = (container: HTMLElement) => ink(container).style.maskImage || ink(container).style.getPropertyValue('-webkit-mask-image')
+
+  it('prints its shape in its Flat colour over the watermark and under the thread, its bar resting across the middle', () => {
+    const note = { ...withInk(), watermark: { imageId: 'mark', xMm: 10, yMm: 10, widthMm: 30, heightMm: 30, depth: 0.6 } }
+    const { container } = render(<NoteView note={note} scale={2} live />)
+    const layer = ink(container)
+    expect([layer.style.left, layer.style.top, layer.style.width, layer.style.height]).toEqual(['20px', '20px', '60px', '40px'])
+    // Clipped to the shape read from its image
+    expect(shape(container)).toContain('mask-ink.png')
+    expect(container.querySelector('[data-watermark]')!.compareDocumentPosition(layer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(layer.compareDocumentPosition(container.querySelector('[data-thread]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect((layer.firstElementChild as HTMLElement).style.backgroundColor).toBe('rgb(201, 162, 39)')
+    expect(shift(container)).toBe(0)
+    expect([bar(container).style.top, bar(container).style.height, bar(container).style.transform]).toEqual(['37.5%', '25%', 'translateY(0%)'])
+    // It takes a press on the canvas, anywhere in its box, to drag it
+    expect(layer.classList.contains('cursor-move')).toBe(true)
+  })
+
+  it('turns to its Tilted colour as the note turns away, either way, and rolls its bar on its own tilt, without re-rendering', () => {
+    const note = withInk()
+    let renders = 0
+    function Counted() {
+      renders++
+      return <NoteView note={note} scale={1} live />
+    }
+    const { container } = render(<Counted />)
+    const before = renders
+    act(() => setTilt({ angle: INK_ROLL_DEG / 2 }))
+    expect(shift(container)).toBeCloseTo(inkShift({ x: 0, y: INK_ROLL_DEG / 2 }))
+    expect(bar(container).style.transform).toBe(`translateY(${barShift(note.magneticInk, 0.5)}%)`)
+    act(() => setTilt({ angle: 0, angleX: -INK_SHIFT_DEG }))
+    expect(shift(container)).toBe(1)
+    // A level bar doesn't roll on the side tilt
+    expect(bar(container).style.transform).toBe('translateY(0%)')
+    expect(renders).toBe(before)
+  })
+
+  it('rolls an upright bar side to side instead, and a still note shows it as at its own tilt, taking no press', () => {
+    const upright = withInk({ barAxis: 'x' })
+    const { container, rerender } = render(<NoteView note={upright} scale={1} live />)
+    expect([bar(container).style.left, bar(container).style.width]).toEqual(['37.5%', '25%'])
+    act(() => setTilt({ angleX: INK_ROLL_DEG }))
+    expect(bar(container).style.transform).toBe(`translateX(${barShift(upright.magneticInk, -1)}%)`)
+    rerender(<NoteView note={upright} scale={1} angle={INK_SHIFT_DEG} />)
+    expect(shift(container)).toBe(1)
+    expect(ink(container).classList.contains('pointer-events-none')).toBe(true)
+  })
+
+  it('goes round the shape when inverted, and draws nothing until it has an image', () => {
+    const { container, rerender } = render(<NoteView note={withInk({ invert: true })} scale={1} live />)
+    expect(shape(container)).toContain('mask-ink-inverted.png')
+    rerender(<NoteView note={withInk({ imageId: undefined })} scale={1} live />)
+    expect(container.querySelector('[data-magnetic-ink]')).toBeNull()
   })
 })

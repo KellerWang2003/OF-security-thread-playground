@@ -14,14 +14,15 @@ import { playbackLens, playbackTilt } from '../lib/pattern'
 import { usePatternOffsets } from '../lib/patternOffset'
 import { type Guide, snapBox } from '../lib/snap'
 import { updateNote } from '../lib/store'
-import type { Note, Watermark } from '../lib/types'
+import type { Note } from '../lib/types'
 import { lengthIn, useLengthUnit } from '../lib/units'
-import { moveWatermark } from '../lib/watermark'
+import { isPlaced, type PlacedLayer } from '../lib/layers'
+import { type PlacedBox, moveBox } from '../lib/placed'
 import { setTilt, springToFlat, useTilt, useTiltLoop } from '../tilt/tilt'
 import { EdgeMarks, NeighbourRing } from './ContinuousView'
 import { addImageFrames, type NoteRef } from './frameActions'
-import { WatermarkEditor } from './WatermarkEditor'
-import { updateWatermark, type Layer } from './watermarkActions'
+import { placeLayer, type Layer } from './layerActions'
+import { PlacingBox } from './PlacingBox'
 import { WindowEditor } from './WindowEditor'
 import { useElementSize } from './useElementSize'
 
@@ -51,8 +52,8 @@ type Gesture =
   /** `moved` once the drag passes a few px: a plain click leaves the tilt where it is, and picks the banknote */
   | { mode: 'tilt'; noteId: string; startX: number; startY: number; start: number; startSide: number; moved: boolean }
   | { mode: 'thread'; noteId: string; startX: number; startY: number; startPosition: number; alongMm: number }
-  /** The watermark moves only once the drag passes a few px, so a click just picks it */
-  | { mode: 'watermark'; noteId: string; startX: number; startY: number; original: Watermark; moved: boolean }
+  /** A placed layer (the watermark, magnetic ink) moves only once the drag passes a few px, so a click just picks it */
+  | { mode: 'placed'; layer: PlacedLayer; noteId: string; startX: number; startY: number; original: PlacedBox; moved: boolean }
 
 /** Where the Edit thread button hangs, px from the banknote's top-left: under the thread's middle, or under the banknote at the thread for a vertical one */
 const threadButtonAt = ({ thread, widthMm, heightMm }: Note, scale: number) =>
@@ -85,8 +86,8 @@ function fitView(notes: Note[], size: { width: number; height: number }): View {
 
 /**
  * Every note of the project on one zoomable canvas. Scroll or drag the background to pan, pinch or
- * ⌘/Ctrl-scroll to zoom, drag a note's label to move it, its thread or watermark to move that across it,
- * and the note itself to tilt.
+ * ⌘/Ctrl-scroll to zoom, drag a note's label to move it, its thread, watermark or magnetic ink to move that across
+ * it, and the note itself to tilt.
  */
 export function Canvas({
   projectId,
@@ -100,7 +101,7 @@ export function Canvas({
   selectedWindowId,
   onWindowSelect,
   onExitWindows,
-  placingWatermark = false,
+  placing,
   onExitPlacing,
   onExport,
   onEditWindow,
@@ -109,11 +110,11 @@ export function Canvas({
   projectId: string
   notes: Note[]
   selectedId: string | undefined
-  /** The selected banknote's part that is picked, outlined on the canvas: the banknote itself, its thread or its watermark */
+  /** The selected banknote's part that is picked, outlined on the canvas: the banknote itself, its thread, watermark or magnetic ink */
   layer?: Layer
   /** Selects a banknote itself, or nothing */
   onSelect: (noteId: string | undefined) => void
-  /** A press on a banknote's thread or watermark picks that layer only */
+  /** A press on a banknote's thread, watermark or magnetic ink picks that layer only */
   onSelectLayer: (noteId: string, layer: Layer) => void
   /** Centres the canvas on a note whenever the token changes */
   focus?: { noteId: string; token: number }
@@ -121,8 +122,8 @@ export function Canvas({
   selectedWindowId?: string
   onWindowSelect: (id: string | undefined) => void
   onExitWindows?: () => void
-  /** The selected banknote shows flat with its watermark clear and its box to drag */
-  placingWatermark?: boolean
+  /** The selected banknote's layer being placed: the banknote shows flat (its watermark clear) with the layer's box to drag */
+  placing?: PlacedLayer
   onExitPlacing?: () => void
   /** Export, at the end of the corner bar after the zoom controls; left out while the thread editor is open */
   onExport?: () => void
@@ -138,7 +139,7 @@ export function Canvas({
   const [activeMode, setActiveMode] = useState<Gesture['mode']>()
   const [dropping, setDropping] = useState(false)
   const [guides, setGuides] = useState<Guide[]>([])
-  // What a click would pick under the pointer, outlined lightly: a banknote itself (or its label), its thread or its watermark
+  // What a click would pick under the pointer, outlined lightly: a banknote itself (or its label), its thread, watermark or magnetic ink
   const [hover, setHover] = useState<{ noteId: string; part: Layer }>()
   // Not the angles themselves: each NoteView follows the tilt on its own, so the canvas doesn't re-render
   // every animation frame while tilting or playing
@@ -288,12 +289,12 @@ export function Canvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus?.token])
 
-  // Editing windows or placing the watermark pauses playback but leaves the view where it is, so you edit at the zoom you chose
+  // Editing windows or placing a layer pauses playback but leaves the view where it is, so you edit at the zoom you chose
   useEffect(() => {
-    if (!(editingWindows || placingWatermark) || !selected) return
+    if (!(editingWindows || placing) || !selected) return
     setTilt({ source: 'slider', target: useTilt.getState().angle, targetX: useTilt.getState().angleX })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingWindows, placingWatermark, selectedId])
+  }, [editingWindows, placing, selectedId])
 
   // Every way a gesture can end comes through here, so a tilt drag always springs back the same way
   const endGesture = () => {
@@ -317,12 +318,17 @@ export function Canvas({
   const noteAt = (target: EventTarget, attribute: 'data-note-label' | 'data-note-body') =>
     (target as HTMLElement).closest(`[${attribute}]`)?.getAttribute(attribute) ?? undefined
 
-  /** Follows the pointer between gestures; the window and watermark editors count as the part they edit */
+  /** A placed layer the pointer is on, on the banknote or its placing box */
+  const placedAt = (target: EventTarget) => {
+    const layer = (target as HTMLElement).closest('[data-placed]')?.getAttribute('data-placed') ?? undefined
+    return isPlaced(layer) ? layer : undefined
+  }
+
+  /** Follows the pointer between gestures; the window editor and placing box count as the part they edit */
   const hoverOver = (target: EventTarget) => {
     const element = target as HTMLElement
     const noteId = noteAt(target, 'data-note-label') ?? noteAt(target, 'data-note-body')
-    const part: Layer = element.closest('[data-thread], [data-window-editor]') ? 'thread'
-      : element.closest('[data-watermark], [data-watermark-editor]') ? 'watermark' : 'note'
+    const part: Layer = element.closest('[data-thread], [data-window-editor]') ? 'thread' : placedAt(target) ?? 'note'
     setHover((h) => (!noteId ? undefined : h?.noteId === noteId && h.part === part ? h : { noteId, part }))
   }
 
@@ -337,7 +343,7 @@ export function Canvas({
         'relative flex-1 touch-none overflow-hidden select-none',
         dropping ? 'bg-muted' : 'bg-muted/40',
         activeMode === 'pan' && 'cursor-grabbing',
-        activeMode === 'watermark' && 'cursor-move',
+        activeMode === 'placed' && 'cursor-move',
       )}
       style={
         current
@@ -353,9 +359,9 @@ export function Canvas({
         // Only the left and middle buttons drag; a right-click's menu would swallow the release
         if (!v || e.button > 1) return
         setHover(undefined)
-        // A click on the banknote outside the thread's windows (or the watermark's box) ends editing and tilts as usual
+        // A click on the banknote outside the thread's windows (or the placed layer's box) ends editing and tilts as usual
         if (editingWindows && noteAt(e.target, 'data-note-body') === selectedId) onExitWindows?.()
-        if (placingWatermark && noteAt(e.target, 'data-note-body') === selectedId) onExitPlacing?.()
+        if (placing && noteAt(e.target, 'data-note-body') === selectedId) onExitPlacing?.()
         // Freeze the fitted view, or moving a note would refit the canvas under the pointer. A live pan or
         // zoom is committed first, so drags measure in the scale on screen.
         if (live.current) commitView()
@@ -365,7 +371,8 @@ export function Canvas({
         const bodyId = noteAt(e.target, 'data-note-body')
         const note = notes.find((n) => n.id === (labelId ?? bodyId))
         const onThread = !labelId && (e.target as HTMLElement).closest('[data-thread]') !== null
-        const onWatermark = !labelId && (e.target as HTMLElement).closest('[data-watermark]') !== null
+        const onPlaced = labelId ? undefined : placedAt(e.target)
+        const placed = onPlaced && note?.[onPlaced]
         if (e.button === 1 || !note) {
           gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, view: v, onBackground: !note }
         } else if (onThread && e.button === 0) {
@@ -379,11 +386,11 @@ export function Canvas({
               : ((e.clientY - rect.top) / rect.height) * note.heightMm
             : -1
           gesture.current = { mode: 'thread', noteId: note.id, startX: e.clientX, startY: e.clientY, startPosition: note.thread.positionMm, alongMm }
-        } else if (onWatermark && e.button === 0 && note.watermark) {
-          // The watermark moves around the banknote, as the thread moves across it. Picking it shows its box, whose
-          // corners resize it.
-          onSelectLayer(note.id, 'watermark')
-          gesture.current = { mode: 'watermark', noteId: note.id, startX: e.clientX, startY: e.clientY, original: note.watermark, moved: false }
+        } else if (onPlaced && placed && e.button === 0) {
+          // The watermark or magnetic ink moves around the banknote, as the thread moves across it. Picking it shows its
+          // box, whose corners resize it.
+          onSelectLayer(note.id, onPlaced)
+          gesture.current = { mode: 'placed', layer: onPlaced, noteId: note.id, startX: e.clientX, startY: e.clientY, original: placed, moved: false }
         } else if (labelId) {
           onSelect(note.id)
           gesture.current = { mode: 'move', noteId: note.id, startX: e.clientX, startY: e.clientY, noteX: note.x, noteY: note.y }
@@ -419,15 +426,14 @@ export function Canvas({
             const positionMm = clamp(Math.round((g.startPosition + (horizontal ? dy : dx) / scale) * 2) / 2, half, across - half)
             return positionMm === n.thread.positionMm ? n : { ...n, thread: { ...n.thread, positionMm } }
           })
-        } else if (g.mode === 'watermark') {
+        } else if (g.mode === 'placed') {
           if (!g.moved && Math.hypot(dx, dy) < 3) return
           g.moved = true
           // From where the press found it, in 0.5 mm steps, kept on the banknote
-          updateNote(projectId, g.noteId, (n) => {
-            if (!n.watermark) return n
-            const next = moveWatermark({ ...n.watermark, xMm: g.original.xMm, yMm: g.original.yMm }, dx / scale, dy / scale, n)
-            return next.xMm === n.watermark.xMm && next.yMm === n.watermark.yMm ? n : { ...n, watermark: next }
-          })
+          const note = notes.find((n) => n.id === g.noteId)
+          const box = note?.[g.layer]
+          const next = note && moveBox(g.original, dx / scale, dy / scale, note)
+          if (box && next && (next.xMm !== box.xMm || next.yMm !== box.yMm)) placeLayer({ projectId, noteId: g.noteId }, g.layer, next)
         } else if (g.mode === 'move') {
           const round = (mm: number) => Math.round(mm * 2) / 2
           const rawX = g.noteX + dx / scale
@@ -469,7 +475,7 @@ export function Canvas({
             : undefined
           if (note && section) onEditWindow?.(note.id, section.id)
         }
-        // A click on a banknote, away from its thread and watermark and without tilting it, picks the banknote itself
+        // A click on a banknote, away from its thread and placed layers and without tilting it, picks the banknote itself
         if (g?.mode === 'tilt' && !g.moved) onSelect(g.noteId)
         // A click on empty canvas, without dragging, clears the selection
         if (g?.mode === 'pan' && g.onBackground && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) onSelect(undefined)
@@ -504,7 +510,7 @@ export function Canvas({
         notes.map((note) => {
           const isSelected = note.id === selectedId
           const editingThis = isSelected && editingWindows
-          const placingThis = isSelected && placingWatermark && note.watermark !== undefined
+          const placingThis = isSelected && placing && note[placing] ? placing : undefined
           // Only what is picked is outlined, the banknote itself or one of its parts; what a click would pick is outlined lightly
           const picked = isSelected ? layer : undefined
           const hovered = hover?.noteId === note.id && hover.part !== picked ? hover.part : undefined
@@ -544,13 +550,13 @@ export function Canvas({
                   quiet ? 'outline-primary/5' : 'outline-primary/25',
                 )}
               >
-                {/* Editing windows shows the banknote flat with its watermark faint; placing the watermark, flat with it clear */}
+                {/* Editing windows shows the banknote flat with its watermark faint; placing a layer, flat (the watermark clear) */}
                 <NoteView note={note} scale={scale} live perspective={perspective && !editingThis && !placingThis} sheen={sheen}
-                  reveal={editingThis ? 0 : placingThis ? 1 : undefined} showWindowCuts={editingThis} showFrameNumber={frameNumbers} offsetMm={offsets[note.id]}
+                  reveal={editingThis ? 0 : placingThis === 'watermark' ? 1 : undefined} showWindowCuts={editingThis} showFrameNumber={frameNumbers} offsetMm={offsets[note.id]}
                   selected={picked === 'note' || editingThis || placingThis || quiet ? undefined : picked} hovered={hovered === 'note' ? undefined : hovered}
                   faceShiftMm={drift && (drift.x || drift.y) ? drift : undefined} />
                 {placingThis && (
-                  <WatermarkEditor note={note} watermark={note.watermark!} scale={scale} onChange={(next) => updateWatermark(ref, () => next)} />
+                  <PlacingBox note={note} layer={placingThis} box={note[placingThis]!} scale={scale} onChange={(next) => placeLayer(ref, placingThis, next)} />
                 )}
                 {isSelected && editingWindows && note.thread.windows.enabled && (
                   <WindowEditor note={note} scale={scale} selectedId={selectedWindowId} onSelect={onWindowSelect}

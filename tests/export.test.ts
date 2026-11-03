@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { exportLayout, exportSize, perspectiveFor, playbackAngles, projectRow, sourceRow, tiltedBounds } from '../src/lib/exportRender'
+import { drawInk, exportLayout, exportSize, perspectiveFor, playbackAngles, projectRow, sourceRow, tiltedBounds } from '../src/lib/exportRender'
+import { DEFAULT_INK, INK_BAR_LIGHT, INK_ROLL_DEG, barCentre, inkShift } from '../src/lib/magneticInk'
 import { createNote } from '../src/lib/notes'
 import { SWEEP_SECONDS } from '../src/lib/playback'
 import { copyStarts, imageBox } from '../src/lib/artwork'
@@ -106,5 +107,45 @@ describe('an image in the repeat', () => {
     // The copy from before the stretch shows its last 5 mm at the start
     expect(copyStarts(box, 25, 0, 90)).toEqual([-5, 20, 45, 70])
     expect(copyStarts(box, 25, 3, 90)).toEqual([-2, 23, 48, 73])
+  })
+})
+
+describe('magnetic ink in an export', () => {
+  it('draws what the canvas shows: Flat, Tilted over it as far as the note has turned, the bar where it rolled, through the mask', () => {
+    const calls: [string, ...unknown[]][] = []
+    const note = (name: string) => (...args: unknown[]) => calls.push([name, ...args])
+    const layer = {
+      set fillStyle(value: unknown) { calls.push(['fill', value]) },
+      set globalAlpha(value: number) { calls.push(['alpha', value]) },
+      set globalCompositeOperation(value: string) { calls.push(['composite', value]) },
+      set imageSmoothingQuality(_value: string) {},
+      fillRect: note('rect'),
+      drawImage: note('draw'),
+      createLinearGradient: (...args: unknown[]) => {
+        calls.push(['gradient', ...args])
+        return { addColorStop: note('stop') }
+      },
+    }
+    vi.stubGlobal('OffscreenCanvas', class {
+      constructor(public width: number, public height: number) {}
+      getContext() { return layer }
+    })
+    const ink = { xMm: 10, yMm: 5, widthMm: 30, heightMm: 20, ...DEFAULT_INK, barWidth: 0.25 }
+    const tilt = { x: 0, y: INK_ROLL_DEG / 2 }
+    const face = { drawImage: vi.fn() }
+    drawInk(face as unknown as CanvasRenderingContext2D, ink, { canvas: 'mask' as unknown as HTMLCanvasElement }, (mm) => mm * 2, tilt)
+    vi.unstubAllGlobals()
+
+    expect(calls.slice(0, 6)).toEqual([
+      ['fill', DEFAULT_INK.color], ['rect', 0, 0, 60, 40],
+      ['alpha', inkShift(tilt)], ['fill', DEFAULT_INK.tiltedColor], ['rect', 0, 0, 60, 40], ['alpha', 1],
+    ])
+    // A level bar, white in its middle, rolled halfway down: its middle where the canvas's translate puts it
+    const centre = barCentre(ink, 0.5) * 40
+    expect(calls).toContainEqual(['gradient', 0, centre - 5, 0, centre + 5])
+    expect(calls).toContainEqual(['stop', 0.5, `rgba(255,255,255,${INK_BAR_LIGHT})`])
+    // Only where the shape takes ink, then onto the banknote at its box
+    expect(calls.slice(-2)).toEqual([['composite', 'destination-in'], ['draw', 'mask', 0, 0, 60, 40]])
+    expect(face.drawImage).toHaveBeenCalledWith(expect.anything(), 20, 10, 60, 40)
   })
 })

@@ -15,7 +15,8 @@ import { ThreadEditor } from '../editor/ThreadEditor'
 import { TimelineBar } from '../editor/TimelineBar'
 import { TiltRail } from '../editor/TiltRail'
 import { useSettleArtwork } from '../editor/useSettleArtwork'
-import { addWatermark, layerOf, removeWatermark, type Layer } from '../editor/watermarkActions'
+import { addLayer, layerOf, removeLayer, type Layer } from '../editor/layerActions'
+import { isPlaced, type PlacedLayer } from '../lib/layers'
 
 /** Keys typed into these, or pressed while a dialog or menu is open, are not shortcuts */
 const TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="spinbutton"]'
@@ -29,8 +30,8 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   // Banknotes whose images came before frames kept their proportions are brought up to date once
   useSettleArtwork(project)
   const [selectedId, setSelectedId] = useState<string>()
-  // Which part of the selected banknote the right panel shows: the one last clicked, the banknote itself, its thread
-  // or its watermark. Every selection sets it, so picking a banknote never brings back a layer picked before
+  // Which part of the selected banknote the right panel shows: the one last clicked, the banknote itself, its thread,
+  // watermark or magnetic ink. Every selection sets it, so picking a banknote never brings back a layer picked before
   const [layer, setLayer] = useState<Layer>('note')
   const [editingNoteId, setEditingNoteId] = useState<string>()
   const [selectedWindowId, setSelectedWindowId] = useState<string>()
@@ -40,20 +41,21 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   // Window editing has no mode of its own: it starts when a window is picked (on the canvas or in the panel,
   // or by turning windows on) and ends on a click elsewhere on the banknote, on the canvas, or with Escape
   const editingWindows = editingNoteId !== undefined && editingNoteId === selectedId && shownLayer === 'thread'
-  // Placing the watermark works the same way: it starts when the watermark is picked (its layer, a press on it on
-  // the canvas, adding it or uploading its image) and shows the banknote flat with it clear until it ends
-  const placingWatermark = placingNoteId !== undefined && placingNoteId === selectedId && shownLayer === 'watermark'
+  // Placing the watermark or magnetic ink works the same way: it starts when the layer is picked (its row, a press on
+  // it on the canvas, adding it or uploading its image) and shows the banknote flat (the watermark clear) with the
+  // layer's box until it ends
+  const placing: PlacedLayer | undefined = placingNoteId !== undefined && placingNoteId === selectedId && isPlaced(shownLayer) ? shownLayer : undefined
   const exitWindows = () => {
     setEditingNoteId(undefined)
     setSelectedWindowId(undefined)
   }
   const exitPlacing = () => setPlacingNoteId(undefined)
-  /** Selects exactly what was picked: a banknote itself, or one of its layers; picking its watermark places it */
+  /** Selects exactly what was picked: a banknote itself, or one of its layers; picking its watermark or magnetic ink places it */
   const selectLayer = (noteId: string, next: Layer) => {
     if (noteId !== selectedId || next !== 'thread') exitWindows()
     setSelectedId(noteId)
     setLayer(next)
-    setPlacingNoteId(next === 'watermark' ? noteId : undefined)
+    setPlacingNoteId(isPlaced(next) ? noteId : undefined)
   }
   /** Selects a banknote itself, or nothing */
   const selectNote = (noteId: string | undefined) => {
@@ -96,7 +98,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     }
   }, [playsOnOpen])
 
-  // Escape leaves window editing or placing the watermark, otherwise clears the selection, unless a field or dialog is handling it
+  // Escape leaves window editing or placing a layer, otherwise clears the selection, unless a field or dialog is handling it
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return
@@ -104,12 +106,12 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
         // Clearing the selection always leaves window editing and placing; avoids reading a stale selectedId here
         exitWindows()
         exitPlacing()
-        if (!editingWindows && !placingWatermark) setSelectedId(undefined)
+        if (!editingWindows && !placing) setSelectedId(undefined)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [editingWindows, placingWatermark])
+  }, [editingWindows, placing])
 
   useEffect(() => {
     if (!editingWindows) return
@@ -128,9 +130,9 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     return () => window.removeEventListener('keydown', onDelete)
   }, [editingWindows, editingNoteId, selectedWindowId, project.id])
 
-  // Delete while placing the watermark removes it, as it removes a selected window
+  // Delete while placing a layer removes it, as it removes a selected window
   useEffect(() => {
-    if (!placingWatermark || !placingNoteId) return
+    if (!placing || !placingNoteId) return
     const onDelete = (event: KeyboardEvent) => {
       if (event.key !== 'Delete' && event.key !== 'Backspace') return
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return
@@ -138,13 +140,13 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
       if (element?.closest('input, textarea, select, [contenteditable], [role="dialog"], [role="menu"]')) return
       if (document.querySelector('[role="dialog"], [role="menu"]')) return
       event.preventDefault()
-      void removeWatermark({ projectId: project.id, noteId: placingNoteId })
+      void removeLayer({ projectId: project.id, noteId: placingNoteId }, placing)
       setLayer('note')
       exitPlacing()
     }
     window.addEventListener('keydown', onDelete)
     return () => window.removeEventListener('keydown', onDelete)
-  }, [placingWatermark, placingNoteId, project.id])
+  }, [placing, placingNoteId, project.id])
 
   // L holds every banknote up to the light: a tap flips the lamp switch, holding it peeks at the other light
   useEffect(() => {
@@ -173,7 +175,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
 
   useEffect(() => {
     const onSpace = (event: KeyboardEvent) => {
-      if (editingWindows || placingWatermark) return
+      if (editingWindows || placing) return
       if (event.code !== 'Space' || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return
       const element = event.target instanceof Element ? event.target : null
       if (element?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="spinbutton"], [role="switch"], [role="checkbox"], [role="radio"], [role="slider"]')) return
@@ -183,7 +185,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     }
     window.addEventListener('keydown', onSpace, { capture: true })
     return () => window.removeEventListener('keydown', onSpace, { capture: true })
-  }, [editingWindows, placingWatermark])
+  }, [editingWindows, placing])
 
   useEffect(() => {
     const onHistory = (event: KeyboardEvent) => {
@@ -216,7 +218,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   const reference = note ?? project.notes.at(0)
   const lens = reference ? playbackLens(reference) : undefined
   const noteRef = note ? { projectId: project.id, noteId: note.id } : undefined
-  const tiltPad = !isEmpty && !editingWindows && !placingWatermark
+  const tiltPad = !isEmpty && !editingWindows && !placing
   const threadNote = note && note.id === threadNoteId ? note : undefined
 
   const selectAndFocus = (noteId: string) => {
@@ -229,11 +231,11 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     selectLayer(noteId, next)
     if (elsewhere || next === 'note') setFocus({ noteId, token: Date.now() })
   }
-  // Removing the watermark it shows leaves the banknote itself selected
-  const dropWatermark = (noteId: string) => {
-    void removeWatermark({ projectId: project.id, noteId })
-    if (noteId === selectedId && shownLayer === 'watermark') setLayer('note')
-    if (noteId === placingNoteId) exitPlacing()
+  // Removing the layer it shows leaves the banknote itself selected
+  const dropLayer = (noteId: string, removed: PlacedLayer) => {
+    void removeLayer({ projectId: project.id, noteId }, removed)
+    if (noteId === selectedId && shownLayer === removed) setLayer('note')
+    if (noteId === placingNoteId && placing === removed) exitPlacing()
   }
 
   return (
@@ -253,7 +255,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
         </div>
       ) : (
         <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} layer={shownLayer} onSelect={selectNote} onSelectLayer={selectLayer} onExitWindows={exitWindows} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} onExport={threadNote ? undefined : () => setExporting(true)}
-          placingWatermark={placingWatermark} onExitPlacing={exitPlacing} onEditThread={threadNote ? undefined : editThread}
+          placing={placing} onExitPlacing={exitPlacing} onEditThread={threadNote ? undefined : editThread}
           onEditWindow={(noteId, windowId) => {
             selectLayer(noteId, 'thread')
             setEditingNoteId(noteId)
@@ -268,11 +270,11 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
         <>
           {tiltPad && <TiltRail limit={lens?.viewDeg} playback={reference && lens ? { projectId: project.id, tilt: playbackTilt(reference), lens } : undefined} />}
           <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} layer={shownLayer} onSelect={selectFromList} onAdd={() => setAdding(true)} aboveTilt={tiltPad}
-            onAddWatermark={(noteId) => {
-              addWatermark({ projectId: project.id, noteId })
-              selectFromList(noteId, 'watermark')
+            onAddLayer={(noteId, added) => {
+              addLayer({ projectId: project.id, noteId }, added)
+              selectFromList(noteId, added)
             }}
-            onRemoveWatermark={dropWatermark} />
+            onRemoveLayer={dropLayer} />
           {!isEmpty && (
             <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
           )}
@@ -283,8 +285,8 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
               setEditingNoteId(note.id)
               setSelectedWindowId(windowId)
             }}
-            onPlaceWatermark={() => setPlacingNoteId(note.id)}
-            onRemoveWatermark={() => dropWatermark(note.id)} />}
+            onPlace={() => setPlacingNoteId(note.id)}
+            onRemove={(removed) => dropLayer(note.id, removed)} />}
         </>
       )}
 

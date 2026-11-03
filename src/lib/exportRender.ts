@@ -6,9 +6,11 @@ import { loadImageUrl } from './images'
 import { patternMix, playbackLens, playbackTilt, preparePattern, sectionSpans, shownLabel } from './pattern'
 import { SWEEP_SECONDS, playbackEase, playbackSettings } from './playback'
 import { type Relief, loadRelief } from './relief'
+import { type InkMask, loadInkMask } from './inkMask'
+import { INK_BAR_LIGHT, barCentre, inkRoll, inkShift } from './magneticInk'
 import { copyStarts, imageBox } from './artwork'
 import { fitSections, threadLength } from './thread'
-import type { Note } from './types'
+import type { MagneticInk, Note } from './types'
 
 // Draws banknotes to a canvas exactly as NoteView shows them on the canvas, so the tilt can be exported
 
@@ -91,6 +93,8 @@ export interface NoteAssets {
   frames: Map<string, HTMLImageElement>
   /** The watermark worked out as light through thinner paper, through its levels, colour-dodged over the design (relief.ts) */
   relief?: Relief
+  /** Magnetic ink's shape, the mask its colours and bar are drawn through (inkMask.ts) */
+  ink?: InkMask
 }
 
 function loadImage(url: string) {
@@ -109,16 +113,17 @@ export async function loadArtwork(id: string) {
 
 export async function loadNoteAssets(note: Note): Promise<NoteAssets> {
   const frames = new Map<string, HTMLImageElement>()
-  const [face, relief] = await Promise.all([
+  const [face, relief, ink] = await Promise.all([
     note.background === 'image' && note.faceImageId ? loadArtwork(note.faceImageId) : undefined,
     note.watermark?.imageId ? loadRelief({ imageId: note.watermark.imageId, invert: note.watermark.invert, levels: note.watermark.levels }) : undefined,
+    note.magneticInk?.imageId ? loadInkMask(note.magneticInk.imageId, note.magneticInk.invert) : undefined,
     ...note.frames.map(async (frame) => {
       if (frame.kind !== 'image' || !frame.imageId) return
       const img = await loadArtwork(frame.imageId)
       if (img) frames.set(frame.id, img)
     }),
   ])
-  return { face, frames, relief }
+  return { face, frames, relief, ink }
 }
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
@@ -140,7 +145,7 @@ export interface FaceOptions {
 
 /** The flat note at `scale` px per mm, as NoteView draws it before it is turned in 3D */
 export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number, tiltAt: Tilt2 | number, options: FaceOptions) {
-  const { thread, frames, watermark } = note
+  const { thread, frames, watermark, magneticInk } = note
   const { x: angleX, y: angle } = asTilt(tiltAt)
   const mm = (value: number) => value * scale
   const width = mm(note.widthMm), height = mm(note.heightMm)
@@ -169,6 +174,7 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     ctx.globalAlpha = 1
     ctx.globalCompositeOperation = 'source-over'
   }
+  if (magneticInk && assets.ink) drawInk(ctx, magneticInk, assets.ink, mm, { x: angleX, y: angle })
 
   const horizontal = thread.direction === 'horizontal'
   const lengthMm = threadLength(note)
@@ -288,6 +294,41 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
   }
   if (options.frameNumbers && frames.length > 0) drawFrameNumber(ctx, shownLabel(mixes.map((mix) => mix.current)), strip, mm)
   ctx.restore()
+}
+
+/**
+ * Magnetic ink as NoteView draws it, over the watermark and under the thread: its Flat colour, the Tilted one over it as
+ * far as the note has turned away, and the bright bar where it has rolled, all through the ink's mask
+ */
+export function drawInk(ctx: Ctx, ink: MagneticInk, mask: Pick<InkMask, 'canvas'>, mm: (value: number) => number, tilt: Tilt2) {
+  const width = Math.max(1, Math.round(mm(ink.widthMm)))
+  const height = Math.max(1, Math.round(mm(ink.heightMm)))
+  const layer = new OffscreenCanvas(width, height)
+  const lctx = layer.getContext('2d')
+  if (!lctx) return
+  lctx.fillStyle = ink.color
+  lctx.fillRect(0, 0, width, height)
+  lctx.globalAlpha = inkShift(tilt)
+  lctx.fillStyle = ink.tiltedColor
+  lctx.fillRect(0, 0, width, height)
+  lctx.globalAlpha = 1
+  // The bar, white in its middle fading out to either side, along the way it rolls
+  const across = ink.barAxis === 'x'
+  const along = across ? width : height
+  const centre = barCentre(ink, inkRoll(ink, tilt)) * along
+  const half = (ink.barWidth * along) / 2
+  const bar = across ? lctx.createLinearGradient(centre - half, 0, centre + half, 0) : lctx.createLinearGradient(0, centre - half, 0, centre + half)
+  bar.addColorStop(0, 'rgba(255,255,255,0)')
+  bar.addColorStop(0.5, `rgba(255,255,255,${INK_BAR_LIGHT})`)
+  bar.addColorStop(1, 'rgba(255,255,255,0)')
+  lctx.fillStyle = bar
+  if (across) lctx.fillRect(centre - half, 0, half * 2, height)
+  else lctx.fillRect(0, centre - half, width, half * 2)
+  // Only where the shape takes ink, scaled as smoothly as the canvas's mask
+  lctx.globalCompositeOperation = 'destination-in'
+  lctx.imageSmoothingQuality = 'high'
+  lctx.drawImage(mask.canvas, 0, 0, width, height)
+  ctx.drawImage(layer, mm(ink.xMm), mm(ink.yMm), mm(ink.widthMm), mm(ink.heightMm))
 }
 
 /** The frame-number pill NoteView shows in the middle of the thread when the # toggle is on */

@@ -15,7 +15,7 @@ import { LEVELS_GAP } from './watermark'
  */
 
 /** Brightness 0 to 1 of an sRGB pixel, in whole numbers until the end so white comes out exactly 1 */
-const luma = (r: number, g: number, b: number) => (2126 * r + 7152 * g + 722 * b) / 2_550_000
+export const luma = (r: number, g: number, b: number) => (2126 * r + 7152 * g + 722 * b) / 2_550_000
 
 /** Middle of some numbers (sorts them) */
 const median = (values: number[]) => {
@@ -70,12 +70,12 @@ export function thinness(data: Uint8ClampedArray, width: number, height: number,
   return out
 }
 
-/** How far above the plain paper's own speckle Auto starts the watermark, in spreads of it */
-const SPECKLE_SPREADS = 4
+/** How far above the plain paper's own speckle Auto starts the watermark, in spreads of it (magnetic ink's shape too) */
+export const SPECKLE_SPREADS = 4
 /** Share of what shows that Auto lets reach the thinnest paper, so a few stray pixels don't set the strongest end */
-const AUTO_CLIP = 0.005
+export const AUTO_CLIP = 0.005
 /** Fewer pixels than this share of the image above the start, and Auto leaves the strongest end at the thinnest */
-const AUTO_MIN_SHARE = 0.003
+export const AUTO_MIN_SHARE = 0.003
 
 /**
  * Levels fitted to the image as read: the watermark starts just above the plain paper's own speckle (its edges'
@@ -190,7 +190,7 @@ function loadImage(url: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image()
     img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('The watermark image could not be loaded.'))
+    img.onerror = () => reject(new Error('The image could not be loaded.'))
     img.src = url
   })
 }
@@ -214,7 +214,8 @@ async function readSource(imageId: string): Promise<Source | undefined> {
   return { data: ctx.getImageData(0, 0, width, height).data, width, height }
 }
 
-function sourceOf(imageId: string) {
+/** An image's pixels, read once, at most RELIEF_MAX_PX on its longest side; magnetic ink reads its shape from them too */
+export function sourceOf(imageId: string) {
   let source = sources.get(imageId)
   if (!source) {
     source = readSource(imageId).catch(() => undefined)

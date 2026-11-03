@@ -1,11 +1,12 @@
 import { reportError } from '../cloud/notices'
-import { Banknote, Columns2, Droplet, ImageUp, RectangleHorizontal, RectangleVertical, Rows2, Shuffle, Trash2, TriangleAlert, X } from 'lucide-react'
+import { Banknote, Columns2, Droplet, ImageUp, Magnet, RectangleHorizontal, RectangleVertical, Rows2, Shuffle, Trash2, TriangleAlert, X } from 'lucide-react'
 import { create } from 'zustand'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { ColorField, Drawer, Group, IconButton, Labeled, LengthField, Panel, PartTab, Section, Segmented, TabStrip } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
+import { LAYER_NAMES, fitLayers, isPlaced, moveLayersTo, type PlacedLayer } from '../lib/layers'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
 import { mod, patternOf } from '../lib/pattern'
 import { setPatternOffset, shufflePatternOffset, usePatternOffsets } from '../lib/patternOffset'
@@ -13,14 +14,14 @@ import { windowReports } from '../lib/patternRules'
 import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
-import { fitWatermark, moveWatermarkTo } from '../lib/watermark'
 import { ChecksDrawer, ContinuousSection } from './DesignChecks'
 import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
+import { MagneticInkPanel } from './MagneticInkPanel'
 import { PanelResizer } from './PanelResizer'
 import { WatermarkPanel } from './WatermarkPanel'
 import { WindowsCard } from './WindowsCard'
 import { setFaceImage, type NoteRef } from './frameActions'
-import type { Layer } from './watermarkActions'
+import type { Layer } from './layerActions'
 
 type Change = (note: Note) => Note
 
@@ -28,12 +29,12 @@ type Change = (note: Note) => Note
  * Right: the selected banknote, one tab per part, as the Banknotes list has its layers: the banknote itself (size,
  * background), its security thread (where it sits and its lens, with the lens's preview in a drawer at the foot; what
  * is printed on it, its artwork and sections, is designed in Thread Studio, which opens from the button under the
- * thread on the canvas) and its watermark once it has one. The tab is the
+ * thread on the canvas) and its watermark and magnetic ink once it has them. The tab is the
  * part picked: a click on the canvas or in the list turns to it, and turning to a tab picks that part. One part at a
  * time, so the panel never grows with features. Every control has a small label over it (`Labeled`) unless a word in
  * it or beside it already says what it is.
  */
-export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onWindowSelect, onPlaceWatermark, onRemoveWatermark }: {
+export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onWindowSelect, onPlace, onRemove }: {
   note: Note
   /** Picks a part of the banknote, as its row in the list does */
   onLayer: (layer: Layer) => void
@@ -42,22 +43,23 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
   selectedWindowId?: string
   /** Selecting a window edits it on the canvas; undefined leaves window editing */
   onWindowSelect: (id: string | undefined) => void
-  onPlaceWatermark: () => void
-  onRemoveWatermark: () => void
+  /** Shows the placed layer the panel shows on the canvas, flat, with its box to place it */
+  onPlace: () => void
+  onRemove: (layer: PlacedLayer) => void
 }) {
   const update = (change: Change) => updateNote(noteRef.projectId, noteRef.noteId, change)
   const { thread } = note
   const setThread = (patch: Partial<Note['thread']>) => update((n) => ({ ...n, thread: { ...n.thread, ...patch } }))
   const acrossOf = (n: Pick<Note, 'widthMm' | 'heightMm'>, direction: Note['thread']['direction']) =>
     direction === 'vertical' ? n.widthMm : n.heightMm
+  // The watermark and magnetic ink stay where they were, as far as they fit
   const setSize = (widthMm: number, heightMm: number) =>
-    update((n) => ({
+    update((n) => fitLayers({
       ...n,
       widthMm,
       heightMm,
       thread: { ...n.thread, positionMm: clamp(n.thread.positionMm, 0, acrossOf({ widthMm, heightMm }, n.thread.direction)),
         windows: { ...n.thread.windows, sections: fitSections(n.thread.windows.sections, n.thread.direction === 'vertical' ? heightMm : widthMm) } },
-      ...(n.watermark ? { watermark: fitWatermark(n.watermark, { widthMm, heightMm }) } : {}),
     }))
   // Turning the thread keeps it at the same relative position across the note
   const setDirection = (direction: Note['thread']['direction']) =>
@@ -70,14 +72,13 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
         positionMm: Math.round((n.thread.positionMm / acrossOf(n, n.thread.direction)) * acrossOf(n, direction) * 2) / 2,
       },
     }))
-  // Turning the note keeps the thread at the same relative position across it
+  // Turning the note keeps the thread, the watermark and magnetic ink at the same relative position across it
   const flipOrientation = () =>
     update((n) => {
       const flipped = { widthMm: n.heightMm, heightMm: n.widthMm }
       const across = acrossOf(n, n.thread.direction)
       const positionMm = Math.round((n.thread.positionMm / across) * acrossOf(flipped, n.thread.direction) * 2) / 2
-      return { ...n, ...flipped, thread: { ...n.thread, positionMm, windows: { ...n.thread.windows, sections: fitSections(n.thread.windows.sections, n.thread.direction === 'vertical' ? flipped.heightMm : flipped.widthMm) } },
-        ...(n.watermark ? { watermark: moveWatermarkTo(n.watermark, n, flipped) } : {}) }
+      return moveLayersTo({ ...n, ...flipped, thread: { ...n.thread, positionMm, windows: { ...n.thread.windows, sections: fitSections(n.thread.windows.sections, n.thread.direction === 'vertical' ? flipped.heightMm : flipped.widthMm) } } }, n)
     })
   const portrait = note.heightMm >= note.widthMm
   const background = useImageUrl(note.faceImageId)
@@ -97,9 +98,10 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
           <PartTab value="note"><Banknote />Banknote</PartTab>
           <PartTab value="thread">{thread.direction === 'vertical' ? <Columns2 /> : <Rows2 />}Thread</PartTab>
           {note.watermark && <PartTab value="watermark"><Droplet />Watermark</PartTab>}
+          {note.magneticInk && <PartTab value="magneticInk"><Magnet />Magnetic ink</PartTab>}
         </TabStrip>
-        {layer === 'watermark' && note.watermark && (
-          <IconButton label="Remove watermark" size="icon-xs" className="-mr-1 shrink-0 text-muted-foreground" onClick={onRemoveWatermark}><Trash2 /></IconButton>
+        {isPlaced(layer) && note[layer] && (
+          <IconButton label={`Remove ${LAYER_NAMES[layer].toLowerCase()}`} size="icon-xs" className="-mr-1 shrink-0 text-muted-foreground" onClick={() => onRemove(layer)}><Trash2 /></IconButton>
         )}
       </div>
 
@@ -224,7 +226,12 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
 
       {note.watermark && (
         <TabsContent value="watermark" className="min-h-0 overflow-y-auto">
-          <WatermarkPanel note={note} watermark={note.watermark} noteRef={noteRef} onPlace={onPlaceWatermark} />
+          <WatermarkPanel note={note} watermark={note.watermark} noteRef={noteRef} onPlace={onPlace} />
+        </TabsContent>
+      )}
+      {note.magneticInk && (
+        <TabsContent value="magneticInk" className="min-h-0 overflow-y-auto">
+          <MagneticInkPanel note={note} ink={note.magneticInk} noteRef={noteRef} onPlace={onPlace} />
         </TabsContent>
       )}
       {layer === 'thread' && <PreviewDrawer note={note} />}
