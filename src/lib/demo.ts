@@ -1,4 +1,4 @@
-import { BIRD_WORDS, drawDemoArt, type DemoArt } from './demoArt'
+import { BIRD_WORDS, STAR_FRAME, STAR_NAMES, drawDemoArt, type DemoArt } from './demoArt'
 import { storeImageAs } from './images'
 import { DEFAULT_TILT, createNote, createProject } from './notes'
 import { defaultPattern } from './pattern'
@@ -6,17 +6,15 @@ import type { Frame, Note, PlaybackMove, Project, TiltSettings } from './types'
 
 /**
  * The demo the project list's Demo button opens. It is built here, its artwork drawn in code (demoArt.ts), so it
- * ships with the app and changes only with it. Banknote 1 shows the watermark beside the flapping bird; Banknote 2
- * what Thread Studio does: images placed in the repeat, and colour and background fills. Mixed angles stays out of
- * it until it is known to be printable (Keller). Its playlist plays both.
+ * ships with the app and changes only with it. Banknote 1 shows the watermark beside the flapping bird; Banknote 2,
+ * Partial reveal: a spinning star whose two outer frames only the up/down tilt shows. Mixed angles stays out of it
+ * until it is known to be printable (Keller). Its playlist plays both.
  */
 
 /** The artwork's ids, fixed so opening the demo again reuses what it stored instead of adding more */
 export const DEMO_ART = {
   faces: ['306d5138-8f56-4236-9aef-20144ed61c67', '01c3aa06-ab18-4dcf-a69d-3131dfd819ab'],
   portrait: '0be755d9-bf5f-4c7d-92e2-0623a5a1a98e',
-  star: '9c629dd6-1e6a-4cf6-8bb4-c8ee37dec1c5',
-  birdHead: 'be5524a0-371e-40b1-bda4-eadd226125c4',
   birds: [
     '12b63eb3-8495-48be-b5b5-a58f132113a3',
     '91d377a4-4837-47e3-a8a1-aa4d35f4653d',
@@ -24,15 +22,25 @@ export const DEMO_ART = {
     'f2ba82ca-ac1b-4f22-aa27-fd6fc015d587',
     'af7325fa-f077-4da1-82d6-a666479a4a0a',
   ],
+  stars: [
+    'fd5689c2-f0d6-4ea6-90c8-4ba36fbd95e1',
+    'b67cc883-54eb-4626-9a97-c95ca4698f20',
+    '60fb810f-1a9a-4274-b5c9-4e69252f653b',
+    'bfec7744-3ba5-4b3f-baa4-04af012d8714',
+    'c1659135-1428-43a1-9e2a-cc73dff1d64e',
+  ],
 } as const
 
 const newId = () => crypto.randomUUID()
 
 /** The demo, with fresh ids every time; its artwork is referred to by DEMO_ART's ids */
 export function demoProject(): Project {
-  // Playback for both: up and down far enough for the watermark to come out fully at either end; no light, which
-  // only matters flat
-  const moves: PlaybackMove[] = [{ id: newId(), kind: 'y', from: -30, y: 30 }]
+  // Playback for both: up/down, then side to side, each far enough for the watermark to come out fully at either end.
+  // No light, which only matters flat
+  const moves: PlaybackMove[] = [
+    { id: newId(), kind: 'y', from: -30, y: 30 },
+    { id: newId(), kind: 'x', from: -30, x: 30 },
+  ]
   const tilt: TiltSettings = { ...DEFAULT_TILT, transition: 0.3, moves }
   const windowAt = (startMm: number, endMm: number) => ({ id: newId(), startMm, endMm })
 
@@ -51,24 +59,23 @@ export function demoProject(): Project {
     watermark: { imageId: DEMO_ART.portrait, xMm: 10, yMm: 18.5, widthMm: 30, heightMm: 37.5, depth: 0.8 },
   }
 
-  // Banknote 2: a frame of each fill, and the star and the bird's head placed apart in the 16 mm repeat
+  // Banknote 2: Partial reveal, as Keller set it out: up/down plays all five frames, side to side only the middle
+  // three. The star spins through them, and the two outer frames add a small star between the big ones, so the
+  // frames only up/down shows stand out. Each frame is one 16 mm repeat long, so the big stars fall 16 mm apart
   const second = createNote({ name: 'Star thread', x: 170, y: 0, widthMm: 75, heightMm: 150, color: '#9A8BC6' })
-  const studio: Note = {
+  const stars: Note = {
     ...second,
     background: 'image',
     faceImageId: DEMO_ART.faces[1],
     thread: { ...second.thread, widthMm: 6, direction: 'horizontal', positionMm: 40, backgroundColor: '#2B2766', windows: { enabled: false, sections: [] } },
-    frames: [
-      { id: newId(), kind: 'color', color: '#F26B5B', name: 'Coral', length: 10 },
-      { id: newId(), kind: 'image', color: '#ffffff', imageId: DEMO_ART.star, aspect: 1, place: { alongMm: 2.5, across: 0.1, size: 0.8 }, name: 'Star', length: 10 },
-      { id: newId(), kind: 'none', color: '#2B2766', name: 'Night', length: 10 },
-      { id: newId(), kind: 'image', color: '#ffffff', imageId: DEMO_ART.birdHead, aspect: 1, place: { alongMm: 9, across: 0.08, size: 0.84 }, name: 'Bird', length: 10 },
-    ],
-    tilt,
+    frames: DEMO_ART.stars.map((imageId, i): Frame => ({
+      id: newId(), kind: 'image', color: '#ffffff', imageId, aspect: STAR_FRAME.height / STAR_FRAME.width, name: STAR_NAMES[i], length: 10,
+    })),
+    tilt: { ...tilt, effect: 'reveal', revealAxis: 'y' },
     pattern: defaultPattern(16),
   }
 
-  return { ...createProject('Silly bird demo'), notes: [watermark, studio] }
+  return { ...createProject('Silly bird demo'), notes: [watermark, stars] }
 }
 
 let drawn: Promise<DemoArt> | undefined
@@ -84,9 +91,8 @@ export async function createDemoProject(): Promise<Project> {
     storeImageAs(DEMO_ART.faces[0], art.faces[0]),
     storeImageAs(DEMO_ART.faces[1], art.faces[1]),
     storeImageAs(DEMO_ART.portrait, art.portrait),
-    storeImageAs(DEMO_ART.star, art.star),
-    storeImageAs(DEMO_ART.birdHead, art.birdHead),
     ...DEMO_ART.birds.map((id, i) => storeImageAs(id, art.birds[i])),
+    ...DEMO_ART.stars.map((id, i) => storeImageAs(id, art.stars[i])),
   ])
   return demoProject()
 }

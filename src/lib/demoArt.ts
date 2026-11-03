@@ -1,7 +1,7 @@
 /**
  * The demo's artwork, drawn in code so it ships with the app and comes out the same every time: two printed faces in
  * the manner of a banknote (fine-line waves, a braided border, rosettes, numerals and microtext), the bird portrait its
- * watermark is read from, the flapping bird the first thread plays, and the star and bird's head placed on the second.
+ * watermark is read from, the flapping bird the first thread plays, and the spinning star the second plays.
  * Everything is original, and nothing is random.
  */
 
@@ -368,85 +368,73 @@ async function drawPortrait() {
   return toBlob(canvas)
 }
 
-/** A gold star, on transparency so the thread's background shows round it */
-async function drawStar() {
-  const { canvas, g } = sheet(400, 400)
-  const points = Array.from({ length: 10 }, (_, i) => {
-    const a = -Math.PI / 2 + (i * Math.PI) / 5
-    const r = i % 2 ? 72 : 176
-    return [200 + r * Math.cos(a), 212 + r * Math.sin(a)] as const
-  })
+/** Traces a five-pointed star `turn` radians from upright */
+function starPath(g: CanvasRenderingContext2D, cx: number, cy: number, outer: number, inner: number, turn: number) {
   g.beginPath()
-  points.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)))
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + turn + (i * Math.PI) / 5
+    const r = i % 2 ? inner : outer
+    if (i === 0) g.moveTo(cx + r * Math.cos(a), cy + r * Math.sin(a))
+    else g.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a))
+  }
   g.closePath()
-  const fill = g.createRadialGradient(165, 150, 10, 200, 212, 190)
-  fill.addColorStop(0, '#FFF1B8')
-  fill.addColorStop(0.45, '#F7C948')
-  fill.addColorStop(1, '#D98B1C')
+}
+
+/** A gold star with its facets, from the middle to every point and corner */
+function goldStar(g: CanvasRenderingContext2D, cx: number, cy: number, outer: number, turn: number, light = false) {
+  const inner = outer * 0.41
+  starPath(g, cx, cy, outer, inner, turn)
+  const fill = g.createRadialGradient(cx - outer * 0.2, cy - outer * 0.35, outer * 0.05, cx, cy, outer)
+  fill.addColorStop(0, light ? '#FFFDF0' : '#FFF1B8')
+  fill.addColorStop(0.45, light ? '#FFF0A8' : '#F7C948')
+  fill.addColorStop(1, light ? '#F2C94C' : '#D98B1C')
   g.fillStyle = fill
   g.fill()
   g.lineJoin = 'round'
-  g.lineWidth = 12
+  g.lineWidth = outer * 0.055
   g.strokeStyle = '#7A4A06'
   g.stroke()
-  // Facets, from the middle to every point and corner
-  g.lineWidth = 4
+  g.lineWidth = outer * 0.018
   g.strokeStyle = 'rgba(122, 74, 6, 0.45)'
-  for (const [x, y] of points) {
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + turn + (i * Math.PI) / 5
+    const r = i % 2 ? inner : outer
     g.beginPath()
-    g.moveTo(200, 212)
-    g.lineTo(x, y)
+    g.moveTo(cx, cy)
+    g.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a))
     g.stroke()
+  }
+}
+
+/**
+ * How far the star thread's big star is turned in each frame, degrees: a fifth of a turn in all, which brings its
+ * points round to where they started, so the frames loop on without a jump
+ */
+const STAR_TURNS = [-28.8, -14.4, 0, 14.4, 28.8]
+/** The outer frames, the two Partial reveal hides from the side tilt, add a small star between the big ones */
+const SPARKLE_FRAMES = new Set([0, STAR_TURNS.length - 1])
+export const STAR_NAMES = STAR_TURNS.map((_, i) => `${i + 1} ${SPARKLE_FRAMES.has(i) ? 'sparkle' : 'star'}`)
+/** A star frame's size, px: one 16 mm repeat by the 6 mm thread, at 100 px a mm */
+export const STAR_FRAME = { width: 1600, height: 600 }
+
+/** One frame of the star thread, on transparency so the thread's background shows round its stars */
+async function drawStarFrame(i: number) {
+  const { canvas, g } = sheet(STAR_FRAME.width, STAR_FRAME.height)
+  const turn = (STAR_TURNS[i] * Math.PI) / 180
+  goldStar(g, 400, 300, 235, turn)
+  if (SPARKLE_FRAMES.has(i)) {
+    // Halfway to the next big star, with a soft glow round it
+    const glow = g.createRadialGradient(1200, 300, 0, 1200, 300, 230)
+    glow.addColorStop(0, 'rgba(255, 244, 200, 0.6)')
+    glow.addColorStop(1, 'rgba(255, 244, 200, 0)')
+    g.fillStyle = glow
+    g.fillRect(970, 70, 460, 460)
+    goldStar(g, 1200, 300, 120, -turn, true)
   }
   return toBlob(canvas)
 }
 
 const BIRD_INK = '#2b2d42'
-
-/** The bird's head, drawn as the flapping bird is, on transparency */
-async function drawBirdHead() {
-  const { canvas, g } = sheet(400, 400)
-  g.lineJoin = 'round'
-  g.strokeStyle = BIRD_INK
-  g.lineWidth = 14
-  g.fillStyle = '#ffffff'
-  // Crest, behind the head
-  for (const [x, y, turn] of [[148, 74, -0.5], [188, 62, -0.12], [228, 74, 0.28]]) {
-    g.save()
-    g.translate(x, y)
-    g.rotate(turn)
-    g.beginPath()
-    g.ellipse(0, 0, 15, 36, 0, 0, Math.PI * 2)
-    g.fill()
-    g.stroke()
-    g.restore()
-  }
-  g.beginPath()
-  g.arc(185, 215, 125, 0, Math.PI * 2)
-  g.fill()
-  g.stroke()
-  g.fillStyle = '#FF9F1C'
-  g.beginPath()
-  g.moveTo(292, 178)
-  g.lineTo(386, 222)
-  g.lineTo(292, 262)
-  g.closePath()
-  g.fill()
-  g.stroke()
-  g.fillStyle = 'rgba(255, 128, 150, 0.45)'
-  g.beginPath()
-  g.arc(198, 268, 26, 0, Math.PI * 2)
-  g.fill()
-  g.fillStyle = BIRD_INK
-  g.beginPath()
-  g.arc(232, 186, 20, 0, Math.PI * 2)
-  g.fill()
-  g.fillStyle = '#ffffff'
-  g.beginPath()
-  g.arc(239, 179, 6, 0, Math.PI * 2)
-  g.fill()
-  return toBlob(canvas)
-}
 
 const SKIES = ['#FFD166', '#F4A261', '#EF6F8C', '#B07BE0', '#6FB7FF']
 const WINGS = [-60, -30, 0, 30, 55]
@@ -524,20 +512,18 @@ async function drawBird(i: number): Promise<Blob> {
 export interface DemoArt {
   faces: [watermark: Blob, studio: Blob]
   portrait: Blob
-  star: Blob
-  birdHead: Blob
   birds: Blob[]
+  stars: Blob[]
 }
 
 /** Every piece of the demo's artwork */
 export async function drawDemoArt(): Promise<DemoArt> {
-  const [watermarkFace, studioFace, portrait, star, birdHead, ...birds] = await Promise.all([
+  const [watermarkFace, studioFace, portrait, birds, stars] = await Promise.all([
     drawWatermarkFace(),
     drawStudioFace(),
     drawPortrait(),
-    drawStar(),
-    drawBirdHead(),
-    ...BIRD_WORDS.map((_, i) => drawBird(i)),
+    Promise.all(BIRD_WORDS.map((_, i) => drawBird(i))),
+    Promise.all(STAR_TURNS.map((_, i) => drawStarFrame(i))),
   ])
-  return { faces: [watermarkFace, studioFace], portrait, star, birdHead, birds }
+  return { faces: [watermarkFace, studioFace], portrait, birds, stars }
 }
