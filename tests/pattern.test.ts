@@ -271,6 +271,15 @@ describe('rules', () => {
     expect(issues(continuous, 'windows')).toEqual([])
   })
 
+  it('1: never flags a window under 1 mm on a lens that runs the whole repeat', () => {
+    const tiny = { thread: { ...banknote().thread, windows: { enabled: true, sections: [window(5, 5.5), window(24, 32)] } } }
+    // A banknote from before patterns, and lanes that each run the whole repeat
+    expect(warningCount(checkPattern(banknote(undefined, tiny)))).toBe(0)
+    expect(issues(withPreset('split', tiny), 'windows')).toEqual([])
+    // Blocks still can't show 1 mm of anything there
+    expect(issues(withPreset('alternate', tiny), 'windows').map((i) => i.text)).toContain('Window 1 can miss ↕ · ↔')
+  })
+
   it('1: also asks for the frames only one section shows', () => {
     // One lens for both, but only the second block carries frames 1 and 5
     const note = banknote({ repeatMm: 24, mixed: false, sections: [

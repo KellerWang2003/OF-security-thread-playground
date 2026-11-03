@@ -120,12 +120,13 @@ function requirements(note: RuleNote, pp: PreparedPattern): Requirement[] {
 /** Offsets (0 to the repeat) at which some copy of one of these sections shows at least the minimum in the window */
 function goodOffsets(req: Requirement, usable: Map<string, Usable>, w0: number, w1: number, repeat: number): [number, number][] | 'always' {
   const m = MIN_SECTION_ALONG_MM
+  // A section over the whole repeat runs through every window, however short
+  if (req.sections.some((id) => usable.get(id)?.continuous)) return 'always'
   if (w1 - w0 < m - EPS) return []
   const pieces: [number, number][] = []
   for (const id of req.sections) {
     const u = usable.get(id)
     if (!u) continue
-    if (u.continuous) return 'always'
     const [a, b] = u.along
     if (b - a < m - EPS) continue
     // A copy shifted by o shows [a + o, b + o]: at least m of it is inside the window for o in [lo, hi], every repeat
