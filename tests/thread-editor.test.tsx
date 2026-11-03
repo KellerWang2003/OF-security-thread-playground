@@ -466,27 +466,45 @@ describe('thread editor', () => {
     expect(within(editor).getByText('Lens angle').nextElementSibling!.textContent).toBe('45° /')
   })
 
-  it('tilts the thread by dragging with Tilt on, turns it in perspective unless switched off, and turns the thread from the panel', async () => {
+  it('tilts by dragging around the thread, always in perspective, and edits the measurements beside it', async () => {
     const user = await openDemo('thread-view-ui-test')
     await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
 
-    // With Tilt on, a drag on the thread tilts it instead of drawing
-    await user.click(within(editor).getByRole('button', { name: 'Tilt', exact: true }))
-    const element = strip().element
-    fireEvent.pointerDown(element, { button: 0, buttons: 1, clientX: 10, clientY: 100, pointerId: 1 })
-    fireEvent.pointerMove(element, { buttons: 1, clientX: 10, clientY: 20, pointerId: 1 })
+    // A drag around the thread tilts it, as on the canvas, and never draws
+    const view = strip().element.parentElement!.parentElement!.parentElement!
+    fireEvent.pointerDown(view, { button: 0, buttons: 1, clientX: 10, clientY: 100, pointerId: 1 })
+    fireEvent.pointerMove(view, { buttons: 1, clientX: 10, clientY: 20, pointerId: 1 })
     expect(useTilt.getState().target).toBe(15)
-    fireEvent.pointerUp(element, { button: 0, clientX: 10, clientY: 20, pointerId: 1 })
+    fireEvent.pointerUp(view, { button: 0, clientX: 10, clientY: 20, pointerId: 1 })
     expect(sections()).toHaveLength(1)
 
-    // Tilted, the thread turns with it, unless Perspective is off
+    // Tilted, the thread always turns with it
     act(() => setTilt({ source: 'drag', angle: 20, target: 20, angleX: 0, targetX: 0 }))
     expect(strip().element.style.transform).toBe('rotateX(20deg) rotateY(0deg)')
-    await user.click(within(editor).getByRole('button', { name: 'Perspective', exact: true }))
-    expect(strip().element.style.transform).toBe('')
+    act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
 
-    // The thread can be turned from the editor
+    // Beside the thread: the repeat and thickness, and the selected section's length and width, to type in
+    const field = (title: string) => within(strip().element).getByTitle(title).querySelector('input')!
+    const type = (title: string, value: string) => { fireEvent.change(field(title), { target: { value } }); fireEvent.blur(field(title)) }
+    expect(field('Length of one repeat of the pattern along the thread').value).toBe('4')
+    type('The selected section\'s length along the thread', '2.5')
+    expect(sections()[0]).toMatchObject({ startMm: 0, endMm: 2.5 })
+    type('The selected section\'s width across the thread', '2')
+    expect(sections()[0].acrossEnd).toBe(0.5)
+    type('Thread width vertically, or height horizontally', '5')
+    expect(note().thread.widthMm).toBe(5)
+    // Nothing is selected: only the thread's own measurements show
+    await user.keyboard('{Escape}')
+    expect(within(strip().element).queryByTitle('The selected section\'s length along the thread')).toBeNull()
+    expect(within(strip().element).getByTitle('Length of one repeat of the pattern along the thread')).toBeDefined()
+
+    // Ridges only shows or hides the hatching
+    await user.click(within(editor).getByRole('button', { name: 'Ridges', exact: true }))
+    expect(strip().element.querySelectorAll('pattern').length).toBeGreaterThan(0)
+    expect(strip().element.querySelector('rect[fill^="url("]')).not.toBeNull()
+
+    // The thread can be turned from the panel
     await user.click(within(editor).getByRole('button', { name: 'Horizontal', exact: true }))
     expect(note().thread.direction).toBe('horizontal')
   })

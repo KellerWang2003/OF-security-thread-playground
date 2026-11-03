@@ -1,11 +1,14 @@
 import { Maximize, Minus, Plus } from 'lucide-react'
-import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import { IconButton } from '../components/controls'
+import { IconButton, ScrubField } from '../components/controls'
 import { ThreadArt } from '../components/NoteView'
 import { clamp } from '../lib/frames'
 import { lensMix } from '../lib/lens'
+import { THREAD_WIDTH } from '../lib/notes'
 import {
+  ALONG_STEP,
+  REPEAT_LIMITS,
   drawRect,
   fillGaps,
   moveRect,
@@ -14,6 +17,7 @@ import {
   placeSection,
   preparePattern,
   resizeEdge,
+  setRepeat,
   updateSection,
   type Edge,
   type PatternPoint,
@@ -25,8 +29,8 @@ import { useElementSize } from './useElementSize'
 
 /** Px per mm the view never goes past, so a short repeat doesn't blow up into a blur */
 const MAX_SCALE = 120
-/** Room around the strip, px */
-const MARGIN = 28
+/** Room around the strip for the measurements, px: wide beside it, where the fields sit, shorter above and below */
+const MARGIN = { x: 104, y: 48 }
 /** How far either side of an edge grabs it, px */
 const EDGE_PX = 5
 
@@ -35,7 +39,7 @@ type Gesture =
   | { mode: 'draw'; copy: number; from: PatternPoint; moved: boolean; rect?: Rect }
   | { mode: 'move'; id: string; start: ThreadSection; pattern: ThreadPattern; at: { along: number; across: number }; moved: boolean }
   | { mode: 'resize'; id: string; edge: Edge; pattern: ThreadPattern; copy: number }
-  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; id?: string; moved: boolean }
+  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; moved: boolean }
   | { mode: 'pan'; startX: number; startY: number; from: View }
 
 /** The view's zoom (1 fits the repeats shown) and how far it is panned from the middle, px */
@@ -48,7 +52,8 @@ const isAlong = (edge: Edge) => edge === 'startMm' || edge === 'endMm'
 
 /** Two repeats, or three when they still leave the thread wide enough to work on */
 function layout(box: { width: number; height: number }, repeatMm: number, widthMm: number, vertical: boolean) {
-  const room = { along: (vertical ? box.height : box.width) - 2 * MARGIN, across: (vertical ? box.width : box.height) - 2 * MARGIN }
+  const free = { width: box.width - 2 * MARGIN.x, height: box.height - 2 * MARGIN.y }
+  const room = { along: vertical ? free.height : free.width, across: vertical ? free.width : free.height }
   const fit = (n: number) => Math.min(MAX_SCALE, room.along / (n * repeatMm), room.across / widthMm)
   const repeats = fit(3) * widthMm >= 140 ? 3 : 2
   // However long the repeat, the thread fits: a cramped view shrinks it rather than spilling over the panels
@@ -60,23 +65,20 @@ function layout(box: { width: number; height: number }, repeatMm: number, widthM
  * the real artwork at the current tilt, with the repeat's ends, each section's outline and, optionally, its ridges.
  * Drag on empty thread to draw a section (it takes the look of the section beside it, as Fill does, or plays plain
  * when it touches none), drag a section to move it or its edges to resize it (snapping to 0.5 mm along and twelfths
- * across); a click selects, and a double-click on an empty area fills it. Like the canvas, scrolling or dragging
- * around the thread pans, pinching or ⌘/Ctrl-scrolling zooms; with `tiltDrag` a drag on the thread tilts instead
- * of drawing, and with `perspective` the thread turns with the tilt (editing still lands where the pointer is). The
+ * across); a click selects, and a double-click on an empty area fills it. Beside the first repeat, measurements to
+ * read and edit: the repeat and the thread's thickness, and the selected section's length and width. Like the
+ * canvas, a drag around the thread tilts it, always in perspective (editing still lands where the pointer is),
+ * scrolling or a middle-button drag pans, and pinching or ⌘/Ctrl-scrolling zooms. The
  * view fills its parent, behind the floating panels, as the canvas does; the thread fits and centres in `room`
  * (Tailwind insets clear of the panels), and panned it runs on under them instead of being cut off at that box.
  */
-export function PatternView({ note, projectId, selectedId, onSelect, ridges, tiltDrag = false, perspective = false, limit = 90, room: roomClassName }: {
+export function PatternView({ note, projectId, selectedId, onSelect, ridges, limit = 90, room: roomClassName }: {
   note: Note
   projectId: string
   selectedId?: string
   onSelect: (id: string | undefined) => void
   /** Hatch each section at its ridge angle */
   ridges: boolean
-  /** A drag on the thread tilts it, as on the canvas, instead of drawing or moving sections */
-  tiltDrag?: boolean
-  /** The thread turns in perspective with the tilt; off, it plays flat */
-  perspective?: boolean
   /** How far a drag may tilt, either way */
   limit?: number
   /** Where the thread fits and centres, as Tailwind insets within the view */
@@ -146,7 +148,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   }
   // Turned in perspective, the thread is a plane seen at an angle: a point on screen is traced back onto it, so
   // drawing and moving land under the pointer at any tilt
-  const turned = perspective && (angle !== 0 || angleX !== 0)
+  const turned = angle !== 0 || angleX !== 0
   const depth = 2.2 * Math.max(width, height)
   const locate = (e: { clientX: number; clientY: number }) => {
     // The untilted box: the strip's parent, the same size and never turned
@@ -172,14 +174,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
     const handle = target.closest<HTMLElement>('[data-edge]')
     const body = target.closest<HTMLElement>('[data-section-id]')
     const section = pattern.sections.find((s) => s.id === body?.dataset.sectionId)
-    if (tiltDrag) {
-      // As on the canvas: from where the tilt is heading, springing back on release unless the pad holds it
-      const s = useTilt.getState()
-      const start = s.source === 'drag' ? s.target : s.angle
-      const startSide = s.source === 'drag' ? s.targetX : s.angleX
-      gesture.current = { mode: 'tilt', startX: e.clientX, startY: e.clientY, start, startSide, id: section?.id, moved: false }
-      setTilt({ source: 'drag', target: start, targetX: startSide })
-    } else if (section && handle) {
+    if (section && handle) {
       onSelect(section.id)
       gesture.current = { mode: 'resize', id: section.id, edge: handle.dataset.edge as Edge, pattern, copy: Number(body?.dataset.copy ?? 0) }
     } else if (section) {
@@ -234,9 +229,9 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
     gesture.current = null
     setPanning(false)
     if (g?.mode === 'tilt') {
-      // A click without tilting still selects what it lands on
+      // A click without tilting clears the selection, as on the canvas
       if (g.moved && useTilt.getState().springBack) springToFlat()
-      else if (!g.moved) onSelect(g.id)
+      else if (!g.moved) onSelect(undefined)
       return
     }
     if (g?.mode !== 'draw') return
@@ -251,12 +246,13 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
     }
   }
 
+  const selected = pattern.sections.find((s) => s.id === selectedId)
   // A section deleted or undone away under the pointer never sees it leave
   const hovered = pattern.sections.some((s) => s.id === hover)
 
   // A double-click on empty thread fills that whole gap, as Fill does: the section in line with it runs on, or new ones take its look
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (tiltDrag || (e.target as HTMLElement).closest('[data-section-id]')) return
+    if ((e.target as HTMLElement).closest('[data-section-id]')) return
     const at = locate(e)
     const copy = copyOf(at.along)
     const filled = fillGaps(pattern, thread.widthMm, { along: clamp(at.along - copy * repeat, 0, repeat), across: clamp(at.across, 0, 1) })
@@ -266,17 +262,26 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   }
 
   return (
-    <div ref={box} className={cn('absolute inset-0 touch-none overflow-hidden', panning ? 'cursor-grabbing' : 'cursor-grab')}
+    <div ref={box} className={cn('absolute inset-0 touch-none overflow-hidden', panning && 'cursor-grabbing')}
       onPointerDown={(e) => {
-        // Around the thread, a drag pans the view
-        if (e.button !== 0) return
+        // Around the thread, a drag tilts it, as on the canvas, from where the tilt is heading (springing back on
+        // release unless the pad holds it); a middle-button drag pans
+        if (e.button !== 0 && e.button !== 1) return
         e.currentTarget.setPointerCapture(e.pointerId)
-        gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, from: viewState }
-        setPanning(true)
+        if (e.button === 1) {
+          gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, from: viewState }
+          setPanning(true)
+          return
+        }
+        const s = useTilt.getState()
+        const start = s.source === 'drag' ? s.target : s.angle
+        const startSide = s.source === 'drag' ? s.targetX : s.angleX
+        gesture.current = { mode: 'tilt', startX: e.clientX, startY: e.clientY, start, startSide, moved: false }
+        setTilt({ source: 'drag', target: start, targetX: startSide })
       }}
       onPointerMove={onPointerMove} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}
       onDoubleClick={(e) => { if (e.target === e.currentTarget) setView(FIT) }}>
-      {/* Lets presses through to the view, so they pan, except on the thread and the zoom controls */}
+      {/* Lets presses through to the view, so they tilt, except on the thread, its measurements and the zoom controls */}
       <div ref={room} className={cn('pointer-events-none absolute inset-0 flex items-center justify-center', roomClassName)}>
       <div className="pointer-events-auto relative shrink-0" style={{ width, height, transform: `translate(${viewState.x}px, ${viewState.y}px)`, perspective: depth }}>
       <div
@@ -284,7 +289,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
         role="group"
         aria-label="Thread pattern"
         data-pattern-view=""
-        className={cn('relative touch-none shadow-sm select-none', tiltDrag ? 'cursor-grab' : preview || !hovered ? 'cursor-crosshair' : 'cursor-move')}
+        className={cn('relative touch-none shadow-sm select-none', preview || !hovered ? 'cursor-crosshair' : 'cursor-move')}
         style={{ width, height, transform: turned ? `rotateX(${angle}deg) rotateY(${angleX}deg)` : undefined }}
         // Moves and releases bubble up to the view's own handlers
         onPointerDown={onPointerDown}
@@ -334,6 +339,31 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
             </div>
           )
         }))}
+
+        {/* Measurements on the first repeat, turning with the thread: the repeat and the selected section's length
+            along it, either side; the thread's thickness and the section's width across it, at either end */}
+        <Measure side={vertical ? 'left' : 'top'} from={0} to={repeat * scale}>
+          <ScrubField size="sm" className="w-[88px]" unit="mm" label="R" title="Length of one repeat of the pattern along the thread" value={repeat}
+            min={REPEAT_LIMITS.min} max={REPEAT_LIMITS.max} step={ALONG_STEP} onChange={(v) => write(setRepeat(pattern, v))} />
+        </Measure>
+        <Measure side={vertical ? 'top' : 'left'} from={0} to={thickness}>
+          <ScrubField size="sm" className="w-[88px]" unit="mm" label="T" title="Thread width vertically, or height horizontally" value={thread.widthMm}
+            min={THREAD_WIDTH.min} max={THREAD_WIDTH.max} step={THREAD_WIDTH.step}
+            onChange={(widthMm) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, widthMm } }))} />
+        </Measure>
+        {selected && (
+          <>
+            <Measure side={vertical ? 'right' : 'bottom'} from={selected.startMm * scale} to={selected.endMm * scale} selected>
+              <ScrubField size="sm" className="w-[88px]" unit="mm" label="L" title="The selected section's length along the thread" value={selected.endMm - selected.startMm}
+                min={ALONG_STEP} max={repeat} step={ALONG_STEP} onChange={(v) => write(resizeEdge(pattern, selected.id, 'endMm', selected.startMm + v, false))} />
+            </Measure>
+            <Measure side={vertical ? 'bottom' : 'right'} from={selected.acrossStart * thickness} to={selected.acrossEnd * thickness} selected>
+              <ScrubField size="sm" className="w-[88px]" unit="mm" label="W" title="The selected section's width across the thread" value={(selected.acrossEnd - selected.acrossStart) * thread.widthMm}
+                min={thread.widthMm / 12} max={thread.widthMm} step={thread.widthMm / 12}
+                onChange={(mm) => write(resizeEdge(pattern, selected.id, 'acrossEnd', selected.acrossStart + mm / thread.widthMm, false))} />
+            </Measure>
+          </>
+        )}
       </div>
       </div>
 
@@ -377,6 +407,34 @@ function solve3(m: number[], v: number[]): number[] {
   const det = a * A + b * B + c * C
   const inv = [A, -(b * i - c * h), b * f - c * e, B, a * i - c * g, -(a * f - c * d), C, -(a * h - b * g), a * e - b * d].map((x) => x / det)
   return [0, 1, 2].map((r) => inv[r * 3] * v[0] + inv[r * 3 + 1] * v[1] + inv[r * 3 + 2] * v[2])
+}
+
+/**
+ * A measurement beside the thread: a bracket over `from` to `to` (px along that side of the strip) and its field
+ * beyond it. Presses on it never reach the thread, so scrubbing or typing doesn't draw or tilt.
+ */
+function Measure({ side, from, to, selected = false, children }: {
+  side: 'left' | 'right' | 'top' | 'bottom'
+  from: number
+  to: number
+  /** The selected section's, in the selection colour */
+  selected?: boolean
+  children: ReactNode
+}) {
+  const gap = 10
+  const upright = side === 'left' || side === 'right'
+  const place: CSSProperties = upright
+    ? { top: from, height: Math.max(0, to - from), [side === 'left' ? 'right' : 'left']: `calc(100% + ${gap}px)` }
+    : { left: from, width: Math.max(0, to - from), [side === 'top' ? 'bottom' : 'top']: `calc(100% + ${gap}px)` }
+  // The bracket's open side faces the thread
+  const bracket = { left: 'h-full w-1.5 border-y border-l', right: 'h-full w-1.5 border-y border-r', top: 'h-1.5 w-full border-x border-t', bottom: 'h-1.5 w-full border-x border-b' }[side]
+  return (
+    <div className={cn('absolute flex items-center gap-1.5', { left: 'flex-row-reverse', right: 'flex-row', top: 'flex-col-reverse', bottom: 'flex-col' }[side])}
+      style={place} data-measure="" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <div className={cn('shrink-0', bracket, selected ? 'border-primary' : 'border-foreground/40')} />
+      <div className="shrink-0 rounded-md bg-background shadow-xs">{children}</div>
+    </div>
+  )
 }
 
 /** Empty thread (no section prints there) as a faint check */

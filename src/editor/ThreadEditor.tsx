@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft, ChevronUp, CircleCheck, Copy, Info, Plus, Redo2, RotateCcw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronUp, CircleCheck, Copy, Eye, EyeOff, Info, Plus, Redo2, RotateCcw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -17,7 +17,6 @@ import { Group, IconButton, Panel, ScrubField, Section, SwitchField } from '../c
 import { canStepNote, useHistory } from '../lib/history'
 import {
   ALONG_STEP,
-  REPEAT_LIMITS,
   addBlankSection,
   duplicateSection,
   fillGaps,
@@ -30,7 +29,6 @@ import {
   resizeEdge,
   sectionSlots,
   sectionView,
-  setRepeat,
   setSectionLens,
   setSectionTrack,
   updateSection,
@@ -60,8 +58,6 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
   const pattern = patternOf(note)
   const [selectedId, setSelectedId] = useState(() => pattern.sections.at(0)?.id)
   const [ridges, setRidges] = useState(false)
-  const [tiltDrag, setTiltDrag] = useState(false)
-  const [perspective, setPerspective] = useState(true)
   // Preview and Checks open one at a time, as an accordion, so the controls above always keep room
   const [info, setInfo] = useState<'preview' | 'checks'>()
   const openInfo = (part: 'preview' | 'checks') => (open: boolean) => setInfo(open ? part : undefined)
@@ -146,7 +142,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
 
       {/* The whole editor, behind the panels, as on the canvas; the thread fits between them */}
       <PatternView note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={setSelectedId} ridges={ridges}
-        tiltDrag={tiltDrag} perspective={perspective} limit={lens.viewDeg} room="top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[272px]" />
+        limit={lens.viewDeg} room="top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[272px]" />
 
       <Panel className="absolute top-3 right-3 left-3 flex h-11 items-center gap-2 rounded-[calc(var(--radius)+0.375rem+1px)] pr-1.5 pl-1.5">
         <IconButton className="rounded-lg" label="Back to the canvas" onClick={onClose}><ChevronLeft /></IconButton>
@@ -160,13 +156,10 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
               {warnings}
             </Button>
           )}
-          <ScrubField className="w-36" label="Repeat" title="Length of one repeat of the pattern along the thread" value={pattern.repeatMm}
-            min={REPEAT_LIMITS.min} max={REPEAT_LIMITS.max} step={ALONG_STEP} unit="mm" onChange={(v) => edit((n) => setRepeat(patternOf(n), v))} />
-          <div className="flex items-center gap-0.5">
-            <Toggle size="sm" aria-label="Tilt" title="Drag on the thread to tilt it, as on the canvas; off, dragging draws and moves sections" pressed={tiltDrag} onPressedChange={setTiltDrag}>Tilt</Toggle>
-            <Toggle size="sm" aria-label="Perspective" title="The thread turns with the tilt; off, it plays flat" pressed={perspective} onPressedChange={setPerspective}>Perspective</Toggle>
-            <Toggle size="sm" aria-label="Ridges" title="Hatch each section at its ridge angle" pressed={ridges} onPressedChange={setRidges}>Ridges</Toggle>
-          </div>
+          <Toggle size="sm" aria-label="Ridges" title={ridges ? "Hide each section's ridges" : "Show each section's ridges"} pressed={ridges} onPressedChange={setRidges}>
+            {ridges ? <Eye /> : <EyeOff />}
+            Ridges
+          </Toggle>
           <div className="flex items-center gap-0.5">
             <IconButton className="rounded-lg" label="Undo" title="Undo (⌘/Ctrl+Z)" disabled={!canUndo} onClick={() => stepNote(project.id, note.id, 'undo')}><Undo2 /></IconButton>
             <IconButton className="rounded-lg" label="Redo" title="Redo (⌘/Ctrl+Shift+Z)" disabled={!canRedo} onClick={() => stepNote(project.id, note.id, 'redo')}><Redo2 /></IconButton>
