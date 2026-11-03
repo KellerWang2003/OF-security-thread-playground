@@ -455,6 +455,11 @@ describe('editing sections', () => {
     expect(shown(after, sweep('x'))).toEqual([...shown(before, sweep('x')).slice(0, 1), ...shown(before, sweep('x'))])
     // Nothing selected: the largest section is cut
     expect(addBlankSection(covered, 4)!.pattern.sections).toHaveLength(3)
+    // A gap between sections a new repeat left off the grid is filled to their edges, leaving no sliver
+    const scaled = setRepeat({ repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 1 }), section({ id: 'b', startMm: 3, endMm: 4 })] }, 5)
+    const exact = addBlankSection(scaled, 4)!
+    expect(exact.pattern.sections.at(-1)).toMatchObject({ startMm: 1.25, endMm: 3.75, acrossStart: 0, acrossEnd: 1 })
+    expect(issues({ ...banknote(), pattern: exact.pattern }, 'gaps')).toEqual([])
   })
 })
 

@@ -496,10 +496,11 @@ export function freeRect(pattern: ThreadPattern): Rect | undefined {
 /**
  * A new section: over the largest empty area, looking like the section beside it (`placeSection`), or else cut from
  * `fromId` (or the largest section) along its longer side, keeping that section's lens and track so the thread still
- * looks the same, and named after it. Undefined when there's no room.
+ * looks the same, and named after it. Undefined when there's no room. The empty area runs exactly to the sections
+ * around it, even ones off the snapping grid, so it leaves no sliver of a gap.
  */
 export function addBlankSection(pattern: ThreadPattern, widthMm: number, fromId?: string): { pattern: ThreadPattern; id: string } | undefined {
-  const free = freeRect(pattern)
+  const free = gapRects(pattern).find((r) => r.endMm - r.startMm >= ALONG_STEP - EPS && r.acrossEnd - r.acrossStart >= ACROSS_STEP - EPS) ?? freeRect(pattern)
   if (free) return placeSection(pattern, free, widthMm)
   const largest = pattern.sections.reduce((a, b) => (area(b) > area(a) ? b : a))
   const from = pattern.sections.find((s) => s.id === fromId) ?? largest
