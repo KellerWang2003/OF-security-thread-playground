@@ -335,8 +335,8 @@ describe('username workspace editor', () => {
     // (Keller), its fill chosen in a panel of its own as Figma's; the timeline picks the frame, so no frame numbers
     expect(screen.getByText('Tile pattern', { exact: true })).toBeDefined()
     expect(screen.queryByRole('button', { name: 'Frame 1', exact: true })).toBeNull()
-    // + and − add and remove it, as in Figma; there is no background under the frames any more (Keller), so an empty
-    // frame shows the banknote through, and the panel offers only a colour or an image
+    // + and − add and remove it, as in Figma; its panel offers a colour or an image, then, in a second section, the
+    // background colour under every frame (Keller), which an empty frame shows
     const fill = () => screen.queryByRole('button', { name: /^Tile pattern: / })
     await user.click(screen.getByRole('button', { name: 'Remove tile pattern' }))
     expect(fill()).toBeNull()
@@ -346,7 +346,10 @@ describe('username workspace editor', () => {
     expect(note().frames[emptied].kind).toBe('color')
     await user.click(fill()!)
     expect(screen.getAllByRole('button', { name: /^(Colour|Image)$/ }).map((b) => b.textContent)).toEqual(['Colour', 'Image'])
-    expect(screen.queryByRole('switch', { name: 'Background colour' })).toBeNull()
+    await user.click(screen.getByRole('switch', { name: 'Background colour' }))
+    expect(note().thread.backgroundColor).toBe('#ffffff')
+    await user.click(screen.getByRole('switch', { name: 'Background colour' }))
+    expect(note().thread.backgroundColor).toBeUndefined()
     // Image starts empty, an image to add with its button, rather than asking for a file straight away (Keller)
     await user.click(screen.getByRole('button', { name: 'Image', exact: true }))
     expect(note().frames[emptied].kind).toBe('image')

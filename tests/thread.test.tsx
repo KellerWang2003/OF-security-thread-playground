@@ -51,25 +51,23 @@ describe('an image in the repeat', () => {
     expect(starts(container, 'vertical')).toEqual([-2, 23, 48, 73])
   })
 
-  it('fills the thread with a colour, and leaves an empty frame empty', () => {
+  it('fills the thread with a colour, and leaves an empty frame to the background', () => {
     const { container, rerender } = render(<FrameFill frame={{ ...image, kind: 'color', color: '#ff0088' }} {...layout('vertical')} />)
     expect((container.firstElementChild as HTMLElement).style.backgroundColor).toBe('rgb(255, 0, 136)')
     rerender(<FrameFill frame={{ ...image, kind: 'none' }} {...layout('vertical')} />)
     expect(container.firstElementChild).toBeNull()
   })
 
-  it('has no background under the frames: an old one becomes its empty frames’ colour, so they look as they did', () => {
+  it('keeps the optional background beneath images and inside the window mask', () => {
     const note = makeNote()
-    note.frames = [image, { ...image, id: 'second' }, { ...image, id: 'empty', kind: 'none' }]
-    const { container } = render(<NoteView note={note} scale={2} />)
+    note.frames = [image, { ...image, id: 'second' }]
+    note.thread.backgroundColor = '#ff0088'
+    const { container, rerender } = render(<NoteView note={note} scale={2} />)
     const strip = container.firstElementChild?.children[0] as HTMLElement
-    expect(strip.style.backgroundColor).toBe('')
+    expect(strip.style.backgroundColor).toBe('rgb(255, 0, 136)')
     expect(strip.style.maskImage).toContain('linear-gradient')
-    // A banknote saved with the shared background it used to have
-    const saved = { ...note, thread: { ...note.thread, backgroundColor: '#ff0088' } }
-    const [loaded] = migrateProject(JSON.parse(JSON.stringify({ ...createProject('Background'), notes: [saved] }))).notes
-    expect(loaded.thread).not.toHaveProperty('backgroundColor')
-    expect(loaded.frames.map((f) => [f.kind, f.kind === 'color' ? f.color : undefined])).toEqual([['image', undefined], ['image', undefined], ['color', '#ff0088']])
+    rerender(<NoteView note={{ ...note, thread: { ...note.thread, backgroundColor: undefined } }} scale={2} />)
+    expect(strip.style.backgroundColor).toBe('')
   })
 
   it('shows cut guides on the banknote and shifts the cuts without moving the artwork', () => {
@@ -111,6 +109,7 @@ describe('an image in the repeat', () => {
     expect(migrated.notes[0].thread.imageGapMm).toBe(0)
     expect(migrated.notes[0].thread).not.toHaveProperty('tileMm')
     migrated.notes[0].thread.imageGapMm = 2.5
+    migrated.notes[0].thread.backgroundColor = '#abcdef'
     expect(migrateProject(JSON.parse(JSON.stringify(migrated))).notes[0].thread).toEqual(migrated.notes[0].thread)
     // A banknote made now loads without one
     expect(migrateProject(JSON.parse(JSON.stringify({ ...createProject('New'), notes: [note] }))).notes[0].thread).not.toHaveProperty('imageGapMm')

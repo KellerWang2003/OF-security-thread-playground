@@ -31,7 +31,7 @@ function everything(): Note {
     ...note,
     background: 'image',
     faceImageId: crypto.randomUUID(),
-    thread: { ...note.thread, widthMm: 5.5, windows: { enabled: true, sections: [{ id: 'w1', startMm: 5, endMm: 17 }, { id: 'w2', startMm: 24, endMm: 62 }] } },
+    thread: { ...note.thread, widthMm: 5.5, backgroundColor: '#112233', windows: { enabled: true, sections: [{ id: 'w1', startMm: 5, endMm: 17 }, { id: 'w2', startMm: 24, endMm: 62 }] } },
     frames: [{ ...empty, kind: 'none' }, { ...colour, color: '#C2456B' }, image],
     watermark: { imageId: crypto.randomUUID(), xMm: 12.3, yMm: 4.5, widthMm: 20, heightMm: 30, depth: 0.4, invert: true, levels: { low: 0.1, high: 0.8, gamma: 1.6 } },
     continuous: { cutMm: 0.7 },

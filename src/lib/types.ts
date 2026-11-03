@@ -1,6 +1,6 @@
 export interface Frame {
   id: string
-  /** What the frame shows: nothing (it starts empty and the banknote shows through), one colour over the whole thread, or one image in the repeat */
+  /** What the frame shows: nothing (the thread's background shows), one colour over the whole thread, or one image in the repeat */
   kind: 'none' | 'color' | 'image'
   color: string
   imageId?: string
@@ -28,6 +28,8 @@ export interface ImagePlace {
 }
 
 export interface ThreadSettings {
+  /** Optional colour behind the frame artwork; omitted for transparency */
+  backgroundColor?: string
   widthMm: number
   /** Which way the thread runs across the note */
   direction: 'vertical' | 'horizontal'

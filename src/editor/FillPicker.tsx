@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { reportError } from '../cloud/notices'
-import { ColorField, IconButton, Segmented } from '../components/controls'
+import { ColorField, IconButton, Segmented, SwitchField } from '../components/controls'
 import { pickFiles, useImageUrl } from '../lib/images'
 import { updateNote } from '../lib/store'
 import type { Frame, Note } from '../lib/types'
@@ -15,6 +15,8 @@ interface Fill {
   kind: 'none' | 'color' | 'image'
   color: string
   url?: string
+  /** What shows round an image with transparency: the thread's background colour */
+  backdrop?: string
 }
 
 /** What it takes to change a fill */
@@ -27,6 +29,8 @@ interface FillEdits {
   removeImage?: () => void
   /** The image button before there is an image */
   uploadLabel?: string
+  /** The colour under every one of the thread's frames, and setting it (none lets the banknote show through) */
+  background?: { color?: string; set: (color: string | undefined) => void }
 }
 
 /** No fill: a faint check, as empty thread shows in Thread Studio */
@@ -35,10 +39,11 @@ const CHECK = {
   backgroundSize: '8px 8px',
 }
 
-/** A fill as a small square, as Figma's fill swatch: its colour or its image, a check when it has neither */
+/** A fill as a small square, as Figma's fill swatch: its colour or its image (over its backdrop), a check when it has neither */
 function FillSwatch({ fill }: { fill: Fill }) {
   return (
-    <span className="relative block size-5 shrink-0 overflow-hidden rounded border border-foreground/15 bg-background" style={CHECK}>
+    <span className="relative block size-5 shrink-0 overflow-hidden rounded border border-foreground/15 bg-background"
+      style={fill.backdrop ? { backgroundColor: fill.backdrop } : CHECK}>
       {fill.kind === 'color' && <span className="absolute inset-0" style={{ backgroundColor: fill.color }} />}
       {fill.kind === 'image' && fill.url && <img src={fill.url} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />}
     </span>
@@ -105,6 +110,15 @@ function FillPanel({ fill, edits, trigger, side = 'left', align = 'start', onOpe
             )}
           </div>
         )}
+        {/* A second section (Keller): the colour under every frame, showing on empty ones and round images */}
+        {edits.background && (
+          <>
+            <div className="-mx-2.5 border-t border-border/70" />
+            <SwitchField label="Background colour" title="One colour under every frame; off, the banknote shows through" checked={!!edits.background.color}
+              onChange={(on) => edits.background?.set(on ? '#ffffff' : undefined)} />
+            {edits.background.color && <ColorField value={edits.background.color} onChange={edits.background.set} />}
+          </>
+        )}
       </PopoverContent>
     </Popover>
   )
@@ -123,28 +137,32 @@ function FillRow({ name, fill, edits }: { name: string; fill: Fill; edits: FillE
   )
 }
 
-/** A frame's fill and how to change it; an image it had comes back when Image is picked again */
-function frameFill(noteRef: NoteRef, frame: Frame, url: string | undefined): { fill: Fill; edits: FillEdits } {
+/** A frame's fill and how to change it, with the thread's background; an image it had comes back when Image is picked again */
+function frameFill(note: Note, noteRef: NoteRef, frame: Frame, url: string | undefined): { fill: Fill; edits: FillEdits } {
   return {
-    fill: { kind: frame.kind, color: frame.color, url },
+    fill: { kind: frame.kind, color: frame.color, url, backdrop: note.thread.backgroundColor },
     edits: {
       setKind: (kind) => updateFrame(noteRef, frame.id, { kind }),
       setColor: (color) => updateFrame(noteRef, frame.id, { color }),
       addImage: (file) => replaceFrameImage(noteRef, frame.id, file),
+      background: {
+        color: note.thread.backgroundColor,
+        set: (backgroundColor) => updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, thread: { ...n.thread, backgroundColor } })),
+      },
     },
   }
 }
 
 /** A frame's fill row, under Tile pattern in the right panels */
-export function FrameFillRow({ noteRef, frame }: { noteRef: NoteRef; frame: Frame }) {
+export function FrameFillRow({ note, noteRef, frame }: { note: Note; noteRef: NoteRef; frame: Frame }) {
   const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
-  return <FillRow name="Tile pattern" {...frameFill(noteRef, frame, url)} />
+  return <FillRow name="Tile pattern" {...frameFill(note, noteRef, frame, url)} />
 }
 
 /** A frame's fill panel, opened from somewhere else: the pencil on its clip in the timeline */
-export function FrameFillPanel({ noteRef, frame, ...place }: { noteRef: NoteRef; frame: Frame } & PanelPlace) {
+export function FrameFillPanel({ note, noteRef, frame, ...place }: { note: Note; noteRef: NoteRef; frame: Frame } & PanelPlace) {
   const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
-  return <FillPanel {...frameFill(noteRef, frame, url)} {...place} />
+  return <FillPanel {...frameFill(note, noteRef, frame, url)} {...place} />
 }
 
 /**

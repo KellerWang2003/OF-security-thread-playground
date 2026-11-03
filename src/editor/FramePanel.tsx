@@ -55,7 +55,7 @@ export function FramePanel({ note, noteRef, frame, index, onShow, picker = true,
       <Section nested title="Tile pattern" action={frame.kind === 'none'
         ? <IconButton label="Add tile pattern" size="icon-xs" onClick={() => set({ kind: 'color' })}><Plus /></IconButton>
         : <IconButton label="Remove tile pattern" size="icon-xs" onClick={() => set({ kind: 'none' })}><Minus /></IconButton>}>
-        {frame.kind !== 'none' && <FrameFillRow noteRef={noteRef} frame={frame} />}
+        {frame.kind !== 'none' && <FrameFillRow note={note} noteRef={noteRef} frame={frame} />}
       </Section>
     </>
   )

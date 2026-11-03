@@ -68,6 +68,10 @@ export function PrintCanvas({ note, ridges, sizePx }: { note: Note; ridges: numb
       c.height = h
       const ctx = c.getContext('2d')
       if (!ctx) return new Uint8ClampedArray(w * h * 4)
+      if (thread.backgroundColor) {
+        ctx.fillStyle = thread.backgroundColor
+        ctx.fillRect(0, 0, w, h)
+      }
       if (frame.kind === 'color') {
         ctx.fillStyle = frame.color
         ctx.fillRect(0, 0, w, h)
@@ -105,7 +109,7 @@ export function PrintCanvas({ note, ridges, sizePx }: { note: Note; ridges: numb
       }
     }
     return { data, owner }
-  }, [cut, frames, images, thread.direction, repeatMm, along, vertical, across, ridges, w, h, scale, dpr])
+  }, [cut, frames, images, thread.backgroundColor, thread.direction, repeatMm, along, vertical, across, ridges, w, h, scale, dpr])
 
   useEffect(() => {
     const ctx = canvas.current?.getContext('2d')

@@ -634,8 +634,8 @@ describe('thread editor', () => {
     arrive()
     expect(frameButton(1).getAttribute('aria-pressed')).toBe('true')
 
-    // Its fill, in a panel of its own as Figma's (Keller), + and − adding and removing it; with no background under the
-    // frames any more, an empty frame shows the banknote through
+    // Its fill, in a panel of its own as Figma's (Keller), + and − adding and removing it; the panel's second section is
+    // the background colour under every frame, which an empty frame shows
     await user.click(within(editor).getByRole('button', { name: 'Remove tile pattern' }))
     expect(note().frames[0].kind).toBe('none')
     expect(within(editor).queryByRole('button', { name: /^Tile pattern: / })).toBeNull()
@@ -643,7 +643,8 @@ describe('thread editor', () => {
     expect(note().frames[0].kind).toBe('color')
     await user.click(within(editor).getByRole('button', { name: /^Tile pattern: #/ }))
     expect(screen.queryByRole('button', { name: 'Background', exact: true })).toBeNull()
-    expect(screen.queryByRole('switch', { name: 'Background colour' })).toBeNull()
+    await user.click(screen.getByRole('switch', { name: 'Background colour' }))
+    expect(note().thread.backgroundColor).toBe('#ffffff')
     await user.click(within(editor).getByRole('button', { name: /^Tile pattern: #/ }))
 
     // An image sits in the repeat; its Place comes before its Fill, fitted at first, then where its fields put it. The

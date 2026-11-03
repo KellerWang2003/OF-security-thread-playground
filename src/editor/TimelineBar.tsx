@@ -298,7 +298,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
                 )}
                 style={{ top: framesTop, left: left + 1, width: Math.max(width - 2, 4), transform: drag ? `translateX(${slide(i)}px)` : undefined }}
               >
-                <FrameThumb frame={frame} />
+                <FrameThumb frame={frame} backgroundColor={note.thread.backgroundColor} />
                 {width > 28 && (
                   <span className={cn('absolute top-0.5 left-1 rounded bg-background/80 px-1 text-[10px] font-medium tabular-nums',
                     frames.length > MIN_FRAMES && !drag && 'group-hover:opacity-0')}>
@@ -323,7 +323,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
                   </Button>
                 )}
                 {/* The pencil at the top right edits its fill, in the same panel as the right panel's, going to the frame */}
-                <FrameFillPanel noteRef={noteRef} frame={frame} side="top" align="center"
+                <FrameFillPanel note={note} noteRef={noteRef} frame={frame} side="top" align="center"
                   onOpenChange={(open) => {
                     if (!open) return
                     goTo(i)

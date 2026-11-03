@@ -67,7 +67,7 @@ export function demoProject(): Project {
     ...second,
     background: 'image',
     faceImageId: DEMO_ART.faces[1],
-    thread: { ...second.thread, widthMm: 6, direction: 'horizontal', positionMm: 40, windows: { enabled: false, sections: [] } },
+    thread: { ...second.thread, widthMm: 6, direction: 'horizontal', positionMm: 40, backgroundColor: '#2B2766', windows: { enabled: false, sections: [] } },
     frames: DEMO_ART.stars.map((imageId, i): Frame => ({
       id: newId(), kind: 'image', color: '#ffffff', imageId, aspect: STAR_FRAME.height / STAR_FRAME.width, name: STAR_NAMES[i], length: 10,
     })),

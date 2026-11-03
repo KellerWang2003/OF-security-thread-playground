@@ -195,6 +195,10 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
   }
   ctx.clip()
   ctx.translate(strip.x, strip.y)
+  if (thread.backgroundColor) {
+    ctx.fillStyle = thread.backgroundColor
+    ctx.fillRect(0, 0, strip.w, strip.h)
+  }
 
   // Each section of the pattern shows its own frames through its areas, as NoteView clips them, and each frame's image
   // sits once in every repeat from the same start
