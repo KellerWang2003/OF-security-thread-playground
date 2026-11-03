@@ -13,17 +13,15 @@ import { cn } from '@/lib/utils'
 
 const round = (value: number) => Math.round(value * 100) / 100
 
-/**
- * A floating panel over the canvas. Opaque, so a banknote behind it never tints it and washes out the fields' fill
- * (Keller noticed W and H turning almost white)
- */
+/** A floating panel over the canvas, a little see-through (Keller wants that kept); fields inside have solid fills instead */
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('rounded-lg border border-border/70 bg-background shadow-panel', className)}>{children}</div>
+  return <div className={cn('rounded-lg border border-border/70 bg-background/95 shadow-panel backdrop-blur', className)}>{children}</div>
 }
 
 /**
  * A Figma-style number field: a short label inside the field that you can drag sideways to scrub the
- * value, and a number you can type. Commits while typing only when the value is in range.
+ * value, and a number you can type. Commits while typing only when the value is in range. Its fill is solid: a
+ * banknote seen through the panel tints the panel, and a see-through fill all but vanished (Keller noticed W and H).
  */
 export function ScrubField({
   label,
@@ -62,7 +60,7 @@ export function ScrubField({
     <div
       title={title}
       className={cn(
-        'flex min-w-0 items-center rounded-md border border-transparent bg-muted/60 focus-within:border-ring hover:border-border',
+        'flex min-w-0 items-center rounded-md border border-transparent bg-muted focus-within:border-ring hover:border-border',
         sm ? 'h-7' : 'h-8',
         className,
       )}
