@@ -33,7 +33,9 @@ const imageFrames = (count: number): Frame[] => colourFrames(count).map((f) => (
 /** Banknotes as saved before thread patterns: no `pattern` field */
 function legacyNotes(): Note[] {
   const base = createNote({ name: 'Plain', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#112233' })
-  const { pattern: _drop, ...plain } = base
+  const { pattern: _drop, ...rest } = base
+  // With the windows banknotes started with then
+  const plain = { ...rest, thread: { ...rest.thread, windows: { ...rest.thread.windows, enabled: true } } }
   const tilt = { ...DEFAULT_TILT, cycleDeg: 25, transition: 0.3 }
   const windows = { enabled: true, sections: [{ id: 'a', startMm: 5, endMm: 17 }, { id: 'b', startMm: 24, endMm: 32 }, { id: 'c', startMm: 40, endMm: 62 }] }
   return [

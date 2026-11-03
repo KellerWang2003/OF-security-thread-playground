@@ -62,7 +62,11 @@ vi.mock('../src/cloud/repository', async (importOriginal) => {
 // The demo's artwork is drawn on a canvas, which jsdom lacks: Demo opens one plain banknote instead
 vi.mock('../src/lib/demo', async () => {
   const { createProject, createNote } = await import('../src/lib/notes')
-  return { createDemoProject: vi.fn(async () => ({ ...createProject('Demo fixture'), notes: [createNote({ name: 'Demo banknote', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' })] })) }
+  // With windows, as the real demo's first banknote has (new banknotes start without)
+  return { createDemoProject: vi.fn(async () => {
+    const note = createNote({ name: 'Demo banknote', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' })
+    return { ...createProject('Demo fixture'), notes: [{ ...note, thread: { ...note.thread, windows: { ...note.thread.windows, enabled: true } } }] }
+  }) }
 })
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
@@ -98,6 +102,33 @@ describe('username workspace editor', () => {
     await waitFor(() => expect(screen.getByText('Renamed UI project copy')).toBeDefined())
     expect(screen.getByText('Renamed UI project', { exact: true })).toBeDefined()
     expect(screen.getAllByText('1 banknote')).toHaveLength(2)
+  })
+
+  it('opens a new project’s first banknote on its thread, without windows, with a tip by Windows until the next click', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'windows-tip-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'New project', exact: true }))
+    await user.type(await screen.findByPlaceholderText('Untitled project'), 'Tip project')
+    await user.click(screen.getByRole('button', { name: 'Create', exact: true }))
+    await screen.findByPlaceholderText('Banknote 1')
+    await user.click(screen.getByRole('button', { name: 'Add', exact: true }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByRole('tab', { name: 'Thread' }).getAttribute('aria-selected')).toBe('true')
+    const windows = screen.getByRole('switch', { name: 'Windows' })
+    expect(windows.getAttribute('aria-checked')).toBe('false')
+    expect(await screen.findByText('You can add windows here')).toBeDefined()
+    // The click that ends it still lands: here it switches the windows on
+    await user.click(windows)
+    expect(windows.getAttribute('aria-checked')).toBe('true')
+    await waitFor(() => expect(screen.queryByText('You can add windows here')).toBeNull())
+
+    // The next banknote shows itself, with no tip
+    await user.click(screen.getByRole('button', { name: 'Add banknote', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Add', exact: true }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByRole('tab', { name: 'Banknote' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.queryByText('You can add windows here')).toBeNull()
   })
   it('edits windows without an edit mode, undoes deletion, and preserves sections when windows are off', async () => {
     vi.stubGlobal('ResizeObserver', class {

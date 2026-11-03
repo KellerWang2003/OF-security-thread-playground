@@ -65,7 +65,8 @@ export function createNote({
     heightMm,
     background: 'solid',
     color,
-    thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, windows: migrateWindows(undefined, heightMm) },
+    // Without windows (Keller, 3 November): continuous until they are switched on, which brings these in
+    thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, windows: { ...migrateWindows(undefined, heightMm), enabled: false } },
     frames: [colorFrame(0), colorFrame(1)],
     tilt: DEFAULT_TILT,
     // On Fit: the tile follows the thread, a square until the first image sets its length

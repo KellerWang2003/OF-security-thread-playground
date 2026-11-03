@@ -36,7 +36,7 @@ type Change = (note: Note) => Note
  * time, so the panel never grows with features. Every control has a small label over it (`Labeled`) unless a word in
  * it or beside it already says what it is.
  */
-export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onWindowSelect, onPlace, onRemove }: {
+export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onWindowSelect, onPlace, onRemove, windowsTip, onWindowsTipDone }: {
   note: Note
   /** Picks a part of the banknote, as its row in the list does */
   onLayer: (layer: Layer) => void
@@ -48,6 +48,9 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
   /** Shows the placed layer the panel shows on the canvas, flat, with its box to place it */
   onPlace: () => void
   onRemove: (layer: PlacedLayer) => void
+  /** The tip by Windows saying they can be added there (a new project's first banknote), and its end */
+  windowsTip?: boolean
+  onWindowsTipDone?: () => void
 }) {
   const update = (change: Change) => updateNote(noteRef.projectId, noteRef.noteId, change)
   const { thread } = note
@@ -176,7 +179,7 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
           />
           </Labeled>
         </div>
-        <WindowsCard note={note} noteRef={noteRef} selectedWindowId={selectedWindowId} onWindowSelect={onWindowSelect} />
+        <WindowsCard note={note} noteRef={noteRef} selectedWindowId={selectedWindowId} onWindowSelect={onWindowSelect} tip={windowsTip} onTipDone={onWindowsTipDone} />
       </Section>
 
       <TimelineFrame note={note} noteRef={noteRef} />

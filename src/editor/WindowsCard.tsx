@@ -1,7 +1,8 @@
 import { ChevronDown, Plus, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { IconButton, LengthField } from '../components/controls'
 import { updateNote } from '../lib/store'
@@ -14,14 +15,18 @@ import type { NoteRef } from './frameActions'
 const span = (section: ThreadWindow, unit: LengthUnit) => `${lengthIn(section.startMm, unit)}–${lengthIn(section.endMm, unit)} ${unit}`
 
 /**
- * The thread's windows as a compact card: a switch (off = continuous), a strip showing where the windows sit
- * along the thread, and the selected window's Start/End. The full list opens on demand.
+ * The thread's windows as a compact card: a switch (off = continuous, as new banknotes start), a strip showing where
+ * the windows sit along the thread, and the selected window's Start/End. The full list opens on demand.
  */
-export function WindowsCard({ note, noteRef, selectedWindowId, onWindowSelect }: {
+export function WindowsCard({ note, noteRef, selectedWindowId, onWindowSelect, tip = false, onTipDone }: {
   note: Note
   noteRef: NoteRef
   selectedWindowId?: string
   onWindowSelect: (id: string | undefined) => void
+  /** A tip beside the card saying windows can be added here (a new project's first banknote, Keller), until `onTipDone` */
+  tip?: boolean
+  /** The next click or key anywhere ends the tip */
+  onTipDone?: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const unit = useLengthUnit((s) => s.unit)
@@ -58,9 +63,18 @@ export function WindowsCard({ note, noteRef, selectedWindowId, onWindowSelect }:
     setWindows({ sections: windows.sections.filter((s) => s.id !== id) })
     onWindowSelect(undefined)
   }
+  useEffect(() => {
+    if (!tip || !onTipDone) return
+    window.addEventListener('pointerdown', onTipDone, true)
+    window.addEventListener('keydown', onTipDone, true)
+    return () => {
+      window.removeEventListener('pointerdown', onTipDone, true)
+      window.removeEventListener('keydown', onTipDone, true)
+    }
+  }, [tip, onTipDone])
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-muted/50 p-2">
+    <div className="relative flex flex-col gap-2 rounded-lg bg-muted/50 p-2">
       <div className="flex h-6 items-center gap-1">
         <span className="flex-1 pl-0.5 text-xs">Windows</span>
         {windows.enabled && (
@@ -112,6 +126,16 @@ export function WindowsCard({ note, noteRef, selectedWindowId, onWindowSelect }:
             <LengthField label="Start" title={`Window ${selectedIndex + 1}: visible section starts here`} value={selected.startMm} min={bounds.min} max={selected.endMm - minimum} step={WINDOW_STEP} onChange={(startMm) => updateSelected({ startMm })} />
             <LengthField label="End" title={`Window ${selectedIndex + 1}: visible section ends here`} value={selected.endMm} min={selected.startMm + minimum} max={bounds.max} step={WINDOW_STEP} onChange={(endMm) => updateSelected({ endMm })} />
         </div>
+      )}
+
+      {/* Anchored to a box over the card rather than the card itself, so the card stays as it is when the tip goes and
+          the click that ends it still lands (on the switch, say) */}
+      {tip && (
+        <Tooltip open>
+          <TooltipTrigger render={<span aria-hidden className="pointer-events-none absolute inset-0" />} />
+          {/* Past the panel's inset, so it sits over the canvas with its arrow at the card */}
+          <TooltipContent side="left" sideOffset={22}>You can add windows here</TooltipContent>
+        </Tooltip>
       )}
     </div>
   )

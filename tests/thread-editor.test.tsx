@@ -39,7 +39,11 @@ vi.mock('../src/cloud/repository', async (importOriginal) => {
 // The demo's artwork is drawn on a canvas, which jsdom lacks: Demo opens one plain banknote instead
 vi.mock('../src/lib/demo', async () => {
   const { createProject, createNote } = await import('../src/lib/notes')
-  return { createDemoProject: async () => ({ ...createProject('Demo fixture'), notes: [createNote({ name: 'Demo banknote', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' })] }) }
+  // With windows, as the real demo's first banknote has (new banknotes start without)
+  return { createDemoProject: async () => {
+    const note = createNote({ name: 'Demo banknote', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' })
+    return { ...createProject('Demo fixture'), notes: [{ ...note, thread: { ...note.thread, windows: { ...note.thread.windows, enabled: true } } }] }
+  } }
 })
 beforeEach(() => {
   // Every observed element measures 1280 × 720, so the magnified thread has room for three repeats

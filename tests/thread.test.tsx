@@ -62,6 +62,7 @@ describe('an image in the repeat', () => {
     const note = makeNote()
     note.frames = [image, { ...image, id: 'second' }]
     note.thread.backgroundColor = '#ff0088'
+    note.thread.windows.enabled = true
     const { container, rerender } = render(<NoteView note={note} scale={2} />)
     const strip = container.firstElementChild?.children[0] as HTMLElement
     expect(strip.style.backgroundColor).toBe('rgb(255, 0, 136)')

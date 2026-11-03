@@ -76,6 +76,12 @@ it('preserves legacy window positions and stable ids through saved-project reloa
   expect(migrateProject(JSON.parse(JSON.stringify(project)))).toEqual(project)
   expect(project.notes[0].thread.windows).not.toHaveProperty('offsetMm')
 })
+it('starts new banknotes without windows, keeping the usual ones for when they are switched on', () => {
+  const { windows } = makeNote().thread
+  expect(windows.enabled).toBe(false)
+  expect(windows.sections[0]).toMatchObject({ startMm: 0, endMm: 8 })
+  expect(windows.sections[1]).toMatchObject({ startMm: 14, endMm: 22 })
+})
 it('distinguishes an empty windowed thread from a continuous one', () => {
   const thread = makeNote().thread
   thread.windows = { enabled: true, sections: [] }

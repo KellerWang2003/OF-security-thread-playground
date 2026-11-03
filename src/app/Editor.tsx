@@ -74,6 +74,9 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   }
   const closeThread = () => setThreadNoteId(undefined)
   const [adding, setAdding] = useState(false)
+  // A new project's first banknote opens on its thread, with a tip by Windows saying they can be added there, since
+  // banknotes start without them (Keller); it goes at the next click or key
+  const [windowsTip, setWindowsTip] = useState<string>()
   const [exporting, setExporting] = useState(false)
   const [focus, setFocus] = useState<{ noteId: string; token: number }>()
   const isEmpty = project.notes.length === 0
@@ -225,6 +228,13 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     selectNote(noteId)
     setFocus({ noteId, token: Date.now() })
   }
+  /** A new banknote shows itself, brought into view; a new project's first shows its thread, with the windows tip */
+  const added = (noteId: string) => {
+    if (!isEmpty) return selectAndFocus(noteId)
+    selectLayer(noteId, 'thread')
+    setFocus({ noteId, token: Date.now() })
+    setWindowsTip(noteId)
+  }
   /** From the Banknotes list: a banknote row (or a new copy) shows the banknote itself, a layer row that layer; a new banknote is brought into view */
   const selectFromList = (noteId: string, next: Layer = 'note') => {
     const elsewhere = noteId !== selectedId
@@ -294,7 +304,8 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
               setSelectedWindowId(windowId)
             }}
             onPlace={() => setPlacingNoteId(note.id)}
-            onRemove={(removed) => dropLayer(note.id, removed)} />}
+            onRemove={(removed) => dropLayer(note.id, removed)}
+            windowsTip={windowsTip === note.id} onWindowsTipDone={() => setWindowsTip(undefined)} />}
         </>
       )}
 
@@ -306,7 +317,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
           notes={project.notes}
           open={adding}
           onOpenChange={setAdding}
-          onAdded={selectAndFocus}
+          onAdded={added}
         />
       )}
     </div>
