@@ -1,7 +1,7 @@
 import { Maximize, Minus, Plus } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import { IconButton, ScrubField } from '../components/controls'
+import { IconButton, Labeled, ScrubField } from '../components/controls'
 import { ThreadArt } from '../components/NoteView'
 import { clamp } from '../lib/frames'
 import { lensMix } from '../lib/lens'
@@ -30,7 +30,7 @@ import { useElementSize } from './useElementSize'
 /** Px per mm the view never goes past, so a short repeat doesn't blow up into a blur */
 const MAX_SCALE = 120
 /** Room around the strip for the measurements, px: wide beside it, where the fields sit, shorter above and below */
-const MARGIN = { x: 104, y: 48 }
+const MARGIN = { x: 104, y: 76 }
 /** How far either side of an edge grabs it, px */
 const EDGE_PX = 5
 
@@ -342,22 +342,22 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, lim
 
         {/* Measurements on the first repeat, turning with the thread: the repeat and the selected section's length
             along it, either side; the thread's thickness and the section's width across it, at either end */}
-        <Measure side={vertical ? 'left' : 'top'} from={0} to={repeat * scale}>
+        <Measure side={vertical ? 'left' : 'top'} from={0} to={repeat * scale} label="Repeat">
           <ScrubField size="sm" className="w-[88px]" unit="mm" label="R" title="Length of one repeat of the pattern along the thread" value={repeat}
             min={REPEAT_LIMITS.min} max={REPEAT_LIMITS.max} step={ALONG_STEP} onChange={(v) => write(setRepeat(pattern, v))} />
         </Measure>
-        <Measure side={vertical ? 'top' : 'left'} from={0} to={thickness}>
+        <Measure side={vertical ? 'top' : 'left'} from={0} to={thickness} label="Thickness">
           <ScrubField size="sm" className="w-[88px]" unit="mm" label="T" title="Thread width vertically, or height horizontally" value={thread.widthMm}
             min={THREAD_WIDTH.min} max={THREAD_WIDTH.max} step={THREAD_WIDTH.step}
             onChange={(widthMm) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, widthMm } }))} />
         </Measure>
         {selected && (
           <>
-            <Measure side={vertical ? 'right' : 'bottom'} from={selected.startMm * scale} to={selected.endMm * scale} selected>
+            <Measure side={vertical ? 'right' : 'bottom'} from={selected.startMm * scale} to={selected.endMm * scale} label="Section length" selected>
               <ScrubField size="sm" className="w-[88px]" unit="mm" label="L" title="The selected section's length along the thread" value={selected.endMm - selected.startMm}
                 min={ALONG_STEP} max={repeat} step={ALONG_STEP} onChange={(v) => write(resizeEdge(pattern, selected.id, 'endMm', selected.startMm + v, false))} />
             </Measure>
-            <Measure side={vertical ? 'bottom' : 'right'} from={selected.acrossStart * thickness} to={selected.acrossEnd * thickness} selected>
+            <Measure side={vertical ? 'bottom' : 'right'} from={selected.acrossStart * thickness} to={selected.acrossEnd * thickness} label="Section width" selected>
               <ScrubField size="sm" className="w-[88px]" unit="mm" label="W" title="The selected section's width across the thread" value={(selected.acrossEnd - selected.acrossStart) * thread.widthMm}
                 min={thread.widthMm / 12} max={thread.widthMm} step={thread.widthMm / 12}
                 onChange={(mm) => write(resizeEdge(pattern, selected.id, 'acrossEnd', selected.acrossStart + mm / thread.widthMm, false))} />
@@ -410,13 +410,15 @@ function solve3(m: number[], v: number[]): number[] {
 }
 
 /**
- * A measurement beside the thread: a bracket over `from` to `to` (px along that side of the strip) and its field
- * beyond it. Presses on it never reach the thread, so scrubbing or typing doesn't draw or tilt.
+ * A measurement beside the thread: a bracket over `from` to `to` (px along that side of the strip) and its labelled
+ * field beyond it. Presses on it never reach the thread, so scrubbing or typing doesn't draw or tilt.
  */
-function Measure({ side, from, to, selected = false, children }: {
+function Measure({ side, from, to, label, selected = false, children }: {
   side: 'left' | 'right' | 'top' | 'bottom'
   from: number
   to: number
+  /** The small label over the field, as over every control in the panels */
+  label: string
   /** The selected section's, in the selection colour */
   selected?: boolean
   children: ReactNode
@@ -432,7 +434,7 @@ function Measure({ side, from, to, selected = false, children }: {
     <div className={cn('absolute flex items-center gap-1.5', { left: 'flex-row-reverse', right: 'flex-row', top: 'flex-col-reverse', bottom: 'flex-col' }[side])}
       style={place} data-measure="" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
       <div className={cn('shrink-0', bracket, selected ? 'border-primary' : 'border-foreground/40')} />
-      <div className="shrink-0 rounded-md bg-background shadow-xs">{children}</div>
+      <Labeled label={label} className="shrink-0 rounded-md bg-background p-1.5 shadow-xs">{children}</Labeled>
     </div>
   )
 }

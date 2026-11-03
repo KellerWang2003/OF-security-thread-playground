@@ -1,7 +1,6 @@
-import { ChevronDown, ChevronLeft, ChevronUp, CircleCheck, Copy, Eye, EyeOff, Info, Plus, Redo2, RotateCcw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { ChevronLeft, CircleCheck, Copy, Eye, EyeOff, Info, Plus, Redo2, RotateCcw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
-import { Group, IconButton, Panel, ScrubField, Section, SwitchField } from '../components/controls'
+import { Drawer, Group, IconButton, Labeled, Panel, ScrubField, Section, SwitchField } from '../components/controls'
 import { canStepNote, useHistory } from '../lib/history'
 import {
   ALONG_STEP,
@@ -147,7 +146,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       <Panel className="absolute top-3 right-3 left-3 flex h-11 items-center gap-2 rounded-[calc(var(--radius)+0.375rem+1px)] pr-1.5 pl-1.5">
         <IconButton className="rounded-lg" label="Back to the canvas" onClick={onClose}><ChevronLeft /></IconButton>
         <span className="min-w-0 truncate text-sm font-medium">{note.name}</span>
-        <span className="shrink-0 text-sm text-muted-foreground">Thread</span>
+        <span className="shrink-0 text-sm text-muted-foreground">Thread Studio</span>
         <div className="ml-auto flex shrink-0 items-center gap-3">
           {warnings > 0 && (
             <Button variant="ghost" size="sm" className="text-amber-600 dark:text-amber-500" title="Rule warnings: show the checks"
@@ -214,7 +213,9 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
                   <RotateCcw />
                 </IconButton>
               }>
-                <TrackEditor note={note} section={selected} onChange={(slots) => edit((n) => setSectionTrack(n, selected.id, slots))} />
+                <Labeled label="Frame each strip shows">
+                  <TrackEditor note={note} section={selected} onChange={(slots) => edit((n) => setSectionTrack(n, selected.id, slots))} />
+                </Labeled>
               </Section>
             </Group>
           )}
@@ -235,47 +236,21 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
         </div>
 
         {/* For information only, so fixed at the bottom under the controls, opening upwards one at a time */}
-        <div className="flex shrink-0 flex-col divide-y divide-border border-t border-border">
-          <InfoDrawer title="Preview" open={info === 'preview'} onOpenChange={openInfo('preview')} action={pattern.mixed && !lensNote
+        <div className="flex shrink-0 flex-col">
+          <Drawer title="Preview" open={info === 'preview'} onOpenChange={openInfo('preview')} action={pattern.mixed && !lensNote
             ? <span className="text-[11px] text-muted-foreground" title="Mixed angles is on: each section plays its own lens">Mixed</span> : undefined}>
             {lensNote ? <LensPreview note={lensNote} printNote={note} /> : <ThreadPrint note={note} />}
-          </InfoDrawer>
-          <InfoDrawer title="Checks" open={info === 'checks'} onOpenChange={openInfo('checks')}
+          </Drawer>
+          <Drawer title="Checks" open={info === 'checks'} onOpenChange={openInfo('checks')}
             action={warnings > 0 ? <span className="text-xs text-amber-600 tabular-nums dark:text-amber-500">{warnings}</span> : undefined}>
             <CheckList checks={checks} onSelect={setSelectedId} onFillGaps={() => added(fillGaps(pattern, note.thread.widthMm))} />
-          </InfoDrawer>
+          </Drawer>
         </div>
       </Panel>
 
       <TiltRail limit={lens.viewDeg} playback={{ projectId: project.id, tilt: playbackTilt(note), lens }} />
       <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel sectionId={selectedSectionId} />
     </div>
-  )
-}
-
-/** A part of the right panel fixed at its bottom: its title stays put under the content above and it opens upwards */
-function InfoDrawer({ title, action, open, onOpenChange, children }: {
-  title: string
-  action?: ReactNode
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  children: ReactNode
-}) {
-  return (
-    <Collapsible open={open} onOpenChange={onOpenChange} className="flex flex-col">
-      <div className="flex h-9 items-center justify-between pr-2.5 pl-4">
-        <CollapsibleTrigger render={
-          <Button variant="ghost" size="xs" className="-ml-1.5 gap-1 px-1.5 text-[13px] font-semibold" />
-        }>
-          {title}
-          {open ? <ChevronDown className="text-muted-foreground" /> : <ChevronUp className="text-muted-foreground" />}
-        </CollapsibleTrigger>
-        {action}
-      </div>
-      <CollapsibleContent className="max-h-[50vh] overflow-y-auto px-4 pb-3">
-        <div className="flex flex-col gap-3">{children}</div>
-      </CollapsibleContent>
-    </Collapsible>
   )
 }
 

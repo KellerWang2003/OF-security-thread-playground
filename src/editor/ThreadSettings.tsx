@@ -1,11 +1,11 @@
-import { ColorField, Section, ScrubField, Segmented, SwitchField } from '../components/controls'
+import { ColorField, Labeled, Section, ScrubField, Segmented, SwitchField } from '../components/controls'
 import { THREAD_WIDTH } from '../lib/notes'
 import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
 
 /**
- * The thread editor's Thread tab: the whole thread's direction and thickness, then its artwork, as in the right
+ * Thread Studio's Thread group: the whole thread's direction and thickness, then its artwork, as in the right
  * panel on the canvas. Turning the thread keeps it at the same relative position across the banknote.
  */
 export function ThreadSettings({ note, projectId }: { note: Note; projectId: string }) {
@@ -28,16 +28,20 @@ export function ThreadSettings({ note, projectId }: { note: Note; projectId: str
   return (
     <>
       <Section nested>
-        <Segmented
-          value={thread.direction}
-          options={[
-            { value: 'vertical', label: 'Vertical' },
-            { value: 'horizontal', label: 'Horizontal' },
-          ]}
-          onChange={setDirection}
-        />
-        <ScrubField label="T" title="Thread width vertically, or height horizontally" value={thread.widthMm} min={THREAD_WIDTH.min} max={THREAD_WIDTH.max}
-          step={THREAD_WIDTH.step} unit="mm" onChange={(widthMm) => setThread({ widthMm })} />
+        <Labeled label="Direction">
+          <Segmented
+            value={thread.direction}
+            options={[
+              { value: 'vertical', label: 'Vertical' },
+              { value: 'horizontal', label: 'Horizontal' },
+            ]}
+            onChange={setDirection}
+          />
+        </Labeled>
+        <Labeled label="Thickness">
+          <ScrubField label="T" title="Thread width vertically, or height horizontally" value={thread.widthMm} min={THREAD_WIDTH.min} max={THREAD_WIDTH.max}
+            step={THREAD_WIDTH.step} unit="mm" onChange={(widthMm) => setThread({ widthMm })} />
+        </Labeled>
       </Section>
 
       <Section nested title="Artwork">
