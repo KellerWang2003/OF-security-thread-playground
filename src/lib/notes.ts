@@ -118,6 +118,9 @@ export function migrateProject(raw: unknown): Project {
   const placed: Note[] = []
   for (const { watermark, continuous, magneticInk, ...raw } of notes) {
     const check = fitContinuous(continuous)
+    // The thread's shared background colour went (Keller, 3 November): the empty frames it showed through take it as
+    // their own colour, so they look as they did; images on transparency now show the banknote round them
+    const background = (raw.thread as { backgroundColor?: string }).backgroundColor
     // Older notes had no background mode; an uploaded face meant an image background
     const n: Note = {
       ...raw,
@@ -128,7 +131,11 @@ export function migrateProject(raw: unknown): Project {
       ...(check ? { continuous: check } : {}),
       background: raw.background ?? (raw.faceImageId ? 'image' : 'solid'),
       // Older frames had degree spans, or split one shared range equally: keep their proportions and cycle
-      frames: raw.frames.map((f) => ({ ...f, length: f.length ?? oldLength(raw.frames, f) })),
+      frames: raw.frames.map((f) => ({
+        ...f,
+        length: f.length ?? oldLength(raw.frames, f),
+        ...(background && f.kind === 'none' ? { kind: 'color' as const, color: background } : {}),
+      })),
       tilt: {
         ...playbackSettings(raw.tilt),
         ...lensFields(raw.tilt),
@@ -142,8 +149,6 @@ export function migrateProject(raw: unknown): Project {
             : 2 * ((raw.tilt as { rangeDeg?: number }).rangeDeg ?? 15)),
       },
       thread: {
-        // Threads without an explicit background let the banknote show through.
-        backgroundColor: raw.thread.backgroundColor,
         widthMm: raw.thread.widthMm,
         direction: raw.thread.direction ?? 'vertical',
         positionMm: raw.thread.positionMm ?? (raw.thread as { xMm?: number }).xMm ?? raw.widthMm / 2,

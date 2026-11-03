@@ -1,4 +1,4 @@
-import { RotateCcw } from 'lucide-react'
+import { Minus, Plus, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { IconButton, Labeled, LengthField, Section } from '../components/controls'
@@ -13,7 +13,8 @@ import { swatch } from './LensVisuals'
  * The frame the timeline is on, in Thread Studio's Frames tab and the canvas's Thread tab (Keller): in Thread Studio a
  * row of frame numbers to go to another frame without the timeline (`picker`; the canvas has the timeline for that),
  * then, for an image, where it sits in the tile (X and Y of its top-left corner as drawn, and its width, its height
- * following), then its fill, one row that opens the fill's own panel (`FillRow`).
+ * following), then its fill, one row that opens the fill's own panel (`FillRow`); + and − add and remove it, as in
+ * Figma, an empty frame showing the banknote through.
  */
 export function FramePanel({ note, noteRef, frame, index, onShow, picker = true }: {
   note: Note
@@ -47,8 +48,10 @@ export function FramePanel({ note, noteRef, frame, index, onShow, picker = true 
         </Section>
       )}
       {frame.kind === 'image' && frame.aspect && <ImagePlaceFields note={note} frame={frame} aspect={frame.aspect} set={set} />}
-      <Section nested title="Fill">
-        <FillRow note={note} noteRef={noteRef} frame={frame} />
+      <Section nested title="Fill" action={frame.kind === 'none'
+        ? <IconButton label="Add fill" size="icon-xs" onClick={() => set({ kind: 'color' })}><Plus /></IconButton>
+        : <IconButton label="Remove fill" size="icon-xs" onClick={() => set({ kind: 'none' })}><Minus /></IconButton>}>
+        {frame.kind !== 'none' && <FillRow noteRef={noteRef} frame={frame} />}
       </Section>
     </>
   )

@@ -39,7 +39,7 @@ function legacyNotes(): Note[] {
   return [
     plain,
     { ...plain, id: 'birds', frames: imageFrames(5), tilt, thread: { ...plain.thread, widthMm: 4, positionMm: 101, imageGapMm: 1.5, windows } },
-    { ...plain, id: 'side', frames: colourFrames(3), tilt: { ...tilt, effect: 'both', flatAt: 'start' }, thread: { ...plain.thread, direction: 'horizontal', positionMm: 34, backgroundColor: '#eeeeee' } },
+    { ...plain, id: 'side', frames: colourFrames(3), tilt: { ...tilt, effect: 'both', flatAt: 'start' }, thread: { ...plain.thread, direction: 'horizontal', positionMm: 34 } },
     { ...plain, id: 'reveal', frames: imageFrames(4), tilt: { ...tilt, effect: 'reveal', revealAxis: 'x', revealLevel: 1 }, thread: { ...plain.thread, windows } },
     { ...plain, id: 'custom', frames: colourFrames(5), tilt: { ...tilt, effect: 'custom', cycleXDeg: 40, yOn: true, runY: 'up', runX: 'left' } },
   ]

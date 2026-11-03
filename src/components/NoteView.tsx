@@ -84,17 +84,12 @@ export function FrameFill({
   )
 }
 
-/** A frame as a thumbnail: the uploaded image whole, or its colour; an empty one shows the thread's background */
-export function FrameThumb({ frame, backgroundColor }: { frame: Frame; backgroundColor?: string }) {
+/** A frame as a thumbnail: the uploaded image whole, or its colour; an empty one shows nothing, as on the thread */
+export function FrameThumb({ frame }: { frame: Frame }) {
   const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
-  if (frame.kind !== 'image' || !url) {
-    return <div className="absolute inset-0" style={{ backgroundColor: frame.kind === 'color' ? frame.color : backgroundColor }} />
-  }
-  return (
-    <div className="absolute inset-0" style={{ backgroundColor }}>
-      <img src={url} alt="" draggable={false} className="absolute inset-0 size-full object-contain p-1" />
-    </div>
-  )
+  if (frame.kind === 'color') return <div className="absolute inset-0" style={{ backgroundColor: frame.color }} />
+  if (frame.kind !== 'image' || !url) return null
+  return <img src={url} alt="" draggable={false} className="absolute inset-0 size-full object-contain p-1" />
 }
 
 /** Light and shade reach full strength at SHADE_DEG; past it (up to TILT_LIMIT) they keep growing */
@@ -373,7 +368,7 @@ export function NoteView({
       )}
 
       {showWindowCuts && thread.windows.enabled && (
-        <div aria-hidden="true" data-window-ghost className="pointer-events-none absolute overflow-hidden" style={{ ...strip, opacity: 0.2, backgroundColor: thread.backgroundColor }}>
+        <div aria-hidden="true" data-window-ghost className="pointer-events-none absolute overflow-hidden" style={{ ...strip, opacity: 0.2 }}>
           {art}
         </div>
       )}
@@ -381,7 +376,7 @@ export function NoteView({
       <div
         data-thread=""
         className={cn('absolute overflow-hidden', horizontal ? 'cursor-ns-resize' : 'cursor-ew-resize')}
-        style={{ ...strip, ...windowMask, backgroundColor: thread.backgroundColor }}
+        style={{ ...strip, ...windowMask }}
       >
         {art}
         {sheen && (

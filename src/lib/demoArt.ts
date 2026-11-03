@@ -417,9 +417,14 @@ export const STAR_NAMES = STAR_TURNS.map((_, i) => `${i + 1} ${SPARKLE_FRAMES.ha
 /** A star frame's size, px: one 16 mm repeat by the 6 mm thread, at 100 px a mm */
 export const STAR_FRAME = { width: 1600, height: 600 }
 
-/** One frame of the star thread, on transparency so the thread's background shows round its stars */
+/** The star thread's night: part of every star frame since threads lost their shared background colour (Keller, 3 November) */
+const STAR_NIGHT = '#2B2766'
+
+/** One frame of the star thread, its stars on the night blue */
 async function drawStarFrame(i: number) {
   const { canvas, g } = sheet(STAR_FRAME.width, STAR_FRAME.height)
+  g.fillStyle = STAR_NIGHT
+  g.fillRect(0, 0, STAR_FRAME.width, STAR_FRAME.height)
   const turn = (STAR_TURNS[i] * Math.PI) / 180
   goldStar(g, 400, 300, 235, turn)
   if (SPARKLE_FRAMES.has(i)) {

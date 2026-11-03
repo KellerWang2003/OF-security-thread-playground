@@ -634,15 +634,15 @@ describe('thread editor', () => {
     arrive()
     expect(frameButton(1).getAttribute('aria-pressed')).toBe('true')
 
-    // Its fill, in a panel of its own as Figma's (Keller): the background every frame shares, set right there, or a
-    // colour of its own
-    await user.click(within(editor).getByRole('button', { name: /^Fill: / }))
-    await user.click(await screen.findByRole('button', { name: 'Background', exact: true }))
+    // Its fill, in a panel of its own as Figma's (Keller), + and − adding and removing it; with no background under the
+    // frames any more, an empty frame shows the banknote through
+    await user.click(within(editor).getByRole('button', { name: 'Remove fill' }))
     expect(note().frames[0].kind).toBe('none')
-    await user.click(screen.getByRole('switch', { name: 'Background colour' }))
-    expect(note().thread.backgroundColor).toBe('#ffffff')
-    await user.click(screen.getByRole('button', { name: 'Colour', exact: true }))
+    expect(within(editor).queryByRole('button', { name: /^Fill: / })).toBeNull()
+    await user.click(within(editor).getByRole('button', { name: 'Add fill' }))
     expect(note().frames[0].kind).toBe('color')
+    await user.click(within(editor).getByRole('button', { name: /^Fill: #/ }))
+    expect(screen.queryByRole('button', { name: 'Background', exact: true })).toBeNull()
     expect(screen.queryByRole('switch', { name: 'Background colour' })).toBeNull()
     await user.click(within(editor).getByRole('button', { name: /^Fill: #/ }))
 

@@ -249,7 +249,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
                 )}
                 style={{ top: framesTop, left: left + 1, width: Math.max(width - 2, 4) }}
               >
-                <FrameThumb frame={frame} backgroundColor={note.thread.backgroundColor} />
+                <FrameThumb frame={frame} />
                 {width > 28 && (
                   <span className="absolute top-0.5 left-1 rounded bg-background/80 px-1 text-[10px] font-medium tabular-nums">
                     {i + 1}
@@ -268,7 +268,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
                   <>
                     <FrameMenu frame={frame} index={i} count={frames.length} noteRef={noteRef} />
                     {/* Its fill, in the same panel as the right panel's, opened from its swatch; it goes to the frame, as a click on it does */}
-                    <FillPopover note={note} noteRef={noteRef} frame={frame} side="top" align="center"
+                    <FillPopover noteRef={noteRef} frame={frame} side="top" align="center"
                       onOpenChange={(open) => {
                         if (!open) return
                         scrubTo((track.current?.getBoundingClientRect().left ?? 0) + left + width / 2)
@@ -277,7 +277,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
                       trigger={
                         <Button variant="secondary" size="icon-xs" aria-label={`Frame ${i + 1} fill`}
                           className="absolute right-2 bottom-0.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[popup-open]:opacity-100">
-                          <FillSwatch frame={frame} backgroundColor={note.thread.backgroundColor} className="size-3.5" />
+                          <FillSwatch frame={frame} className="size-3.5" />
                         </Button>
                       } />
                     <div

@@ -325,7 +325,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, onThreadCli
         onPointerDown={onPointerDown}
         onDoubleClick={onDoubleClick}
       >
-        <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: thread.backgroundColor, ...EMPTY }}>
+        <div className="absolute inset-0 overflow-hidden" style={EMPTY}>
           <ThreadArt note={note} shown={shown} blends={mixes.map((m) => m.blend)} fill={fill} />
         </div>
         {/* The copies either side, a little quieter than the repeat being edited */}

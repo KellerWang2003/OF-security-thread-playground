@@ -236,9 +236,10 @@ describe('username workspace editor', () => {
     await user.click(screen.getByRole('tab', { name: 'Banknote' }))
     await user.click(screen.getByRole('button', { name: 'Frame 2 fill' }))
     expect(open()).toBe('Thread')
-    await user.click(await screen.findByRole('button', { name: 'Background', exact: true }))
-    expect(note().frames[1].kind).toBe('none')
-    expect(note().frames[0].kind).toBe('color')
+    const hex = document.querySelector<HTMLInputElement>('[data-slot="popover-content"] input:not([type="color"])')!
+    fireEvent.change(hex, { target: { value: '#123456' } })
+    expect(note().frames[1].color).toBe('#123456')
+    expect(note().frames[0].color).not.toBe('#123456')
   })
   it('shows one tab per part, labels every control, and the thread’s lens with its preview in a drawer at the foot', async () => {
     const user = userEvent.setup()
@@ -262,16 +263,19 @@ describe('username workspace editor', () => {
     // (Keller), its fill chosen in a panel of its own as Figma's; the timeline picks the frame, so no frame numbers
     expect(screen.getByText('Fill', { exact: true })).toBeDefined()
     expect(screen.queryByRole('button', { name: 'Frame 1', exact: true })).toBeNull()
-    const fill = () => screen.getByRole('button', { name: /^Fill: / })
-    await user.click(fill())
-    await user.click(await screen.findByRole('button', { name: 'Background', exact: true }))
+    // + and − add and remove it, as in Figma; there is no background under the frames any more (Keller), so an empty
+    // frame shows the banknote through, and the panel offers only a colour or an image
+    const fill = () => screen.queryByRole('button', { name: /^Fill: / })
+    await user.click(screen.getByRole('button', { name: 'Remove fill' }))
+    expect(fill()).toBeNull()
     const emptied = note().frames.findIndex((f) => f.kind === 'none')
     expect(emptied).toBeGreaterThanOrEqual(0)
-    expect(fill().getAttribute('aria-label')).toBe('Fill: Background')
-    expect(screen.getByRole('switch', { name: 'Background colour' })).toBeDefined()
-    await user.click(screen.getByRole('button', { name: 'Colour', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Add fill' }))
     expect(note().frames[emptied].kind).toBe('color')
-    await user.click(fill())
+    await user.click(fill()!)
+    expect(screen.getAllByRole('button', { name: /^(Colour|Image)$/ }).map((b) => b.textContent)).toEqual(['Colour', 'Image'])
+    expect(screen.queryByRole('switch', { name: 'Background colour' })).toBeNull()
+    await user.click(fill()!)
     // There is no Image gap any more
     expect(screen.queryByTitle('Space between complete image copies along the thread')).toBeNull()
 
