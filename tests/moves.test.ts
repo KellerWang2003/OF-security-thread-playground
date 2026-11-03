@@ -2,13 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { playbackTilts } from '../src/lib/exportRender'
 import { lensState } from '../src/lib/lens'
 import {
-  LIGHT_FADE_SECONDS, LIGHT_HOLD_SECONDS, lightAt, lightHoldSeconds, moveFromRecording, movesOf, planLitPaths, playbackPlan, recordingFromSamples, tiltAt,
+  HOLD_LIMITS, HOLD_SECONDS, LIGHT_FADE_SECONDS, LIGHT_HOLD_SECONDS, holdMoveSeconds, lightAt, lightHoldSeconds, moveFromRecording, movesOf, planLitPaths,
+  playbackPlan, recordingFromSamples, tiltAt,
 } from '../src/lib/moves'
 import { migrateProject } from '../src/lib/notes'
 import type { TiltSettings } from '../src/lib/types'
 
 const frames = [10, 10, 10].map((length, i) => ({ id: String(i), kind: 'color' as const, color: '#000', name: '', length }))
-const base = { cycleDeg: 40, cycleXDeg: 80, effect: 'both', transition: 0, speed: 1, curve: 'linear', holdSeconds: 0 } as TiltSettings
+const base = { cycleDeg: 40, cycleXDeg: 80, effect: 'both', transition: 0, speed: 1, curve: 'linear' } as TiltSettings
+const planOf = (moves: TiltSettings['moves'], settings: Partial<TiltSettings> = {}) => {
+  const tilt = { ...base, ...settings, moves } as TiltSettings
+  return playbackPlan(tilt, lensState(tilt, frames))
+}
 
 describe('playback moves', () => {
   it('falls back to the old Tilt choice when there is no list', () => {
@@ -43,11 +48,13 @@ describe('playback moves', () => {
     expect(tiltAt(plan, 0.75)).toEqual({ x: 10, y: 5 })
   })
 
-  it('keeps the moves through the migration', () => {
-    const tilt = { ...base, moves: [{ id: 'a', kind: 'x' }] }
+  it('keeps the moves through the migration, and drops the hold older saves set for every move', () => {
+    const tilt = { ...base, holdSeconds: 0.5, moves: [{ id: 'a', kind: 'x' }, { id: 'h', kind: 'hold', seconds: 2 }] }
     const note = { id: 'n', name: 'N', x: 0, y: 0, widthMm: 100, heightMm: 50, background: 'solid', color: '#fff', frames, tilt,
       thread: { widthMm: 4, direction: 'vertical', positionMm: 50, imageGapMm: 0, windows: { enabled: false, sections: [] } } }
-    expect(migrateProject({ id: 'p', name: 'P', createdAt: 0, updatedAt: 0, notes: [note] }).notes[0].tilt.moves).toEqual(tilt.moves)
+    const migrated = migrateProject({ id: 'p', name: 'P', createdAt: 0, updatedAt: 0, notes: [note] }).notes[0].tilt
+    expect(migrated.moves).toEqual(tilt.moves)
+    expect(migrated).not.toHaveProperty('holdSeconds')
   })
 })
 
@@ -82,12 +89,38 @@ describe('swing moves', () => {
   })
 })
 
-describe('hold to light', () => {
-  const planOf = (moves: TiltSettings['moves'], settings: Partial<TiltSettings> = {}) => {
-    const tilt = { ...base, ...settings, moves } as TiltSettings
-    return playbackPlan(tilt, lensState(tilt, frames))
-  }
+describe('hold', () => {
+  it('stays flat in reflected light for its seconds, scaled by speed', () => {
+    const plan = planOf([{ id: 'h', kind: 'hold' }])
+    expect(plan.seconds).toBeCloseTo(HOLD_SECONDS)
+    for (const t of [0, 0.5, 0.99]) {
+      expect(tiltAt(plan, t)).toEqual({ x: 0, y: 0 })
+      expect(lightAt(plan, t)).toBe(0)
+    }
+    expect(planOf([{ id: 'h', kind: 'hold', seconds: 3 }]).seconds).toBeCloseTo(3)
+    expect(planOf([{ id: 'h', kind: 'hold', seconds: 3 }], { speed: 2 }).seconds).toBeCloseTo(1.5)
+    expect(holdMoveSeconds({ seconds: 99 })).toBe(HOLD_LIMITS.max)
+    expect(holdMoveSeconds({ seconds: Number.NaN })).toBe(HOLD_SECONDS)
+  })
 
+  it('pauses at flat once the move before it has come back, and nowhere else', () => {
+    const plan = planOf([{ id: 'a', kind: 'y', y: 20 }, { id: 'h', kind: 'hold', seconds: 1.5 }, { id: 'b', kind: 'x', x: 30 }])
+    // Out and back for each swing, plus the hold between them
+    expect(plan.seconds).toBeCloseTo(2 + 1.5 + 2)
+    // Full tilt is passed through, not held
+    expect(tiltAt(plan, 1).y).toBeCloseTo(20)
+    expect(tiltAt(plan, 1.25).y).toBeCloseTo(15)
+    for (const t of [2, 2.75, 3.49]) expect(tiltAt(plan, t)).toEqual({ x: 0, y: 0 })
+    expect(tiltAt(plan, 4).x).toBeCloseTo(15)
+  })
+
+  it('leaves every other move without a pause, whatever hold an older save set for all of them', () => {
+    expect(planOf([{ id: 'a', kind: 'y', y: 20 }], { holdSeconds: 0.5 }).seconds).toBeCloseTo(2)
+    expect(planOf([{ id: 'l', kind: 'light' }], { holdSeconds: 0.5 }).seconds).toBeCloseTo(2 * LIGHT_FADE_SECONDS + LIGHT_HOLD_SECONDS)
+  })
+})
+
+describe('hold to light', () => {
   it('stays flat while the light fades in, holds and fades out', () => {
     const plan = planOf([{ id: 'l', kind: 'light' }])
     expect(plan.seconds).toBeCloseTo(2 * LIGHT_FADE_SECONDS + LIGHT_HOLD_SECONDS)
@@ -100,12 +133,9 @@ describe('hold to light', () => {
     expect(lightAt(plan, plan.seconds - 1e-6)).toBeCloseTo(0, 4)
   })
 
-  it('holds for the seconds set, scaled by speed, then pauses at flat in reflected light', () => {
+  it('holds for the seconds set, scaled by speed', () => {
     expect(planOf([{ id: 'l', kind: 'light', seconds: 3 }]).seconds).toBeCloseTo(4)
     expect(planOf([{ id: 'l', kind: 'light', seconds: 3 }], { speed: 2 }).seconds).toBeCloseTo(2)
-    const held = planOf([{ id: 'l', kind: 'light' }], { holdSeconds: 0.5 })
-    expect(held.seconds).toBeCloseTo(3)
-    expect(lightAt(held, 2.75)).toBe(0)
     expect(lightHoldSeconds({ seconds: 99 })).toBe(10)
     expect(lightHoldSeconds({ seconds: Number.NaN })).toBe(LIGHT_HOLD_SECONDS)
   })

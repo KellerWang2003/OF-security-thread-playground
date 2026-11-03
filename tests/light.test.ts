@@ -11,7 +11,7 @@ import type { TiltSettings } from '../src/lib/types'
 vi.mock('../src/lib/images', () => ({ loadImageUrl: async () => undefined }))
 
 const frames = [10, 10, 10].map((length, i) => ({ id: String(i), kind: 'color' as const, color: '#000', name: '', length }))
-const base = { cycleDeg: 40, cycleXDeg: 80, effect: 'both', transition: 0, speed: 1, curve: 'linear', holdSeconds: 0 } as TiltSettings
+const base = { cycleDeg: 40, cycleXDeg: 80, effect: 'both', transition: 0, speed: 1, curve: 'linear' } as TiltSettings
 
 describe('how clearly the watermark shows', () => {
   it('measures how far the banknote faces away, whichever way it tilts', () => {

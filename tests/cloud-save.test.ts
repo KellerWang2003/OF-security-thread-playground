@@ -78,7 +78,9 @@ describe('saving to the cloud', () => {
   it('opens the old shared demo, saved before these settings, with its banknotes as they were', () => {
     const demo = JSON.parse(readFileSync(new URL('../supabase/demo/demo-template.json', import.meta.url), 'utf8')) as Project
     const opened = migrateProject(structuredClone(demo))
-    expect(opened.notes.map(({ pattern: _pattern, ...note }) => note)).toEqual(demo.notes)
+    // All but the hold every move had then (0 s), which Hold moves in the playlist replaced
+    const asSaved = demo.notes.map(({ tilt: { holdSeconds: _hold, ...tilt }, ...note }) => ({ ...note, tilt }))
+    expect(opened.notes.map(({ pattern: _pattern, ...note }) => note)).toEqual(asSaved)
     expect(opened.notes.every((n) => n.pattern?.sections.length === 1 && n.thread.imageGapMm === 0)).toBe(true)
   })
 })

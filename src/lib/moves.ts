@@ -6,7 +6,8 @@ import type { PlaybackCurve, PlaybackMove, RecordedPoint, Recording, TiltSetting
 /**
  * Playback as a list of moves played in order, each a path on the tilt pad with how far the banknote is held to
  * the light along it. Preset moves start and end flat, in reflected light; a recorded gesture is joined to flat on
- * both sides. Live playback, the pad's path and export all read the same plan, so they always agree.
+ * both sides. Nothing pauses unless a Hold says so: it stays flat, so it pauses after the move before it has come
+ * back. Live playback, the pad's path and export all read the same plan, so they always agree.
  */
 
 export const MOVE_KINDS: { value: Exclude<PlaybackMove['kind'], 'gesture'>; label: string }[] = [
@@ -14,8 +15,12 @@ export const MOVE_KINDS: { value: Exclude<PlaybackMove['kind'], 'gesture'>; labe
   { value: 'x', label: '↔ Side to side' },
   { value: 'diagonal', label: '⤢ Diagonal' },
   { value: 'circle', label: '◯ Circle' },
+  { value: 'hold', label: '⏸ Hold' },
   { value: 'light', label: '☀ Hold to light' },
 ]
+/** Seconds a Hold move stays flat at 1×, unless set */
+export const HOLD_SECONDS = 1
+export const HOLD_LIMITS = { min: 0.1, max: 10, step: 0.1 }
 /** Seconds a Hold to light move stays up to the light at 1×, unless set */
 export const LIGHT_HOLD_SECONDS = 1.5
 export const LIGHT_HOLD_LIMITS = { min: 0.2, max: 10, step: 0.1 }
@@ -67,7 +72,7 @@ export function moveReach(move: PlaybackMove, lens: LensState): Tilt2 {
 export function movesAxes(move: Pick<PlaybackMove, 'kind'>): Axis[] {
   if (move.kind === 'y') return ['y']
   if (move.kind === 'x') return ['x']
-  if (move.kind === 'gesture' || move.kind === 'light') return []
+  if (move.kind === 'gesture' || move.kind === 'light' || move.kind === 'hold') return []
   return ['x', 'y']
 }
 
@@ -103,9 +108,8 @@ function byDistance(points: Tilt2[]) {
   return lengths.map((l) => l / total)
 }
 
-function moveSegments(move: PlaybackMove, lens: LensState, speed: number, holdSeconds: number): Segment[] {
+function moveSegments(move: PlaybackMove, lens: LensState, speed: number): Segment[] {
   const leg = 1 / speed
-  const holds = (at: Tilt2, light = 0) => (holdSeconds > 0 ? [hold(at, holdSeconds, light)] : [])
   if (move.kind === 'gesture') {
     const recorded = (move.points ?? []).filter((p) => Number.isFinite(p.t) && Number.isFinite(p.x) && Number.isFinite(p.y))
     if (recorded.length < 2) return []
@@ -114,12 +118,14 @@ function moveSegments(move: PlaybackMove, lens: LensState, speed: number, holdSe
     const points = recorded.map(({ x, y }) => ({ x, y }))
     const light = recorded.map(lightOf)
     const gesture: Segment = { seconds: span / speed, eased: false, points, at: recorded.map((p) => (p.t - t0) / span), ...(light.some((l) => l > 0) ? { light } : {}) }
-    return [gesture, ...holds(points.at(-1)!, light.at(-1))]
+    return [gesture]
   }
+  // Every move ends flat, so a Hold waits there once the move before it has come back
+  if (move.kind === 'hold') return [hold(FLAT, holdMoveSeconds(move) / speed)]
   if (move.kind === 'light') {
-    // Flat the whole time: the light fades in, stays and fades out, then the usual pause at flat
+    // Flat the whole time: the light fades in, stays and fades out
     const fade = LIGHT_FADE_SECONDS / speed
-    return [line(FLAT, FLAT, fade, true, [0, 1]), hold(FLAT, lightHoldSeconds(move) / speed, 1), line(FLAT, FLAT, fade, true, [1, 0]), ...holds(FLAT)]
+    return [line(FLAT, FLAT, fade, true, [0, 1]), hold(FLAT, lightHoldSeconds(move) / speed, 1), line(FLAT, FLAT, fade, true, [1, 0])]
   }
   const end = moveReach(move, lens)
   if (move.kind === 'circle') {
@@ -129,13 +135,13 @@ function moveSegments(move: PlaybackMove, lens: LensState, speed: number, holdSe
       const a = (i / CIRCLE_POINTS) * 2 * Math.PI
       return { x: end.x * Math.sin(a), y: end.y * Math.cos(a) }
     })
-    return [line(FLAT, top, leg), ...holds(top), { seconds: 2 * leg, eased: false, points: ring, at: byDistance(ring) }, line(top, FLAT, leg), ...holds(FLAT)]
+    return [line(FLAT, top, leg), { seconds: 2 * leg, eased: false, points: ring, at: byDistance(ring) }, line(top, FLAT, leg)]
   }
   // Up/down and side make one pass from their start to their end; the plan glides to and from flat around it.
   // A move left at flat to start keeps going out and back, as before.
   const { start, end: stop } = swingEnds(move, lens)
-  if (distance(start, FLAT) < 0.5) return [line(FLAT, stop, leg), ...holds(stop), line(stop, FLAT, leg), ...holds(FLAT)]
-  return [line(start, stop, leg), ...holds(stop)]
+  if (distance(start, FLAT) < 0.5) return [line(FLAT, stop, leg), line(stop, FLAT, leg)]
+  return [line(start, stop, leg)]
 }
 
 /**
@@ -161,9 +167,12 @@ export function moveStart(move: PlaybackMove): Tilt2 {
   return FLAT
 }
 
+const heldSeconds = (move: Pick<PlaybackMove, 'seconds'>, unset: number, limits: { min: number; max: number }) =>
+  clamp(typeof move.seconds === 'number' && Number.isFinite(move.seconds) ? move.seconds : unset, limits.min, limits.max)
+/** Seconds a Hold move stays flat, at 1× */
+export const holdMoveSeconds = (move: Pick<PlaybackMove, 'seconds'>) => heldSeconds(move, HOLD_SECONDS, HOLD_LIMITS)
 /** Seconds a Hold to light move stays up to the light, at 1× */
-export const lightHoldSeconds = (move: Pick<PlaybackMove, 'seconds'>) =>
-  clamp(typeof move.seconds === 'number' && Number.isFinite(move.seconds) ? move.seconds : LIGHT_HOLD_SECONDS, LIGHT_HOLD_LIMITS.min, LIGHT_HOLD_LIMITS.max)
+export const lightHoldSeconds = (move: Pick<PlaybackMove, 'seconds'>) => heldSeconds(move, LIGHT_HOLD_SECONDS, LIGHT_HOLD_LIMITS)
 
 const firstPoint = (s: Segment) => s.points[0]
 const lastPoint = (s: Segment) => s.points.at(-1)!
@@ -174,8 +183,8 @@ const join = (a: Tilt2, b: Tilt2, speed: number, light: [number, number] = [0, 0
   line(a, b, Math.max(0.15, distance(a, b) / JOIN_DEG_PER_SECOND, Math.abs(light[1] - light[0]) * LIGHT_FADE_SECONDS) / speed, true, light)
 
 export function playbackPlan(tilt: TiltSettings, lens: LensState): PlaybackPlan {
-  const { speed, curve, holdSeconds } = playbackSettings(tilt)
-  const runs = movesOf(tilt, lens).map((m) => moveSegments(m, lens, speed, holdSeconds).filter((s) => s.seconds > 0)).filter((r) => r.length)
+  const { speed, curve } = playbackSettings(tilt)
+  const runs = movesOf(tilt, lens).map((m) => moveSegments(m, lens, speed).filter((s) => s.seconds > 0)).filter((r) => r.length)
   // Every move starts from flat in reflected light, and returns there before the next one
   const segments = runs.flatMap((run) => {
     const first = firstPoint(run[0])

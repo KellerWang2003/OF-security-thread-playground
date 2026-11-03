@@ -81,15 +81,15 @@ describe('flat-to-upward playback', () => {
     expect(useTilt.getState().angle).toBeCloseTo(0, 8)
   })
 
-  it('holds at both ends for the requested time', () => {
-    renderHook(() => useTiltLoop(planFor(30, { curve: 'linear', holdSeconds: 0.4 })))
+  it('pauses flat for as long as a Hold move says, and turns straight back at full tilt', () => {
+    renderHook(() => useTiltLoop(planFor(30, { curve: 'linear', moves: [{ id: 'a', kind: 'y', y: 30 }, { id: 'h', kind: 'hold', seconds: 0.4 }] })))
     setTilt({ source: 'wobble' })
     tick(20)
     advance(1000)
     expect(useTilt.getState().angle).toBeCloseTo(30, 8)
-    advance(400)
-    expect(useTilt.getState().angle).toBeCloseTo(30, 8)
-    advance(1000)
+    advance(200)
+    expect(useTilt.getState().angle).toBeCloseTo(24, 8)
+    advance(800)
     expect(useTilt.getState().angle).toBeCloseTo(0, 8)
     advance(400)
     expect(useTilt.getState().angle).toBeCloseTo(0, 8)
@@ -192,7 +192,7 @@ describe('the light behind the banknotes', () => {
   })
 
   it('holds the banknotes to the light while playback says so, and fades back to the switch on pause', () => {
-    renderHook(() => useTiltLoop(planFor(30, { moves: [{ id: 'l', kind: 'light' }], curve: 'linear', holdSeconds: 0 })))
+    renderHook(() => useTiltLoop(planFor(30, { moves: [{ id: 'l', kind: 'light' }], curve: 'linear' })))
     setTilt({ source: 'wobble' })
     tick(20)
     expect(light()).toBe(0)

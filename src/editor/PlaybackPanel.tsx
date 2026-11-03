@@ -5,11 +5,13 @@ import { IconButton, ScrubField } from '../components/controls'
 import { cn } from '@/lib/utils'
 import { SWEEP_MAX, type LensState } from '../lib/lens'
 import {
+  HOLD_LIMITS,
   LIGHT_HOLD_LIMITS,
   MOVES_MAX,
   MOVE_KINDS,
   editableMoves,
   gestureSeconds,
+  holdMoveSeconds,
   lightHoldSeconds,
   moveFromRecording,
   moveReach,
@@ -19,7 +21,7 @@ import {
   newMove,
   playbackPlan,
 } from '../lib/moves'
-import { HOLD_LIMITS, PLAYBACK_CURVES, SPEED_LIMITS, playbackEase, playbackSettings } from '../lib/playback'
+import { PLAYBACK_CURVES, SPEED_LIMITS, playbackEase, playbackSettings } from '../lib/playback'
 import type { PlaybackCurve, PlaybackMove, Recording, TiltSettings } from '../lib/types'
 import { saveTilt } from './playbackActions'
 
@@ -195,6 +197,11 @@ function PlaylistRow({ index, count, move, lens, recordings, shift, dragging, on
           value={Math.round(move.kind === 'y' ? ends.start.y : ends.start.x)} min={-SWEEP_MAX} max={SWEEP_MAX} unit="°"
           onChange={(from) => onChange((m) => ({ ...m, from, [m.kind]: m.kind === 'y' ? ends.end.y : ends.end.x }))} />
       )}
+      {move.kind === 'hold' && (
+        <ScrubField className="w-[70px] shrink-0" label="⏸" title="Seconds held flat, at 1× speed"
+          value={holdMoveSeconds(move)} {...HOLD_LIMITS} unit="s"
+          onChange={(seconds) => onChange((m) => ({ ...m, seconds }))} />
+      )}
       {move.kind === 'light' && (
         <ScrubField className="w-[70px] shrink-0" label="☀" title="Seconds held up to the light, at 1× speed"
           value={lightHoldSeconds(move)} {...LIGHT_HOLD_LIMITS} unit="s"
@@ -219,14 +226,13 @@ function curvePath(curve: PlaybackCurve) {
   return Array.from({ length: 41 }, (_, i) => `${i ? 'L' : 'M'}${2 + i * 2},${22 - 20 * playbackEase(i / 40, curve)}`).join(' ')
 }
 
-/** Speed, holds and curve shape how every move travels; fade is how frames blend */
+/** Speed and curve shape how every move travels; fade is how frames blend. Pauses are Hold moves in the playlist */
 function MotionSettings({ tilt, set }: { tilt: TiltSettings; set: (patch: Partial<TiltSettings>) => void }) {
-  const { speed, curve, holdSeconds } = playbackSettings(tilt)
+  const { speed, curve } = playbackSettings(tilt)
   return (
     <Section title="Motion">
-      <div className="grid grid-cols-2 gap-1.5">
+      <div className="grid grid-cols-3 gap-1.5">
         <ScrubField label="Speed" title="Playback speed multiplier; 1× takes one second each way" value={speed} {...SPEED_LIMITS} unit="×" onChange={(next) => set({ speed: next })} />
-        <ScrubField label="Hold" title="Pause at flat and at full tilt, in seconds at each end" value={holdSeconds} {...HOLD_LIMITS} unit="s" onChange={(next) => set({ holdSeconds: next })} />
         <Select value={curve} items={PLAYBACK_CURVES} onValueChange={(next) => { if (next) set({ curve: next }) }}>
           <SelectTrigger aria-label="Playback curve" size="sm" className="h-8 w-full text-xs">
             <svg viewBox="0 0 84 24" className="h-4 w-8 shrink-0 text-foreground" aria-hidden>

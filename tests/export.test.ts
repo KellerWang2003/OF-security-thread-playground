@@ -10,7 +10,7 @@ const makeNote = (widthMm = 68, heightMm = 120) => createNote({ name: 'Test', x:
 
 describe('playback angles', () => {
   it('goes from flat up through the cycle and back, like live playback', () => {
-    const tilt = { cycleDeg: 30, transition: 0, speed: 1, curve: 'linear' as const, holdSeconds: 0 }
+    const tilt = { cycleDeg: 30, transition: 0, speed: 1, curve: 'linear' as const }
     const angles = playbackAngles(tilt, 30)
     expect(angles).toHaveLength(60)
     expect(angles[0]).toBe(0)
@@ -19,14 +19,15 @@ describe('playback angles', () => {
     expect(angles[45]).toBeCloseTo(15)
   })
 
-  it('adds holds and loops', () => {
-    const tilt = { cycleDeg: 20, transition: 0, speed: 2, curve: 'smooth' as const, holdSeconds: 0.5 }
-    // 0.5 s up, 0.5 s hold, 0.5 s down, 0.5 s hold
+  it('loops at the project speed, turning straight back at full tilt', () => {
+    const tilt = { cycleDeg: 20, transition: 0, speed: 2, curve: 'smooth' as const }
+    // 0.5 s up, 0.5 s down
     const angles = playbackAngles(tilt, 10, 2)
-    expect(angles).toHaveLength(40)
+    expect(angles).toHaveLength(20)
     expect(angles[5]).toBeCloseTo(20)
-    expect(angles[8]).toBeCloseTo(20)
-    expect(angles[20]).toBe(0)
+    expect(angles[8]).toBeLessThan(20)
+    expect(angles[10]).toBe(0)
+    expect(angles[15]).toBeCloseTo(20)
   })
 })
 

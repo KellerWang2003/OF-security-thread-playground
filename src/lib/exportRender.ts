@@ -4,7 +4,7 @@ import { watermarkOpacity, watermarkReveal } from './light'
 import { lightAt, playbackPlan, tiltAt } from './moves'
 import { loadImageUrl } from './images'
 import { patternMix, playbackLens, playbackTilt, preparePattern, sectionSpans, shownLabel } from './pattern'
-import { advancePlayback, playbackEase, playbackSettings } from './playback'
+import { playbackEase, playbackSettings } from './playback'
 import { type Relief, loadRelief } from './relief'
 import { copyStarts, imageBox } from './artwork'
 import { fitSections, threadLength } from './thread'
@@ -19,22 +19,21 @@ export const EXPORT_MARGIN_MM = 6
 
 /** One sweep's easing at each video frame: 0 at flat, 1 at the end of the cycle, as live playback */
 function sweepProgress(tilt: Note['tilt'], fps: number, sweeps: number) {
-  const { speed, curve, holdSeconds } = playbackSettings(tilt)
-  const loopSeconds = 2 / speed + 2 * holdSeconds
+  const { speed, curve } = playbackSettings(tilt)
+  const loopSeconds = 2 / speed
   const count = Math.max(1, Math.round(loopSeconds * sweeps * fps))
   return Array.from({ length: count }, (_, i) => {
-    const t = i / fps
-    const { phase } = advancePlayback({ phase: 0, holdRemaining: 0 }, t % loopSeconds, speed, holdSeconds)
-    return { sweep: Math.floor(t / loopSeconds + 1e-9), k: playbackEase(phase <= 1 ? phase : 2 - phase, curve) }
+    const phase = ((i / fps) % loopSeconds) * speed
+    return playbackEase(phase <= 1 ? phase : 2 - phase, curve)
   })
 }
 
 /**
  * The angle of every video frame for `loops` passes of up/down playback: flat, up through the cycle, back to
- * flat, with the project's speed, curve and holds. Uses the same maths as live playback.
+ * flat, with the project's speed and curve. Uses the same maths as live playback.
  */
 export function playbackAngles(tilt: Note['tilt'], fps: number, loops = 1) {
-  return sweepProgress(tilt, fps, loops).map(({ k }) => Math.max(0, tilt.cycleDeg) * k)
+  return sweepProgress(tilt, fps, loops).map((k) => Math.max(0, tilt.cycleDeg) * k)
 }
 
 /** The tilt of every video frame for `loops` passes of the project's playback moves, exactly as live playback */

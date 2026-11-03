@@ -2,7 +2,7 @@
 import React from 'react'
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../src/App'
 import { addNote, updateNote, useProjects } from '../src/lib/store'
@@ -362,7 +362,7 @@ describe('username workspace editor', () => {
     expect(changed).toHaveLength(1)
     expect(changed[0].tilt.cycleDeg).toBe(47)
   })
-  it('opens playback settings and applies saved fade, speed, curve and hold to every banknote', async () => {
+  it('opens playback settings and applies saved fade, speed, curve and a Hold to every banknote', async () => {
     const user = userEvent.setup()
     localStorage.setItem('of-thread-workspace', 'playback-settings-ui-test')
     render(<TooltipProvider><App /></TooltipProvider>)
@@ -374,15 +374,18 @@ describe('username workspace editor', () => {
     expect(dialog).toBeDefined()
     fireEvent.change(screen.getByTitle('How much neighbouring frames blend into each other').querySelector('input')!, { target: { value: '60' } })
     fireEvent.change(screen.getByTitle('Playback speed multiplier; 1× takes one second each way').querySelector('input')!, { target: { value: '2' } })
-    fireEvent.change(screen.getByTitle('Pause at flat and at full tilt, in seconds at each end').querySelector('input')!, { target: { value: '0.5' } })
+    await user.click(within(dialog).getByRole('button', { name: 'Hold', exact: true }))
+    fireEvent.change(screen.getByTitle('Seconds held flat, at 1× speed').querySelector('input')!, { target: { value: '0.5' } })
     await user.click(screen.getByRole('combobox', { name: 'Playback curve' }))
     await user.click(await screen.findByRole('option', { name: 'Linear', exact: true }))
     const project = useProjects.getState().demoPreview!
     expect(project.notes).toHaveLength(2)
     for (const note of migrateProject(JSON.parse(JSON.stringify(project))).notes) {
-      expect(note.tilt).toMatchObject({ transition: 0.6, speed: 2, curve: 'linear', holdSeconds: 0.5 })
+      expect(note.tilt).toMatchObject({ transition: 0.6, speed: 2, curve: 'linear' })
+      expect(note.tilt.moves?.map((m) => [m.kind, m.seconds])).toEqual([['y', undefined], ['hold', 0.5]])
     }
-    expect(screen.getByText('2 s loop')).toBeDefined()
+    // A swing across the cycle (0.75 s at 2×) and the hold (0.25 s at 2×)
+    expect(screen.getByText('1 s loop')).toBeDefined()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Playback settings' })).toBeNull())
     expect(screen.getByRole('button', { name: 'Playback settings', exact: true })).toBeDefined()

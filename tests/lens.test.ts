@@ -85,7 +85,7 @@ describe('reveal on one tilt', () => {
 
 describe('playback', () => {
   it('sweeps each chosen tilt in turn, flat → full cycle → flat', () => {
-    const note = { frames: frames([10, 10, 10]), tilt: { cycleDeg: 40, cycleXDeg: 80, effect: 'both', runX: 'left', playTilt: 'both', transition: 0, speed: 1, curve: 'linear', holdSeconds: 0 } as TiltSettings }
+    const note = { frames: frames([10, 10, 10]), tilt: { cycleDeg: 40, cycleXDeg: 80, effect: 'both', runX: 'left', playTilt: 'both', transition: 0, speed: 1, curve: 'linear' } as TiltSettings }
     const tilts = playbackTilts(note, 10)
     expect(tilts).toHaveLength(40)
     expect(tilts[10].x).toBeCloseTo(0)

@@ -3,7 +3,6 @@ import { SHADE_DEG } from '../../src/lib/frames'
 import { lensMix, lensState, type Tilt2 } from '../../src/lib/lens'
 import { playbackPlan, tiltAt } from '../../src/lib/moves'
 import { loadImageUrl } from '../../src/lib/images'
-import { advancePlayback, playbackEase, playbackSettings } from '../../src/lib/playback'
 import { fitSections, threadLength } from '../../src/lib/thread'
 import type { Note } from '../../src/lib/types'
 
@@ -21,26 +20,6 @@ function imageTiles(thicknessPx: number, lengthPx: number, gapPx: number, aspect
 export const perspectiveFor = (note: Pick<Note, 'widthMm' | 'heightMm'>, scale: number) => 2.2 * Math.max(note.widthMm, note.heightMm) * scale
 /** Space around and between banknotes in an export, in mm */
 export const EXPORT_MARGIN_MM = 6
-
-/** One sweep's easing at each video frame: 0 at flat, 1 at the end of the cycle, as live playback */
-function sweepProgress(tilt: Note['tilt'], fps: number, sweeps: number) {
-  const { speed, curve, holdSeconds } = playbackSettings(tilt)
-  const loopSeconds = 2 / speed + 2 * holdSeconds
-  const count = Math.max(1, Math.round(loopSeconds * sweeps * fps))
-  return Array.from({ length: count }, (_, i) => {
-    const t = i / fps
-    const { phase } = advancePlayback({ phase: 0, holdRemaining: 0 }, t % loopSeconds, speed, holdSeconds)
-    return { sweep: Math.floor(t / loopSeconds + 1e-9), k: playbackEase(phase <= 1 ? phase : 2 - phase, curve) }
-  })
-}
-
-/**
- * The angle of every video frame for `loops` passes of up/down playback: flat, up through the cycle, back to
- * flat, with the project's speed, curve and holds. Uses the same maths as live playback.
- */
-export function playbackAngles(tilt: Note['tilt'], fps: number, loops = 1) {
-  return sweepProgress(tilt, fps, loops).map(({ k }) => Math.max(0, tilt.cycleDeg) * k)
-}
 
 /** The tilt of every video frame for `loops` passes of the project's playback moves, exactly as live playback */
 export function playbackTilts(note: Pick<Note, 'tilt' | 'frames'>, fps: number, loops = 1): Tilt2[] {

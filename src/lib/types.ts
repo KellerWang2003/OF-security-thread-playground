@@ -61,7 +61,7 @@ export interface TiltSettings {
   /** Playback speed multiplier; 1 = one second in each direction */
   speed?: number
   curve?: PlaybackCurve
-  /** Seconds spent at each end of the tilt motion */
+  /** No longer read: pauses are Hold moves in `moves` (Keller, 3 November); kept so older saves still type-check */
   holdSeconds?: number
   /** Degrees of tilt for one full cycle of the frames; past it the frames loop */
   cycleDeg: number
@@ -117,17 +117,18 @@ export interface Recording {
 /**
  * One step of playback. Preset moves go out from flat and back: up/down, side to side, both at once
  * (diagonal), or once round an ellipse (circle). `x`/`y` are the signed angles reached; absent means one full
- * cycle of that tilt. Hold to light (`light`) stays flat, fades the light behind the banknote in, holds and fades
- * it out. A gesture is a recording of the tilt pad.
+ * cycle of that tilt. Hold (`hold`) stays flat, a pause once the move before it has come back. Hold to light
+ * (`light`) stays flat, fades the light behind the banknote in, holds and fades it out. A gesture is a recording of
+ * the tilt pad.
  */
 export interface PlaybackMove {
   id: string
-  kind: 'y' | 'x' | 'diagonal' | 'circle' | 'light' | 'gesture'
+  kind: 'y' | 'x' | 'diagonal' | 'circle' | 'hold' | 'light' | 'gesture'
   x?: number
   y?: number
   /** Up/down and side only: the signed angle the move starts and returns to (flat when absent), so it can swing −12° to +12° */
   from?: number
-  /** Hold to light only: seconds held up to the light at 1× (default LIGHT_HOLD_SECONDS) */
+  /** Hold and Hold to light only: seconds held, flat or up to the light, at 1× (default HOLD_SECONDS, LIGHT_HOLD_SECONDS) */
   seconds?: number
   /** Gesture only: seconds from the start, the tilt then and the light (a copy of the recording's) */
   points?: RecordedPoint[]

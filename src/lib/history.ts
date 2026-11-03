@@ -91,7 +91,7 @@ export function historyStep(project: Project, direction: 'undo' | 'redo'): Proje
 }
 
 /** Playback settings every banknote keeps a copy of but the whole project shares (saved to all of them at once) */
-const SHARED_TILT = ['speed', 'curve', 'holdSeconds', 'transition', 'moves', 'recordings', 'playTilt'] as const
+const SHARED_TILT = ['speed', 'curve', 'transition', 'moves', 'recordings', 'playTilt'] as const
 // A banknote's own settings, without the playback it shares; worked out once per note, as notes are never mutated
 const ownParts = new WeakMap<Note, string>()
 function ownPart(note: Note) {
