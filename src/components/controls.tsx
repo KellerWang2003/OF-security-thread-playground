@@ -119,7 +119,8 @@ export function Group({ title, action, children }: { title?: string; action?: Re
           {action}
         </div>
       )}
-      <div className="flex flex-col divide-y divide-border">{children}</div>
+      {/* Inside a part, its sections split by lighter, inset lines; the dark full-width ones divide the parts themselves */}
+      <div className="flex flex-col divide-y divide-border/70">{children}</div>
     </div>
   )
 }
