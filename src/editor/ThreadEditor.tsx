@@ -66,8 +66,13 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
   const [ridges, setRidges] = useState(false)
   // How strongly the ridges show, while they show
   const [ridgeOpacity, setRidgeOpacity] = useState(1)
-  // The right panel's tab: the whole thread, or the frames; a click on the thread turns to Frames (Keller)
+  // The right panel's tab: the whole thread, or the frames. A click on the thread turns to Frames, and letting go of
+  // it, by a click around it or Escape, back to Thread (Keller)
   const [tab, setTab] = useState<'thread' | 'frames'>('thread')
+  const selectOnThread = (id: string | undefined) => {
+    selectSection(id)
+    if (!id) setTab('thread')
+  }
   // Preview and Checks open one at a time, as an accordion, so the controls above always keep room
   const [info, setInfo] = useState<'preview' | 'checks'>()
   const openInfo = (part: 'preview' | 'checks') => (open: boolean) => setInfo(open ? part : undefined)
@@ -123,8 +128,10 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return
       e.preventDefault()
       if (e.key === 'Escape') {
-        if (selectedSectionId) setSelectedId(undefined)
-        else onClose()
+        if (selectedSectionId || tab === 'frames') {
+          setSelectedId(undefined)
+          setTab('thread')
+        } else onClose()
       } else if (selectedSectionId && canRemove) {
         updateNote(project.id, note.id, (n) => ({ ...n, pattern: removeSection(patternOf(n), selectedSectionId) }))
         setSelectedId(neighbourOf(pattern, selectedSectionId))
@@ -132,7 +139,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
     }
     window.addEventListener('keydown', onKey, { capture: true })
     return () => window.removeEventListener('keydown', onKey, { capture: true })
-  }, [selectedSectionId, canRemove, onClose, project.id, note.id, pattern])
+  }, [selectedSectionId, tab, canRemove, onClose, project.id, note.id, pattern])
 
   // ⌘Z and ⇧⌘Z (or Ctrl+Y) undo and redo this banknote's steps only, caught before the canvas's project-wide undo
   useEffect(() => {
@@ -165,7 +172,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       <div className="absolute inset-0 bg-muted/40" />
 
       {/* The whole editor, behind the panels, as on the canvas; the thread fits between them, and fits again once turned */}
-      <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={selectSection} ridges={ridges} ridgeOpacity={ridgeOpacity}
+      <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={selectOnThread} ridges={ridges} ridgeOpacity={ridgeOpacity}
         frame={note.frames.indexOf(current)} onThreadClick={() => setTab('frames')}
         limit={lens.viewDeg} room="top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[248px]" />
 

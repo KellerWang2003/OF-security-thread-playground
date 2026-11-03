@@ -153,21 +153,31 @@ describe('thread editor', () => {
     expect(sections()[1]).toMatchObject({ startMm: 0, endMm: 4, acrossStart: 0.75 })
     act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
 
-    // A click on the thread picks the section under it, turning the panel to Frames; a click around it lets go;
-    // Escape lets go, then leaves
-    fireEvent.pointerDown(strip().element, { button: 0, buttons: 1, ...at(0.5, 0.25) })
-    fireEvent.pointerUp(strip().element, { button: 0, ...at(0.5, 0.25) })
+    // A click on the thread picks the section under it, turning the panel to Frames; a click around it lets go,
+    // turning back to Thread; Escape lets go too, then leaves
+    const clickThread = () => {
+      fireEvent.pointerDown(strip().element, { button: 0, buttons: 1, ...at(0.5, 0.25) })
+      fireEvent.pointerUp(strip().element, { button: 0, ...at(0.5, 0.25) })
+    }
+    clickThread()
     expect(tab(editor, 'Frames').getAttribute('aria-selected')).toBe('true')
     await user.click(tab(editor, 'Thread'))
     expect(within(editor).getByRole('heading', { name: 'Lane ↔' })).toBeDefined()
+    clickThread()
+    expect(tab(editor, 'Frames').getAttribute('aria-selected')).toBe('true')
     const view = strip().element.parentElement!.parentElement!.parentElement!
     fireEvent.pointerDown(view, { button: 0, buttons: 1, clientX: 5, clientY: 5, pointerId: 1 })
     fireEvent.pointerUp(view, { button: 0, clientX: 5, clientY: 5, pointerId: 1 })
+    expect(tab(editor, 'Thread').getAttribute('aria-selected')).toBe('true')
     expect(within(editor).queryByRole('heading', { name: 'Lane ↔' })).toBeNull()
     await user.click(within(editor).getByRole('button', { name: added.name, exact: true }))
     expect(within(editor).getByRole('heading', { name: added.name })).toBeDefined()
     await user.keyboard('{Escape}')
     expect(within(editor).queryByRole('heading', { name: added.name })).toBeNull()
+    clickThread()
+    expect(tab(editor, 'Frames').getAttribute('aria-selected')).toBe('true')
+    await user.keyboard('{Escape}')
+    expect(tab(editor, 'Thread').getAttribute('aria-selected')).toBe('true')
     expect(screen.getByRole('region', { name: 'Thread editor' })).toBeDefined()
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('region', { name: 'Thread editor' })).toBeNull()
