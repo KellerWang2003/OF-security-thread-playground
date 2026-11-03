@@ -4,17 +4,15 @@ import { Button } from '@/components/ui/button'
 import { ColorField, Group, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
-import { LENS_EFFECTS, lensState } from '../lib/lens'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
 import { mod, patternOf } from '../lib/pattern'
 import { setPatternOffset, shufflePatternOffset, usePatternOffsets } from '../lib/patternOffset'
-import { checkPattern, warningCount, windowReports } from '../lib/patternRules'
+import { windowReports } from '../lib/patternRules'
 import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
 import { fitWatermark, moveWatermarkTo } from '../lib/watermark'
 import { PanelResizer } from './PanelResizer'
-import { PatternPicture } from './PatternPicture'
 import { WatermarkPanel } from './WatermarkPanel'
 import { WindowsCard } from './WindowsCard'
 import { setFaceImage, type NoteRef } from './frameActions'
@@ -24,8 +22,8 @@ type Change = (note: Note) => Note
 
 /**
  * Right: the selected layer of the selected banknote, Figma style: the banknote itself (size, background), its
- * security thread with a summary of its lens effect (edited in the thread editor), or its watermark. One at a time,
- * so the panel never grows with features.
+ * security thread with the way into the thread editor (where its lens effect is edited), or its watermark. One at a
+ * time, so the panel never grows with features.
  */
 export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSelect, onExport, onEditThread, onPlaceWatermark, onRemoveWatermark }: {
   note: Note
@@ -211,7 +209,9 @@ export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSele
       </Group>
 
       <Group title="Lens effect">
-        <LensSummary note={note} onEdit={onEditThread} />
+        <Section nested>
+          <Button size="sm" onClick={onEditThread}>Edit thread</Button>
+        </Section>
         <PrintOffset note={note} onWindowSelect={onWindowSelect} />
       </Group>
       </>
@@ -222,35 +222,6 @@ export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSele
       )}
     </Panel>
     </>
-  )
-}
-
-/** The thread's lens at a glance (its sections as a picture, the effect or mixed angles, rule warnings) and the way into the thread editor */
-function LensSummary({ note, onEdit }: { note: Note; onEdit: () => void }) {
-  const pattern = patternOf(note)
-  const count = pattern.sections.length
-  const warnings = warningCount(checkPattern(note))
-  const effect = LENS_EFFECTS.find((e) => e.value === lensState(note.tilt, note.frames).effect)?.label
-  const vertical = note.thread.direction === 'vertical'
-  return (
-    <Section nested>
-      <div className="flex items-center gap-3">
-        <PatternPicture note={note} width={vertical ? 28 : 56} height={vertical ? 56 : 28} />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-sm">{pattern.mixed ? 'Mixed angles' : effect}</span>
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
-            {count} {count === 1 ? 'section' : 'sections'}
-            {warnings > 0 && (
-              <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-500" title={`${warnings} rule ${warnings === 1 ? 'warning' : 'warnings'}`}>
-                <TriangleAlert className="size-3" />
-                {warnings}
-              </span>
-            )}
-          </span>
-        </div>
-      </div>
-      <Button variant="outline" size="sm" onClick={onEdit}>Edit thread</Button>
-    </Section>
   )
 }
 

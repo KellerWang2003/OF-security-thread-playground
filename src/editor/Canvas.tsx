@@ -45,8 +45,8 @@ interface View {
 type Gesture =
   | { mode: 'pan'; startX: number; startY: number; view: View; onBackground: boolean }
   | { mode: 'move'; noteId: string; startX: number; startY: number; noteX: number; noteY: number }
-  /** `moved` once the drag passes a few px: a plain click leaves the tilt where it is */
-  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; moved: boolean }
+  /** `moved` once the drag passes a few px: a plain click leaves the tilt where it is, and picks the banknote */
+  | { mode: 'tilt'; noteId: string; startX: number; startY: number; start: number; startSide: number; moved: boolean }
   | { mode: 'thread'; noteId: string; startX: number; startY: number; startPosition: number; alongMm: number }
   /** The watermark moves only once the drag passes a few px, so a click just picks it */
   | { mode: 'watermark'; noteId: string; startX: number; startY: number; original: Watermark; moved: boolean }
@@ -99,9 +99,9 @@ export function Canvas({
   projectId: string
   notes: Note[]
   selectedId: string | undefined
-  /** Selects a banknote, keeping the layer shown */
+  /** Selects a banknote itself, or nothing */
   onSelect: (noteId: string | undefined) => void
-  /** A press on a banknote's thread or watermark picks that layer */
+  /** A press on a banknote's thread or watermark picks that layer only */
   onSelectLayer: (noteId: string, layer: Layer) => void
   /** Centres the canvas on a note whenever the token changes */
   focus?: { noteId: string; token: number }
@@ -361,11 +361,13 @@ export function Canvas({
           onSelect(note.id)
           gesture.current = { mode: 'move', noteId: note.id, startX: e.clientX, startY: e.clientY, noteX: note.x, noteY: note.y }
         } else {
-          onSelect(note.id)
+          // A press picks another banknote itself; on the selected one only a click does (on release), so tilting it
+          // by dragging keeps its layer in the panel
+          if (note.id !== selectedId) onSelect(note.id)
           const s = useTilt.getState()
           const start = s.source === 'drag' ? s.target : s.angle
           const startSide = s.source === 'drag' ? s.targetX : s.angleX
-          gesture.current = { mode: 'tilt', startX: e.clientX, startY: e.clientY, start, startSide, moved: false }
+          gesture.current = { mode: 'tilt', noteId: note.id, startX: e.clientX, startY: e.clientY, start, startSide, moved: false }
           setTilt({ source: 'drag', target: start, targetX: startSide })
         }
         setActiveMode(gesture.current.mode)
@@ -440,6 +442,8 @@ export function Canvas({
             : undefined
           if (note && section) onEditWindow?.(note.id, section.id)
         }
+        // A click on a banknote, away from its thread and watermark and without tilting it, picks the banknote itself
+        if (g?.mode === 'tilt' && !g.moved) onSelect(g.noteId)
         // A click on empty canvas, without dragging, clears the selection
         if (g?.mode === 'pan' && g.onBackground && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) onSelect(undefined)
         endGesture()

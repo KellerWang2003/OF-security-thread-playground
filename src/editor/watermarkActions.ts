@@ -7,9 +7,9 @@ import type { NoteRef } from './frameActions'
 /** A banknote's parts, listed under it in the Banknotes list; the right panel shows one at a time */
 export type Layer = 'note' | 'thread' | 'watermark'
 
-/** The layer a banknote can show: a watermark it doesn't have falls back to its thread */
+/** The layer a banknote can show: a watermark it no longer has (undone, say) falls back to the banknote itself */
 export const layerOf = (note: Pick<Note, 'watermark'> | undefined, layer: Layer): Layer =>
-  layer === 'watermark' && !note?.watermark ? 'thread' : layer
+  layer === 'watermark' && !note?.watermark ? 'note' : layer
 
 /** Adds an empty watermark in the banknote's plain part; a banknote has at most one */
 export function addWatermark({ projectId, noteId }: NoteRef) {

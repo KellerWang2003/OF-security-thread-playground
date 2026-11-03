@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../src/App'
-import { updateNote, useProjects } from '../src/lib/store'
-import { migrateProject } from '../src/lib/notes'
+import { addNote, updateNote, useProjects } from '../src/lib/store'
+import { createNote, migrateProject } from '../src/lib/notes'
+import { newWatermark } from '../src/lib/watermark'
 import { setTilt, useTilt } from '../src/tilt/tilt'
 import { TooltipProvider } from '../src/components/ui/tooltip'
 
@@ -96,10 +97,12 @@ describe('username workspace editor', () => {
     await user.click(screen.getByRole('button', { name: 'Undo', exact: true }))
     await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
     expect(screen.getByTitle('Window 2: visible section starts here').querySelector('input')!.value).toBe('16')
-    // Clicking the banknote away from its windows ends editing, and the banknote stays selected
+    // Clicking the banknote away from its windows ends editing and picks the banknote itself, not its thread
     fireEvent.pointerDown(document.querySelector('[data-note-body]')!, { button: 0, pointerId: 1 })
     fireEvent.pointerUp(document.querySelector('[data-note-body]')!, { button: 0, pointerId: 1 })
     expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Banknote', exact: true })).toBeDefined()
+    await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
     expect(row(2)).toBeDefined()
     await user.click(screen.getByRole('switch', { name: 'Windows' }))
     expect(screen.queryByRole('button', { name: /^Window 2,/ })).toBeNull()
@@ -109,6 +112,68 @@ describe('username workspace editor', () => {
     expect(screen.getByTitle('Window 2: visible section starts here').querySelector('input')!.value).toBe('16')
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
+    expect(saves).not.toHaveBeenCalled()
+  })
+  it('picks only what a click lands on: the banknote itself, its thread or its watermark, never a layer picked before', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      callback: ResizeObserverCallback
+      constructor(callback: ResizeObserverCallback) { this.callback = callback }
+      observe() { this.callback([{ contentRect: { width: 1280, height: 720 } } as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      unobserve() {} disconnect() {}
+    })
+    for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
+    }
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'selection-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const demo = useProjects.getState().demoPreview!
+    act(() => addNote(demo.id, createNote({ name: 'Other', x: 200, y: 0, widthMm: 100, heightMm: 50, color: '#654321' })))
+    act(() => updateNote(demo.id, demo.notes[0].id, (n) => ({ ...n, watermark: { ...newWatermark(n), imageId: 'fixture-watermark' } })))
+    const shown = () => ['Banknote', 'Security thread', 'Watermark'].filter((name) => screen.queryByRole('heading', { name, exact: true }))
+    const width = () => screen.getByText('W', { exact: true }).parentElement!.querySelector('input')!.value
+    const body = (i: number) => document.querySelectorAll('[data-note-body]')[i]
+    const click = (target: Element) => {
+      fireEvent.pointerDown(target, { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
+      fireEvent.pointerUp(target, { button: 0, pointerId: 1, clientX: 100, clientY: 100 })
+    }
+
+    // The thread, then another banknote: that banknote itself, not its thread
+    click(body(0).querySelector('[data-thread]')!)
+    expect(shown()).toEqual(['Security thread'])
+    click(body(1))
+    expect(shown()).toEqual(['Banknote'])
+    expect(width()).toBe('100')
+
+    // Tilting the selected banknote by dragging it leaves its layer showing; a click picks the banknote itself
+    click(body(1).querySelector('[data-thread]')!)
+    expect(shown()).toEqual(['Security thread'])
+    fireEvent.pointerDown(body(1), { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(body(1), { buttons: 1, pointerId: 1, clientX: 100, clientY: 60 })
+    fireEvent.pointerUp(body(1), { button: 0, pointerId: 1, clientX: 100, clientY: 60 })
+    expect(shown()).toEqual(['Security thread'])
+    click(body(1))
+    expect(shown()).toEqual(['Banknote'])
+
+    // The watermark, then the banknote under it, then the other banknote: each time just what was clicked
+    click(body(0).querySelector('[data-watermark]')!)
+    expect(shown()).toEqual(['Watermark'])
+    click(body(0))
+    expect(shown()).toEqual(['Banknote'])
+    expect(width()).toBe('150')
+    click(body(0).querySelector('[data-watermark]')!)
+    click(body(1))
+    expect(shown()).toEqual(['Banknote'])
+    expect(width()).toBe('100')
+
+    // The same in the list: a layer row, then another banknote's row
+    await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
+    expect(shown()).toEqual(['Security thread'])
+    await user.click(screen.getByRole('button', { name: 'Demo banknote', exact: true }))
+    expect(shown()).toEqual(['Banknote'])
+    expect(width()).toBe('150')
     expect(saves).not.toHaveBeenCalled()
   })
   it('pans and zooms the canvas as one layer, then redraws the banknotes at the new view', async () => {
@@ -454,14 +519,17 @@ describe('username workspace editor', () => {
     await waitFor(() => expect(notes()).toHaveLength(2))
     expect(notes()[1].watermark).toEqual(original)
 
-    // The copy is selected with its watermark showing; removing it leaves the original alone
+    // The copy is selected as a banknote, not on the layer picked before; removing its watermark leaves the original alone
+    expect(screen.getByRole('heading', { name: 'Banknote', exact: true })).toBeDefined()
+    await user.click(screen.getByRole('button', { name: 'Watermark', exact: true }))
     expect(screen.getByRole('heading', { name: 'Watermark', exact: true })).toBeDefined()
     const [fromList] = screen.getAllByRole('button', { name: 'Remove watermark' })
     await user.click(fromList)
     expect(notes()[1].watermark).toBeUndefined()
     expect(notes()[0].watermark).toEqual(original)
     expect(screen.queryByRole('button', { name: 'Watermark', exact: true })).toBeNull()
-    expect(screen.getByRole('heading', { name: 'Security thread', exact: true })).toBeDefined()
+    // The banknote itself stays selected
+    expect(screen.getByRole('heading', { name: 'Banknote', exact: true })).toBeDefined()
 
     await user.click(screen.getByRole('button', { name: 'Undo', exact: true }))
     expect(notes()[1].watermark).toEqual(original)

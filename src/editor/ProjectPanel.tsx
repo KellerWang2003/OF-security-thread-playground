@@ -47,7 +47,7 @@ export function ProjectPanel({
   selectedId: string | undefined
   /** The selected banknote's layer the right panel shows */
   layer: Layer
-  /** A banknote row picks the banknote itself ('note'), a layer row that layer; no layer keeps the one shown */
+  /** A banknote row picks the banknote itself (no layer, or 'note'), a layer row that layer */
   onSelect: (noteId: string, layer?: Layer) => void
   onAdd: () => void
   onAddWatermark: (noteId: string) => void

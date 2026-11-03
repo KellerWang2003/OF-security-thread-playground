@@ -129,10 +129,10 @@ describe('thread editor', () => {
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('region', { name: 'Thread editor' })).toBeNull()
 
-    // Back on the canvas, the banknote is still selected and the panel sums the thread up
+    // Back on the canvas, the banknote's thread is still selected, with Edit thread to go back in
     expect(screen.getByRole('button', { name: 'Export', exact: true })).toBeDefined()
-    expect(screen.getByText('Mixed angles')).toBeDefined()
-    expect(screen.getByText(/^2 sections/)).toBeDefined()
+    expect(screen.getByRole('heading', { name: 'Security thread', exact: true })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Edit thread', exact: true })).toBeDefined()
   })
 
   it('adds, duplicates and renames sections, and edits each section’s lens only while angles are mixed', async () => {

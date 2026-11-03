@@ -26,9 +26,9 @@ const POPUP = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="list
  */
 export function Editor({ project, isDemo = false }: { project: Project; isDemo?: boolean }) {
   const [selectedId, setSelectedId] = useState<string>()
-  // Which part of the selected banknote the right panel shows. It stays as you click from banknote to banknote,
-  // so tilting or picking another banknote never throws you out of the lens settings
-  const [layer, setLayer] = useState<Layer>('thread')
+  // Which part of the selected banknote the right panel shows: the one last clicked, the banknote itself, its thread
+  // or its watermark. Every selection sets it, so picking a banknote never brings back a layer picked before
+  const [layer, setLayer] = useState<Layer>('note')
   const [editingNoteId, setEditingNoteId] = useState<string>()
   const [selectedWindowId, setSelectedWindowId] = useState<string>()
   const [placingNoteId, setPlacingNoteId] = useState<string>()
@@ -45,20 +45,19 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     setSelectedWindowId(undefined)
   }
   const exitPlacing = () => setPlacingNoteId(undefined)
-  /** Selects a banknote and keeps the layer shown */
-  const selectNote = (noteId: string | undefined) => {
-    if (noteId !== selectedId) {
-      exitWindows()
-      exitPlacing()
-    }
-    setSelectedId(noteId)
-  }
-  /** Selects a banknote's layer; picking its watermark places it */
+  /** Selects exactly what was picked: a banknote itself, or one of its layers; picking its watermark places it */
   const selectLayer = (noteId: string, next: Layer) => {
-    selectNote(noteId)
+    if (noteId !== selectedId || next !== 'thread') exitWindows()
+    setSelectedId(noteId)
     setLayer(next)
-    if (next !== 'thread') exitWindows()
     setPlacingNoteId(next === 'watermark' ? noteId : undefined)
+  }
+  /** Selects a banknote itself, or nothing */
+  const selectNote = (noteId: string | undefined) => {
+    if (noteId) return selectLayer(noteId, 'note')
+    exitWindows()
+    exitPlacing()
+    setSelectedId(undefined)
   }
   // The thread editor shows the selected banknote while open; selecting another (or none) leaves it.
   // It belongs to the thread, so the right panel shows the thread when it closes
@@ -125,7 +124,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
       if (document.querySelector('[role="dialog"], [role="menu"]')) return
       event.preventDefault()
       void removeWatermark({ projectId: project.id, noteId: placingNoteId })
-      setLayer('thread')
+      setLayer('note')
       exitPlacing()
     }
     window.addEventListener('keydown', onDelete)
@@ -209,16 +208,16 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     selectNote(noteId)
     setFocus({ noteId, token: Date.now() })
   }
-  /** From the Banknotes list: a banknote row shows the banknote itself, a layer row that layer; a new banknote is brought into view */
-  const selectFromList = (noteId: string, next?: Layer) => {
+  /** From the Banknotes list: a banknote row (or a new copy) shows the banknote itself, a layer row that layer; a new banknote is brought into view */
+  const selectFromList = (noteId: string, next: Layer = 'note') => {
     const elsewhere = noteId !== selectedId
-    if (next) selectLayer(noteId, next)
-    else selectNote(noteId)
+    selectLayer(noteId, next)
     if (elsewhere || next === 'note') setFocus({ noteId, token: Date.now() })
   }
+  // Removing the watermark it shows leaves the banknote itself selected
   const dropWatermark = (noteId: string) => {
     void removeWatermark({ projectId: project.id, noteId })
-    if (noteId === selectedId && shownLayer === 'watermark') setLayer('thread')
+    if (noteId === selectedId && shownLayer === 'watermark') setLayer('note')
     if (noteId === placingNoteId) exitPlacing()
   }
 
