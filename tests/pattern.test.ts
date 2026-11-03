@@ -466,6 +466,8 @@ describe('filling gaps', () => {
     // Edges off the snapping grid leave no sliver behind
     const scaled = setRepeat({ repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 1 }), section({ id: 'b', startMm: 3, endMm: 4 })] }, 5)
     expect(gapRects(scaled)).toEqual([{ startMm: 1.25, endMm: 3.75, acrossStart: 0, acrossEnd: 1 }])
+    // and a hair's-breadth left by rounding is no gap
+    expect(gapRects({ repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 2 }), section({ id: 'b', startMm: 2.0005 })] })).toEqual([])
   })
 
   it('fills each gap with a section that looks like the one it borders most, leaving no gap', () => {

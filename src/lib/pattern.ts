@@ -553,6 +553,8 @@ export function gapRects(pattern: ThreadPattern, at?: PatternPoint): Rect[] {
     }
     if (!best) return rects
     for (let c = best.c0; c <= best.c1; c++) for (let r = best.r0; r <= best.r1; r++) free[c][r] = false
+    // A sliver left by rounding (under a micron along or a thousandth across) is no gap worth a section
+    if (along[best.c1 + 1] - along[best.c0] < 1e-3 || across[best.r1 + 1] - across[best.r0] < 1e-3) continue
     rects.push({ startMm: tidy(along[best.c0]), endMm: tidy(along[best.c1 + 1]), acrossStart: tidyShare(across[best.r0]), acrossEnd: tidyShare(across[best.r1 + 1]) })
   }
 }
