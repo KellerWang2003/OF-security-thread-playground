@@ -582,6 +582,9 @@ describe('thread editor', () => {
     // Thread is the panel's tab at first, and a frame changing from elsewhere leaves it there; a click on the thread
     // turns to Frames
     expect(tab(editor, 'Thread').getAttribute('aria-selected')).toBe('true')
+    // Its strips are Strips there, so only the next tab is called Frames
+    expect(within(editor).getByRole('heading', { name: 'Strips' })).toBeDefined()
+    expect(within(editor).queryByRole('heading', { name: 'Frames' })).toBeNull()
     expect(within(editor).queryByRole('button', { name: 'Frame 2', exact: true })).toBeNull()
     act(() => setTilt({ source: 'slider', angle: 20, target: 20, angleX: 0, targetX: 0 }))
     expect(tab(editor, 'Thread').getAttribute('aria-selected')).toBe('true')

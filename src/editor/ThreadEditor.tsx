@@ -247,7 +247,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
           {/* The selected section's frames; its size comes from its edges on the thread */}
           {selected && (
             <Group title={selected.name}>
-              <Section nested title="Frames" action={
+              <Section nested title="Strips" action={
                 <IconButton label="Every frame in order" size="icon-xs" disabled={isIdentity(sectionSlots(note.frames, selected))}
                   onClick={() => edit((n) => setSectionTrack(n, selected.id, n.frames.map((_, i) => i)))}>
                   <RotateCcw />
