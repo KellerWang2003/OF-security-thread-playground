@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../src/App'
+import { usePatternOffsets } from '../src/lib/patternOffset'
 import { useProjects } from '../src/lib/store'
 import { setTilt } from '../src/tilt/tilt'
 import { TooltipProvider } from '../src/components/ui/tooltip'
@@ -172,5 +173,43 @@ describe('thread editor', () => {
     await user.click(within(editor).getByRole('button', { name: 'Every frame in order', exact: true }))
     expect(sections()[2].track).toBeUndefined()
     expect(within(editor).queryByRole('button', { name: 'Corner rests on 2, the others on 1', exact: true })).toBeNull()
+  })
+
+  it('previews where the print lands: an offset to type or shuffle, and the windows that miss a tilt there', async () => {
+    const user = await openDemo('thread-offset-ui-test')
+    const offsetTitle = 'Where the print lands along the thread: a preview, not saved in the project'
+    // One section over the whole thread looks the same wherever it lands: no offset to set
+    expect(screen.queryByTitle(offsetTitle)).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    const editor = screen.getByRole('region', { name: 'Thread editor' })
+    await user.click(within(editor).getByRole('button', { name: /^Alternating/ }))
+    // A repeat longer than the 8 mm windows, so a window can sit inside one block
+    const repeat = screen.getByTitle('Length of one repeat of the pattern along the thread').querySelector('input')!
+    fireEvent.change(repeat, { target: { value: '20' } })
+    fireEvent.blur(repeat)
+    expect(note().pattern!.sections.map((s) => [s.startMm, s.endMm])).toEqual([[0, 10], [10, 20]])
+    await user.click(within(editor).getByRole('button', { name: 'Back to the canvas', exact: true }))
+
+    const offset = () => screen.getByTitle(offsetTitle).querySelector('input')!
+    expect(offset().value).toBe('0')
+    // Landing at 0, the first window (0 to 8 mm) sits inside the up/down block; a click selects it
+    await user.click(screen.getByRole('button', { name: 'Window 1 misses ↔', exact: true }))
+    expect(screen.getByRole('group', { name: 'Edit thread windows' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Window 1', exact: true }).getAttribute('aria-pressed')).toBe('true')
+
+    // Landing 6 mm on, it holds the side-to-side block's start too
+    fireEvent.change(offset(), { target: { value: '6' } })
+    fireEvent.blur(offset())
+    expect(usePatternOffsets.getState().offsets[note().id]).toBe(6)
+    expect(screen.queryByRole('button', { name: 'Window 1 misses ↔', exact: true })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Shuffle the offset', exact: true }))
+    const shuffled = usePatternOffsets.getState().offsets[note().id]
+    expect(shuffled).not.toBe(6)
+    expect(shuffled).toBeGreaterThanOrEqual(0)
+    expect(shuffled).toBeLessThan(20)
+    expect(Number(offset().value)).toBe(shuffled)
+    // A preview only: the project never holds it
+    expect(Object.keys(note().pattern!).toSorted()).toEqual(['mixed', 'repeatMm', 'sections'])
+    expect(JSON.parse(localStorage.getItem('of-playground.pattern-offsets')!)[note().id]).toBe(shuffled)
   })
 })

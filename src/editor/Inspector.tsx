@@ -1,13 +1,14 @@
 import { reportError } from '../cloud/notices'
-import { Download, ImageUp, RectangleHorizontal, RectangleVertical, TriangleAlert, X } from 'lucide-react'
+import { Download, ImageUp, RectangleHorizontal, RectangleVertical, Shuffle, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ColorField, Group, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
 import { LENS_EFFECTS, lensState } from '../lib/lens'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
-import { patternOf } from '../lib/pattern'
-import { checkPattern, warningCount } from '../lib/patternRules'
+import { mod, patternOf } from '../lib/pattern'
+import { setPatternOffset, shufflePatternOffset, usePatternOffsets } from '../lib/patternOffset'
+import { checkPattern, warningCount, windowReports } from '../lib/patternRules'
 import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
@@ -195,6 +196,7 @@ export function Inspector({ note, noteRef, selectedWindowId, onWindowSelect, onE
 
       <Group title="Lens effect">
         <LensSummary note={note} onEdit={onEditThread} />
+        <PrintOffset note={note} onWindowSelect={onWindowSelect} />
       </Group>
     </Panel>
     </>
@@ -226,6 +228,46 @@ function LensSummary({ note, onEdit }: { note: Note; onEdit: () => void }) {
         </div>
       </div>
       <Button variant="outline" size="sm" onClick={onEdit}>Edit thread</Button>
+    </Section>
+  )
+}
+
+/**
+ * Where the print lands along the thread. It isn't registered to the banknote, so this only previews one landing
+ * (remembered per browser, never saved in the project): Shuffle tries another. Shown only when some section is
+ * shorter than the repeat, since lanes look the same wherever they land. Windows that miss a tilt (or frames only one
+ * tilt shows) at this landing are listed, rule 1; a click selects the window.
+ */
+function PrintOffset({ note, onWindowSelect }: { note: Note; onWindowSelect: (id: string | undefined) => void }) {
+  const saved = usePatternOffsets((s) => s.offsets[note.id] ?? 0)
+  const pattern = patternOf(note)
+  const repeat = pattern.repeatMm
+  if (!pattern.sections.some((s) => s.startMm > 1e-6 || s.endMm < repeat - 1e-6)) return null
+  const misses = windowReports(note, saved).flatMap((w) => {
+    const now = w.misses.filter((m) => m.now)
+    if (!now.length) return []
+    const share = Math.max(...w.misses.map((m) => m.share))
+    return [{ id: w.windowId, text: `${w.label} misses ${now.map((m) => m.label).join(' · ')}`, title: `At ${Math.round(share * 100)}% of offsets` }]
+  })
+  return (
+    <Section nested>
+      <div className="flex items-center gap-1">
+        <ScrubField className="flex-1" label="Offset" title="Where the print lands along the thread: a preview, not saved in the project"
+          value={Math.round(mod(saved, repeat) * 10) / 10} min={0} max={repeat} step={0.1} unit="mm" onChange={(mm) => setPatternOffset(note.id, mm)} />
+        <IconButton label="Shuffle the offset" onClick={() => shufflePatternOffset(note.id, repeat)}><Shuffle /></IconButton>
+      </div>
+      {misses.length > 0 && (
+        <div className="flex flex-col">
+          {misses.map((miss) => (
+            <Button key={miss.id ?? 'thread'} variant="ghost" size="xs" title={miss.title}
+              className="h-auto min-h-6 justify-start py-1 text-left leading-snug font-normal whitespace-normal text-amber-700 dark:text-amber-500"
+              onClick={() => onWindowSelect(miss.id)}>
+              <TriangleAlert />
+              {miss.text}
+            </Button>
+          ))}
+        </div>
+      )}
     </Section>
   )
 }
