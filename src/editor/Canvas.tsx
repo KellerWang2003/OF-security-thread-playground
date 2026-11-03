@@ -9,6 +9,8 @@ import { clamp } from '../lib/frames'
 import { lensState } from '../lib/lens'
 import { playbackPlan } from '../lib/moves'
 import { usePanelWidth } from '../lib/panelWidth'
+import { playbackLens, playbackTilt } from '../lib/pattern'
+import { usePatternOffsets } from '../lib/patternOffset'
 import { type Guide, snapBox } from '../lib/snap'
 import { updateNote } from '../lib/store'
 import type { Note, Watermark } from '../lib/types'
@@ -92,6 +94,7 @@ export function Canvas({
   onExitPlacing,
   onExport,
   onEditWindow,
+  onEditThread,
 }: {
   projectId: string
   notes: Note[]
@@ -112,6 +115,8 @@ export function Canvas({
   onExport: () => void
   /** A click on a thread window opens it for editing */
   onEditWindow?: (noteId: string, windowId: string) => void
+  /** A double-click on a thread opens the thread editor */
+  onEditThread?: (noteId: string) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const size = useElementSize(ref)
@@ -129,10 +134,12 @@ export function Canvas({
 
   const selected = notes.find((n) => n.id === selectedId)
   const reference = selected ?? notes.at(0)
-  const lens = useMemo(() => (reference ? lensState(reference.tilt, reference.frames) : undefined), [reference])
+  // A thread mixing ridge angles plays each tilt at its fastest section's cycle
+  const lens = useMemo(() => (reference ? playbackLens(reference) : undefined), [reference])
   const loopLens = lens ?? lensState({ cycleDeg: 30, transition: 0 })
-  const plan = useMemo(() => playbackPlan(reference?.tilt ?? { cycleDeg: 30, transition: 0 }, loopLens), [reference, loopLens])
+  const plan = useMemo(() => playbackPlan(reference ? playbackTilt(reference) : { cycleDeg: 30, transition: 0 }, loopLens), [reference, loopLens])
   useTiltLoop(plan, loopLens.viewDeg)
+  const offsets = usePatternOffsets((s) => s.offsets)
 
   // Until the first pan or zoom, the view simply fits every note
   const current = view ?? (size && notes.length ? fitView(notes, size) : undefined)
@@ -439,6 +446,11 @@ export function Canvas({
       }}
       onPointerCancel={endGesture}
       onLostPointerCapture={endGesture}
+      onDoubleClick={(e) => {
+        const target = e.target as HTMLElement
+        const noteId = noteAt(target, 'data-note-body')
+        if (noteId && target.closest('[data-thread], [data-window-editor]')) onEditThread?.(noteId)
+      }}
       onDragOver={(e) => {
         e.preventDefault()
         setDropping(true)
@@ -493,7 +505,7 @@ export function Canvas({
               >
                 {/* Editing windows shows the banknote flat with its watermark faint; placing the watermark, flat with it clear */}
                 <NoteView note={note} scale={scale} live perspective={perspective && !editingThis && !placingThis} sheen={sheen}
-                  reveal={editingThis ? 0 : placingThis ? 1 : undefined} showWindowCuts={editingThis} showFrameNumber={frameNumbers} />
+                  reveal={editingThis ? 0 : placingThis ? 1 : undefined} showWindowCuts={editingThis} showFrameNumber={frameNumbers} offsetMm={offsets[note.id]} />
                 {placingThis && (
                   <WatermarkEditor note={note} watermark={note.watermark!} scale={scale} onChange={(next) => updateWatermark(ref, () => next)} />
                 )}

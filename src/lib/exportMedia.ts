@@ -24,6 +24,8 @@ export interface ExportOptions {
   frameNumbers?: boolean
   /** The whole video held up to the light (the watermark clear throughout), as the lamp switch on the canvas; otherwise only Hold to light moves are */
   backlit?: boolean
+  /** Where each banknote's thread pattern starts along its thread (mm, by banknote id), as the canvas previews it */
+  offsets?: Record<string, number>
 }
 
 const safeName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Banknote'

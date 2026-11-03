@@ -133,6 +133,40 @@ export interface Watermark {
   invert?: boolean
 }
 
+/**
+ * Lens settings a section keeps for itself while mixed angles is on: the same fields as the banknote's lens. Any
+ * left out take their defaults, not the banknote's, so a section's lens never shifts when the shared one changes.
+ */
+export type SectionLens = Partial<Pick<TiltSettings, 'effect' | 'cycleDeg' | 'cycleXDeg' | 'yOn' | 'runY' | 'runX' | 'revealAxis' | 'revealWobble' | 'revealLevel' | 'flatAt'>>
+
+/**
+ * One area of the thread pattern: a mask that shows, at the current tilt, the frame its own lens and track give.
+ * It sits within one repeat; the pattern repeats along the whole thread.
+ */
+export interface ThreadSection {
+  id: string
+  name: string
+  /** Along the thread, mm from the start of the repeat (0 to the repeat length) */
+  startMm: number
+  endMm: number
+  /** Across the thread, as a share of its width (0 to 1) from the left edge (vertical) or the top edge (horizontal) */
+  acrossStart: number
+  acrossEnd: number
+  /** Its own lens, used only while mixed angles is on; absent means the banknote's */
+  lens?: SectionLens
+  /** The frame each strip of the print shows here, by frame id, one per banknote frame; absent means every frame in order */
+  track?: string[]
+}
+
+/** The thread as sections that repeat along it */
+export interface ThreadPattern {
+  /** Length of one repeat along the thread, mm */
+  repeatMm: number
+  /** Off: one ridge angle for the whole thread (the banknote's lens). On: each section has its own lens */
+  mixed: boolean
+  sections: ThreadSection[]
+}
+
 /** One banknote in a project, with its own size, thread and frames */
 export interface Note {
   id: string
@@ -151,6 +185,8 @@ export interface Note {
   tilt: TiltSettings
   /** A sibling of the thread; absent until one is added */
   watermark?: Watermark
+  /** The thread's sections; absent on banknotes from before patterns, which are one section with the banknote's lens */
+  pattern?: ThreadPattern
 }
 
 export interface Project {

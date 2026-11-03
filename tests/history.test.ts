@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createNote, createProject } from '../src/lib/notes'
-import { beginHistoryGroup, endHistoryGroup, historyStep, recordEdit, reconcileHistory, resetHistory, useHistory } from '../src/lib/history'
+import { beginHistoryGroup, canStepNote, endHistoryGroup, historyStep, recordEdit, reconcileHistory, resetHistory, useHistory } from '../src/lib/history'
 import type { Project } from '../src/lib/types'
 
 beforeEach(() => { resetHistory(); vi.useRealTimers() })
@@ -91,5 +91,70 @@ describe('project undo history', () => {
     recordEdit(other, { ...other, name: 'Other' })
     expect(useHistory.getState().entries[project.id].past).toHaveLength(100)
     expect(useHistory.getState().entries[other.id].past).toHaveLength(1)
+  })
+})
+
+describe('undo in one banknote’s thread editor', () => {
+  function twoNotes(): Project {
+    const make = (name: string, x: number) => createNote({ name, x, y: 0, widthMm: 150, heightMm: 70, color: '#123456' })
+    return { ...createProject('Two'), notes: [make('A', 0), make('B', 200)] }
+  }
+  /** Records one edit, as the store does, and returns the project after it */
+  function edit(project: Project, change: (p: Project) => Project) {
+    const next = change(project)
+    beginHistoryGroup(project.id)
+    recordEdit(project, next)
+    endHistoryGroup(project.id)
+    return next
+  }
+  const editNote = (project: Project, i: number, change: (n: Project['notes'][number]) => Project['notes'][number]) =>
+    edit(project, (p) => ({ ...p, notes: p.notes.map((n, k) => (k === i ? change(n) : n)) }))
+
+  it('steps only through the open banknote’s edits, and the project-wide undo still reaches the rest', () => {
+    let project = twoNotes()
+    const [a, b] = project.notes.map((n) => n.id)
+    project = editNote(project, 1, (n) => ({ ...n, widthMm: 160 }))
+    project = editNote(project, 0, (n) => ({ ...n, name: 'A2' }))
+    expect(canStepNote(project, a, 'undo')).toBe(true)
+    expect(canStepNote(project, b, 'undo')).toBe(false)
+    project = historyStep(project, 'undo')!
+    expect(project.notes[0].name).toBe('A')
+    // Next back is B's resize: not A's to undo, though the canvas can
+    expect(canStepNote(project, a, 'undo')).toBe(false)
+    expect(canStepNote(project, a, 'redo')).toBe(true)
+    expect(canStepNote(project, b, 'undo')).toBe(true)
+    const canvas = historyStep(project, 'undo')!
+    expect(canvas.notes[1].widthMm).toBe(150)
+  })
+
+  it('takes playback saved to every banknote as shared, even where the open one already had it', () => {
+    let project = twoNotes()
+    const [a] = project.notes.map((n) => n.id)
+    // An older project where B plays faster than A: playback set to A's speed for every banknote leaves A as it was
+    project = { ...project, notes: project.notes.map((n, i) => (i === 1 ? { ...n, tilt: { ...n.tilt, speed: 2 } } : n)) }
+    const before = JSON.stringify(project.notes[0])
+    project = edit(project, (p) => ({ ...p, notes: p.notes.map((n) => ({ ...n, tilt: { ...n.tilt, speed: 1 } })) }))
+    expect(JSON.stringify(project.notes[0])).toBe(before)
+    // Still undoable from A's editor, and an edit to A on top of it too, one after the other
+    project = editNote(project, 0, (n) => ({ ...n, tilt: { ...n.tilt, cycleDeg: 40 } }))
+    expect(canStepNote(project, a, 'undo')).toBe(true)
+    project = historyStep(project, 'undo')!
+    expect(canStepNote(project, a, 'undo')).toBe(true)
+    project = historyStep(project, 'undo')!
+    expect(project.notes[1].tilt.speed).toBe(2)
+    expect(canStepNote(project, a, 'redo')).toBe(true)
+  })
+
+  it('never adds, removes or reorders banknotes, and stops when the cloud replaced the project', () => {
+    let project = twoNotes()
+    const [a] = project.notes.map((n) => n.id)
+    project = edit(project, (p) => ({ ...p, notes: [...p.notes, { ...p.notes[1], id: crypto.randomUUID(), name: 'C' }] }))
+    expect(canStepNote(project, a, 'undo')).toBe(false)
+    project = edit(project, (p) => ({ ...p, notes: [p.notes[1], p.notes[0], p.notes[2]] }))
+    expect(canStepNote(project, a, 'undo')).toBe(false)
+    project = edit(project, (p) => ({ ...p, name: 'Renamed' }))
+    expect(canStepNote(project, a, 'undo')).toBe(true)
+    expect(canStepNote({ ...project, name: 'From another device' }, a, 'undo')).toBe(false)
+    expect(canStepNote(project, 'not-a-banknote', 'undo')).toBe(false)
   })
 })

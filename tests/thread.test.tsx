@@ -65,11 +65,13 @@ describe('whole image repeats', () => {
     const ghost = container.querySelector('[data-window-ghost]') as HTMLElement
     expect(ghost.style.opacity).toBe('0.2')
     expect(container.querySelector('[data-window-cuts]')?.children[0].getAttribute('style')).toContain('top: 0px')
-    note.thread.windows.sections = note.thread.windows.sections.map((s) => ({ ...s, startMm: s.startMm + 3, endMm: s.endMm + 3 }))
-    rerender(<NoteView note={note} scale={2} showWindowCuts />)
+    // A new banknote object, as every edit makes: the compiled view redraws only for a new one
+    const windows = note.thread.windows
+    const shifted = { ...note, thread: { ...note.thread, windows: { ...windows, sections: windows.sections.map((s) => ({ ...s, startMm: s.startMm + 3, endMm: s.endMm + 3 })) } } }
+    rerender(<NoteView note={shifted} scale={2} showWindowCuts />)
     expect(container.querySelector('[data-window-cuts]')?.children[0].getAttribute('style')).toContain('top: 6px')
     expect((container.querySelector('[data-window-ghost]') as HTMLElement).style.top).toBe(ghost.style.top)
-    rerender(<NoteView note={note} scale={2} />)
+    rerender(<NoteView note={shifted} scale={2} />)
     expect(container.querySelector('[data-window-cuts]')).toBeNull()
     expect(container.querySelector('[data-window-ghost]')).toBeNull()
   })

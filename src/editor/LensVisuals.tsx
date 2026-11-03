@@ -3,12 +3,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { frameEdges, lensMix, type Axis, type LensState, type Tilt2 } from '../lib/lens'
 import { FRAME_COLORS } from '../lib/notes'
+import { frameIndex, frameNumber } from '../lib/pattern'
 import { playbackEase } from '../lib/playback'
 import type { Note } from '../lib/types'
 
+/** A frame's colour in the lens controls; a section's strip takes the colour of the banknote frame it shows */
 export const swatch = (note: Pick<Note, 'frames'>, i: number) => {
   const frame = note.frames.at(i)
-  return frame?.kind === 'color' ? frame.color : FRAME_COLORS[i % FRAME_COLORS.length]
+  return frame?.kind === 'color' ? frame.color : FRAME_COLORS[frameIndex(note.frames, i) % FRAME_COLORS.length]
 }
 
 /** Seconds since mount, ticking at about 30 fps while `running` */
@@ -71,7 +73,7 @@ export function MiniNote({ note, lens, tilt, className, label }: {
         style={{ transform: `rotateX(${tilt.y * 0.75}deg) rotateY(${tilt.x * 0.75}deg)` }}>
         <div className="absolute inset-y-0 left-1/2 flex w-[22%] -translate-x-1/2 items-center justify-center text-[9px] font-semibold text-white mix-blend-normal"
           style={{ backgroundColor: swatch(note, current) }}>
-          {label && current + 1}
+          {label && frameNumber(note.frames, current)}
         </div>
       </div>
     </div>
@@ -107,7 +109,7 @@ export function CycleBar({ note, offset, cycleDeg }: { note: Pick<Note, 'frames'
         {pieces.map((p, k) => (
           <div key={k} className="flex items-center justify-center text-[9px] font-semibold text-white"
             style={{ width: `${(p.to - p.from) * 100}%`, backgroundColor: swatch(note, p.i) }}>
-            {p.to - p.from > 0.06 && p.i + 1}
+            {p.to - p.from > 0.06 && frameNumber(note.frames, p.i)}
           </div>
         ))}
       </div>
@@ -144,14 +146,15 @@ export function Explain({ label, picture, caption, children }: { label?: ReactNo
 
 /**
  * The lens ridges as a little picture: parallel lines at the ridge angle (0 = horizontal ridges, which play on
- * up/down tilt; 90 = vertical, which play side to side).
+ * up/down tilt; 90 = vertical, which play side to side). A positive angle leans \ as on the print and the tilt
+ * map; SVG turns clockwise for positive angles, so it rotates by the angle itself.
  */
 export function RidgeIcon({ angle, className }: { angle: number; className?: string }) {
   const id = `ridges-${Math.round(angle * 10)}`
   return (
     <svg viewBox="0 0 28 20" className={cn('h-5 w-7 shrink-0 overflow-hidden rounded-[3px] bg-muted', className)} aria-hidden>
       <defs>
-        <pattern id={id} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform={`rotate(${-angle})`}>
+        <pattern id={id} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform={`rotate(${angle})`}>
           <line x1="0" y1="2" x2="4" y2="2" stroke="currentColor" strokeWidth="1.1" />
         </pattern>
       </defs>

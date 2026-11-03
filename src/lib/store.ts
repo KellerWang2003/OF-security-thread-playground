@@ -1,7 +1,8 @@
-import { recordEdit, historyStep, reconcileHistory, resetHistory } from './history'
+import { canStepNote, recordEdit, historyStep, reconcileHistory, resetHistory } from './history'
 import { useWorkspace, putProject, editorProject } from '../cloud/workspace'
 import { copyImage, removeImage } from './images'
 import { nextNotePosition } from './notes'
+import { remapTracks } from './pattern'
 import type { Note, Project } from './types'
 
 const noteImageIds = (note: Note) =>
@@ -19,7 +20,9 @@ async function copyNote(note: Note): Promise<Note> {
   const faceImageId = note.faceImageId ? await copyImage(note.faceImageId) : undefined
   // The watermark is part of the banknote's design, so a copy keeps it, with its own image
   const watermark = note.watermark?.imageId ? { ...note.watermark, imageId: await copyImage(note.watermark.imageId) } : note.watermark
-  return { ...note, id: crypto.randomUUID(), faceImageId, frames, ...(watermark ? { watermark } : {}) }
+  // Section tracks name frames by id, so they follow the frames to their new ids
+  const pattern = remapTracks(note.pattern, new Map(note.frames.map((f, i) => [f.id, frames[i].id])))
+  return { ...note, id: crypto.randomUUID(), faceImageId, frames, ...(watermark ? { watermark } : {}), ...(pattern ? { pattern } : {}) }
 }
 
 // Keep the editor's existing actions while the cloud workspace owns persistence.
@@ -72,6 +75,13 @@ export function undoProject(id: string) {
 export function redoProject(id: string) {
   const project = editorProject(id)
   const restored = project && historyStep(project, 'redo')
+  if (restored) putProject(restored)
+}
+
+/** Undo or redo from one banknote's thread editor: only a step that is that banknote's (`canStepNote`) */
+export function stepNote(projectId: string, noteId: string, direction: 'undo' | 'redo') {
+  const project = editorProject(projectId)
+  const restored = project && canStepNote(project, noteId, direction) && historyStep(project, direction)
   if (restored) putProject(restored)
 }
 

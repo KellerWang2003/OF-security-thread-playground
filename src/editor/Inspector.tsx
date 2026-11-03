@@ -1,17 +1,20 @@
-import { useRef } from 'react'
 import { reportError } from '../cloud/notices'
-import { ImageUp, RectangleHorizontal, RectangleVertical, Share, X } from 'lucide-react'
+import { ImageUp, RectangleHorizontal, RectangleVertical, Share, Shuffle, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ColorField, Group, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
+import { LENS_EFFECTS, lensState } from '../lib/lens'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
+import { mod, patternOf } from '../lib/pattern'
+import { setPatternOffset, shufflePatternOffset, usePatternOffsets } from '../lib/patternOffset'
+import { checkPattern, warningCount, windowReports } from '../lib/patternRules'
 import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
-import { PANEL_WIDTH, savePanelWidth, setPanelWidth, usePanelWidth } from '../lib/panelWidth'
 import { fitWatermark, moveWatermarkTo } from '../lib/watermark'
-import { EffectSection, LensMenu } from './EffectSection'
+import { PanelResizer } from './PanelResizer'
+import { PatternPicture } from './PatternPicture'
 import { WatermarkPanel } from './WatermarkPanel'
 import { WindowsCard } from './WindowsCard'
 import { setFaceImage, type NoteRef } from './frameActions'
@@ -21,11 +24,14 @@ type Change = (note: Note) => Note
 
 /**
  * Right: the selected layer of the selected banknote, Figma style: the banknote itself (size, background), its
- * security thread with the lens effect, or its watermark. One at a time, so the panel never grows with features.
+ * security thread with a summary of its lens effect (edited in the thread editor), or its watermark. One at a time,
+ * so the panel never grows with features.
  */
-export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSelect, onExport, onPlaceWatermark, onRemoveWatermark }: {
+export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSelect, onExport, onEditThread, onPlaceWatermark, onRemoveWatermark }: {
   note: Note
   onExport: () => void
+  /** Opens the thread editor, where the lens and the thread's sections are edited */
+  onEditThread: () => void
   noteRef: NoteRef
   layer: Layer
   selectedWindowId?: string
@@ -204,8 +210,9 @@ export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSele
 
       </Group>
 
-      <Group title="Lens effect" action={<LensMenu projectId={noteRef.projectId} note={note} />}>
-        <EffectSection projectId={noteRef.projectId} note={note} />
+      <Group title="Lens effect">
+        <LensSummary note={note} onEdit={onEditThread} />
+        <PrintOffset note={note} onWindowSelect={onWindowSelect} />
       </Group>
       </>
       )}
@@ -218,45 +225,71 @@ export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSele
   )
 }
 
-/**
- * The panel's left edge: drag it to make the panel wider for controls that need finer placement,
- * double-click to go back to the default width. The width is remembered.
- */
-function PanelResizer() {
-  const width = usePanelWidth((s) => s.width)
-  const drag = useRef<{ startX: number; startWidth: number } | null>(null)
+/** The thread's lens at a glance (its sections as a picture, the effect or mixed angles, rule warnings) and the way into the thread editor */
+function LensSummary({ note, onEdit }: { note: Note; onEdit: () => void }) {
+  const pattern = patternOf(note)
+  const count = pattern.sections.length
+  const warnings = warningCount(checkPattern(note))
+  const effect = LENS_EFFECTS.find((e) => e.value === lensState(note.tilt, note.frames).effect)?.label
+  const vertical = note.thread.direction === 'vertical'
   return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize panel"
-      title="Drag to resize the panel, double-click to reset"
-      className="group absolute top-3 bottom-3 z-10 w-3 translate-x-1/2 cursor-col-resize touch-none"
-      style={{ right: `calc(${width}px + 12px)` }}
-      onPointerDown={(e) => {
-        if (e.button !== 0) return
-        e.preventDefault()
-        e.currentTarget.setPointerCapture(e.pointerId)
-        drag.current = { startX: e.clientX, startWidth: width }
-      }}
-      onPointerMove={(e) => {
-        const d = drag.current
-        if (d) setPanelWidth(d.startWidth + d.startX - e.clientX)
-      }}
-      onPointerUp={() => {
-        if (drag.current) savePanelWidth()
-        drag.current = null
-      }}
-      onLostPointerCapture={() => {
-        if (drag.current) savePanelWidth()
-        drag.current = null
-      }}
-      onDoubleClick={() => {
-        setPanelWidth(PANEL_WIDTH.initial)
-        savePanelWidth()
-      }}
-    >
-      <div className="absolute inset-y-6 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-primary/0 transition-colors group-hover:bg-primary/50 group-active:bg-primary" />
-    </div>
+    <Section nested>
+      <div className="flex items-center gap-3">
+        <PatternPicture note={note} width={vertical ? 28 : 56} height={vertical ? 56 : 28} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate text-sm">{pattern.mixed ? 'Mixed angles' : effect}</span>
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
+            {count} {count === 1 ? 'section' : 'sections'}
+            {warnings > 0 && (
+              <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-500" title={`${warnings} rule ${warnings === 1 ? 'warning' : 'warnings'}`}>
+                <TriangleAlert className="size-3" />
+                {warnings}
+              </span>
+            )}
+          </span>
+        </div>
+      </div>
+      <Button variant="outline" size="sm" onClick={onEdit}>Edit thread</Button>
+    </Section>
+  )
+}
+
+/**
+ * Where the print lands along the thread. It isn't registered to the banknote, so this only previews one landing
+ * (remembered per browser, never saved in the project): Shuffle tries another. Shown only when some section is
+ * shorter than the repeat, since lanes look the same wherever they land. Windows that miss a tilt (or frames only one
+ * tilt shows) at this landing are listed, rule 1; a click selects the window.
+ */
+function PrintOffset({ note, onWindowSelect }: { note: Note; onWindowSelect: (id: string | undefined) => void }) {
+  const saved = usePatternOffsets((s) => s.offsets[note.id] ?? 0)
+  const pattern = patternOf(note)
+  const repeat = pattern.repeatMm
+  if (!pattern.sections.some((s) => s.startMm > 1e-6 || s.endMm < repeat - 1e-6)) return null
+  const misses = windowReports(note, saved).flatMap((w) => {
+    const now = w.misses.filter((m) => m.now)
+    if (!now.length) return []
+    const share = Math.max(...w.misses.map((m) => m.share))
+    return [{ id: w.windowId, text: `${w.label} misses ${now.map((m) => m.label).join(' · ')}`, title: `At ${Math.round(share * 100)}% of offsets` }]
+  })
+  return (
+    <Section nested>
+      <div className="flex items-center gap-1">
+        <ScrubField className="flex-1" label="Offset" title="Where the print lands along the thread: a preview, not saved in the project"
+          value={Math.round(mod(saved, repeat) * 10) / 10} min={0} max={repeat} step={0.1} unit="mm" onChange={(mm) => setPatternOffset(note.id, mm)} />
+        <IconButton label="Shuffle the offset" onClick={() => shufflePatternOffset(note.id, repeat)}><Shuffle /></IconButton>
+      </div>
+      {misses.length > 0 && (
+        <div className="flex flex-col">
+          {misses.map((miss) => (
+            <Button key={miss.id ?? 'thread'} variant="ghost" size="xs" title={miss.title}
+              className="h-auto min-h-6 justify-start py-1 text-left leading-snug font-normal whitespace-normal text-amber-700 dark:text-amber-500"
+              onClick={() => onWindowSelect(miss.id)}>
+              <TriangleAlert />
+              {miss.text}
+            </Button>
+          ))}
+        </div>
+      )}
+    </Section>
   )
 }

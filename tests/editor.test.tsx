@@ -154,6 +154,8 @@ describe('username workspace editor', () => {
     // The copy is selected, its layers open under it
     await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
     const before = useProjects.getState().demoPreview!.notes.map((n) => n.tilt.cycleDeg)
+    // The lens is edited in the thread editor
+    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
     const cycle = screen.getByText('Cycle', { exact: true }).closest('label, div')!.querySelector('input')!
     fireEvent.change(cycle, { target: { value: '47' } })
     fireEvent.blur(cycle)

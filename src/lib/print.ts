@@ -1,5 +1,6 @@
 import { frameEdges, lensCycle, type LensState } from './lens'
-import type { Frame } from './types'
+import { mod } from './pattern'
+import type { Frame, ThreadSection } from './types'
 
 /**
  * The thread's print under a lenticular lens. Every frame is cut into strips parallel to the ridges and woven
@@ -50,4 +51,44 @@ export const phasePosition = (w: Weave, phase: number) => w.offset + phase - 0.5
 /** The frame printed at a point on the thread */
 export function printedFrame(w: Weave, xMm: number, yMm: number) {
   return frameAtPosition(w.edges, phasePosition(w, ridgePhase(w, xMm, yMm)))
+}
+
+/** One section of a thread's pattern as printed: its area within the repeat, the frame each strip shows, its weave */
+export interface SectionCut {
+  startMm: number
+  endMm: number
+  acrossStart: number
+  acrossEnd: number
+  /** The banknote frame (by index) each strip shows */
+  slots: number[]
+  weave: Weave
+}
+
+/** What shapes a section's print: its area, its strips and its lens (`PreparedSection` has them all) */
+export interface CutSource {
+  section: Pick<ThreadSection, 'startMm' | 'endMm' | 'acrossStart' | 'acrossEnd'>
+  slots: number[]
+  lens: Pick<LensState, 'cycleX' | 'cycleY' | 'dirX' | 'dirY' | 'offset'>
+}
+
+/** Every section of a pattern cut at its own ridge angle, all with the same ridge width */
+export function cutPattern(sections: CutSource[], frames: Pick<Frame, 'length'>[], pitchMm: number): SectionCut[] {
+  return sections.map(({ section: { startMm, endMm, acrossStart, acrossEnd }, slots, lens }) => ({
+    startMm, endMm, acrossStart, acrossEnd, slots, weave: weave(lens, frames, pitchMm),
+  }))
+}
+
+/**
+ * What prints at a point of the thread (mm from its top left, y down): the section there (by index), the strip of
+ * its print and the banknote frame that strip shows, and where the point sits across its ridge. Undefined in a gap.
+ */
+export function printedAt(cuts: SectionCut[], repeatMm: number, thread: { widthMm: number; direction: 'vertical' | 'horizontal' }, xMm: number, yMm: number) {
+  const vertical = thread.direction === 'vertical'
+  const along = mod(vertical ? yMm : xMm, repeatMm), share = (vertical ? xMm : yMm) / thread.widthMm
+  const section = cuts.findIndex((c) => along >= c.startMm && along < c.endMm && share >= c.acrossStart && share < c.acrossEnd)
+  const cut = cuts.at(section)
+  if (section < 0 || !cut) return undefined
+  const phase = ridgePhase(cut.weave, xMm, yMm)
+  const slot = frameAtPosition(cut.weave.edges, phasePosition(cut.weave, phase))
+  return { section, slot, frame: cut.slots.at(slot) ?? slot, phase }
 }

@@ -1,7 +1,7 @@
 import { undoProject, redoProject, updateNote } from '../lib/store'
 import { beginHistoryGroup, endHistoryGroup, breakHistoryGroup } from '../lib/history'
 import { pressLight, releaseLight, togglePlayback } from '../tilt/tilt'
-import { lensState } from '../lib/lens'
+import { playbackLens, playbackTilt } from '../lib/pattern'
 import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import { Canvas } from '../editor/Canvas'
 import { ExportDialog } from '../editor/ExportDialog'
 import { Inspector } from '../editor/Inspector'
 import { ProjectPanel } from '../editor/ProjectPanel'
+import { ThreadEditor } from '../editor/ThreadEditor'
 import { TimelineBar } from '../editor/TimelineBar'
 import { TiltRail } from '../editor/TiltRail'
 import { addWatermark, layerOf, removeWatermark, type Layer } from '../editor/watermarkActions'
@@ -21,7 +22,7 @@ const POPUP = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="list
 
 /**
  * A full-screen canvas with floating panels: project and banknotes top left, the frame timeline along
- * the bottom, and the selected banknote's selected layer on the right.
+ * the bottom, and the selected banknote's selected layer on the right. The thread editor opens over it all.
  */
 export function Editor({ project, isDemo = false }: { project: Project; isDemo?: boolean }) {
   const [selectedId, setSelectedId] = useState<string>()
@@ -59,6 +60,15 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     if (next !== 'thread') exitWindows()
     setPlacingNoteId(next === 'watermark' ? noteId : undefined)
   }
+  // The thread editor shows the selected banknote while open; selecting another (or none) leaves it.
+  // It belongs to the thread, so the right panel shows the thread when it closes
+  const [threadNoteId, setThreadNoteId] = useState<string>()
+  const editThread = (noteId: string) => {
+    selectLayer(noteId, 'thread')
+    exitWindows()
+    setThreadNoteId(noteId)
+  }
+  const closeThread = () => setThreadNoteId(undefined)
   const [adding, setAdding] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [focus, setFocus] = useState<{ noteId: string; token: number }>()
@@ -190,9 +200,10 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
 
   // Each banknote has its own lens; playback and the tilt pad follow the selected one (or the first)
   const reference = note ?? project.notes.at(0)
-  const lens = reference ? lensState(reference.tilt, reference.frames) : undefined
+  const lens = reference ? playbackLens(reference) : undefined
   const noteRef = note ? { projectId: project.id, noteId: note.id } : undefined
   const tiltPad = !isEmpty && !editingWindows && !placingWatermark
+  const threadNote = note && note.id === threadNoteId ? note : undefined
 
   const selectAndFocus = (noteId: string) => {
     selectNote(noteId)
@@ -228,7 +239,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
         </div>
       ) : (
         <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} onSelect={selectNote} onSelectLayer={selectLayer} onExitWindows={exitWindows} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} onExport={() => setExporting(true)}
-          placingWatermark={placingWatermark} onExitPlacing={exitPlacing}
+          placingWatermark={placingWatermark} onExitPlacing={exitPlacing} onEditThread={editThread}
           onEditWindow={(noteId, windowId) => {
             selectLayer(noteId, 'thread')
             setEditingNoteId(noteId)
@@ -236,24 +247,32 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
           }} />
       )}
 
-      {tiltPad && <TiltRail limit={lens?.viewDeg} playback={reference && lens ? { projectId: project.id, tilt: reference.tilt, lens } : undefined} />}
-      <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} layer={shownLayer} onSelect={selectFromList} onAdd={() => setAdding(true)} aboveTilt={tiltPad}
-        onAddWatermark={(noteId) => {
-          addWatermark({ projectId: project.id, noteId })
-          selectFromList(noteId, 'watermark')
-        }}
-        onRemoveWatermark={dropWatermark} />
-      {!isEmpty && (
-        <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
+      {threadNote ? (
+        // The canvas stays underneath: it runs playback
+        <ThreadEditor key={threadNote.id} project={project} note={threadNote} onClose={closeThread} />
+      ) : (
+        <>
+          {tiltPad && <TiltRail limit={lens?.viewDeg} playback={reference && lens ? { projectId: project.id, tilt: playbackTilt(reference), lens } : undefined} />}
+          <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} layer={shownLayer} onSelect={selectFromList} onAdd={() => setAdding(true)} aboveTilt={tiltPad}
+            onAddWatermark={(noteId) => {
+              addWatermark({ projectId: project.id, noteId })
+              selectFromList(noteId, 'watermark')
+            }}
+            onRemoveWatermark={dropWatermark} />
+          {!isEmpty && (
+            <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
+          )}
+          {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} layer={shownLayer} onExport={() => setExporting(true)} onEditThread={() => editThread(note.id)}
+            selectedWindowId={editingWindows ? selectedWindowId : undefined}
+            onWindowSelect={(windowId) => {
+              if (!windowId) return exitWindows()
+              setEditingNoteId(note.id)
+              setSelectedWindowId(windowId)
+            }}
+            onPlaceWatermark={() => setPlacingNoteId(note.id)}
+            onRemoveWatermark={() => dropWatermark(note.id)} />}
+        </>
       )}
-      {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} layer={shownLayer} onExport={() => setExporting(true)} selectedWindowId={editingWindows ? selectedWindowId : undefined}
-        onWindowSelect={(windowId) => {
-          if (!windowId) return exitWindows()
-          setEditingNoteId(note.id)
-          setSelectedWindowId(windowId)
-        }}
-        onPlaceWatermark={() => setPlacingNoteId(note.id)}
-        onRemoveWatermark={() => dropWatermark(note.id)} />}
 
       {exporting && <ExportDialog project={project} selectedId={note?.id} open={exporting} onOpenChange={setExporting} />}
 

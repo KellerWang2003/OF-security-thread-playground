@@ -268,9 +268,16 @@ export function Segmented<T extends string>({
   )
 }
 
-export function SwitchField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+export function SwitchField({ label, title, checked, onChange, className }: {
+  label: string
+  /** Tooltip saying what the switch does */
+  title?: string
+  checked: boolean
+  onChange: (value: boolean) => void
+  className?: string
+}) {
   return (
-    <Label className="flex cursor-pointer items-center justify-between gap-3 text-xs font-normal text-muted-foreground">
+    <Label title={title} className={cn('flex cursor-pointer items-center justify-between gap-3 text-xs font-normal text-muted-foreground', className)}>
       {label}
       <Switch checked={checked} onCheckedChange={onChange} />
     </Label>

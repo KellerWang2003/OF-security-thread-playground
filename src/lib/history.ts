@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Project } from './types'
+import type { Note, Project, TiltSettings } from './types'
 
 const LIMIT = 100
 const COALESCE_MS = 750
@@ -88,6 +88,35 @@ export function historyStep(project: Project, direction: 'undo' | 'redo'): Proje
     current: fingerprint(snapshot), lastEdit: 0,
   })
   return { ...structuredClone(snapshot), updatedAt: Date.now() }
+}
+
+/** Playback settings every banknote keeps a copy of but the whole project shares (saved to all of them at once) */
+const SHARED_TILT = ['speed', 'curve', 'holdSeconds', 'transition', 'moves', 'recordings', 'playTilt'] as const
+// A banknote's own settings, without the playback it shares; worked out once per note, as notes are never mutated
+const ownParts = new WeakMap<Note, string>()
+function ownPart(note: Note) {
+  let value = ownParts.get(note)
+  if (value === undefined) {
+    const tilt: Partial<TiltSettings> = { ...note.tilt }
+    for (const key of SHARED_TILT) delete tilt[key]
+    value = JSON.stringify({ ...note, tilt })
+    ownParts.set(note, value)
+  }
+  return value
+}
+
+/**
+ * Whether the next undo or redo belongs to one banknote: it leaves every other banknote's own settings alone (it may
+ * change that banknote, or what the whole project shares: playback, the name) and adds, removes or reorders none. The
+ * thread editor steps through these alone, so it never changes a banknote out of sight. A playback change saved to
+ * every banknote is shared even where the open one already had it, so it never strands the editor's undo.
+ */
+export function canStepNote(project: Project, noteId: string, direction: 'undo' | 'redo', entry = useHistory.getState().entries[project.id]): boolean {
+  if (!entry || entry.current !== fingerprint(project)) return false
+  const next = (direction === 'undo' ? entry.past : entry.future).at(-1)
+  const { notes } = project
+  if (!next || next.notes.length !== notes.length || !notes.some((n) => n.id === noteId)) return false
+  return notes.every((n, i) => n.id === next.notes[i].id && (n.id === noteId || ownPart(n) === ownPart(next.notes[i])))
 }
 
 /** A cloud refresh must never leave undo steps that can overwrite someone else's newer work. */

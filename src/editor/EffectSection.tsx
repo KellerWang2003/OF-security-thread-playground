@@ -38,29 +38,26 @@ import {
   type LensState,
 } from '../lib/lens'
 import { CYCLE_LIMITS } from '../lib/notes'
+import { frameNumber } from '../lib/pattern'
 import { PRINT_RIDGES, setPrintView, usePrintView } from '../lib/printView'
 import { switchEffect } from '../lib/switchEffect'
 import { CycleBar, Explain, MiniNote, RidgeIcon, swatch, useClock } from './LensVisuals'
 import { PrintCanvas } from './PrintView'
 import { useElementSize } from './useElementSize'
-import { updateNote } from '../lib/store'
 import type { Note, TiltSettings } from '../lib/types'
 import { setTilt, useTilt } from '../tilt/tilt'
 
 const round = (v: number, digits = 0) => Math.round(v * 10 ** digits) / 10 ** digits
 
-/**
- * The banknote's lens, as an effect: what tilting does. Each effect asks only what it needs and works out the
- * rest; Custom exposes the raw values. It applies only to the selected banknote, flat and Cycle included.
- */
+/** Applies a change to the lens being edited: the banknote's, or one thread section's own */
+export type SetLens = (patch: Partial<TiltSettings>) => void
+
 /**
  * Which way frames run on each tilt. Flat always shows the middle frame, so the default (1 → 5 top to bottom
- * and left to right) rarely needs changing; it lives in the Lens effect title's ⋯ menu.
+ * and left to right) rarely needs changing; it lives in the lens title's ⋯ menu.
  */
-export function LensMenu({ projectId, note }: { projectId: string; note: Note }) {
+export function LensMenu({ note, set }: { note: Pick<Note, 'frames' | 'tilt'>; set: SetLens }) {
   const lens = lensState(note.tilt, note.frames)
-  const set = (patch: Partial<TiltSettings>) =>
-    updateNote(projectId, note.id, (n) => ({ ...n, tilt: { ...n.tilt, ...patch } }))
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Lens options" className="text-muted-foreground" />}>
@@ -87,12 +84,15 @@ export function LensMenu({ projectId, note }: { projectId: string; note: Note })
   )
 }
 
-export function EffectSection({ projectId, note }: { projectId: string; note: Note }) {
+/**
+ * A lens, as an effect: what tilting does. Each effect asks only what it needs and works out the rest; Custom
+ * exposes the raw values. `note` is the banknote, or one thread section as the lens sees it (`sectionView`: its
+ * strips as frames, its own lens); the print shows `printNote`, the whole thread.
+ */
+export function EffectSection({ note, set, printNote = note }: { note: Note; set: SetLens; printNote?: Note }) {
   const { tilt } = note
   const lens = lensState(tilt, note.frames)
   const [setBy, setSetBy] = useState<'tilt' | 'lens'>('tilt')
-  const set = (patch: Partial<TiltSettings>) =>
-    updateNote(projectId, note.id, (n) => ({ ...n, tilt: { ...n.tilt, ...patch } }))
 
   const chooseEffect = (effect: LensEffect) => set(switchEffect(tilt, lens, effect))
 
@@ -196,7 +196,7 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
       <div className="grid grid-cols-2 gap-2 rounded-md bg-muted/40 p-2 text-xs">
         <div title="Ridge angle from the banknote's horizontal">
           <div className="text-muted-foreground">Lens angle</div>
-          <div className="text-sm font-medium tabular-nums">{round(Math.abs(lensAngle(lens)), 1)}° {lensAngle(lens) < 0 ? '\\' : lensAngle(lens) > 0 && lensAngle(lens) < 90 ? '/' : ''}</div>
+          <div className="text-sm font-medium tabular-nums">{round(Math.abs(lensAngle(lens)), 1)}° {lensAngle(lens) < 0 ? '/' : lensAngle(lens) > 0 && lensAngle(lens) < 90 ? '\\' : ''}</div>
         </div>
         <div title="Degrees of tilt across the ridges for one full cycle">
           <div className="text-muted-foreground">Lens cycle</div>
@@ -210,7 +210,7 @@ export function EffectSection({ projectId, note }: { projectId: string; note: No
         ))}
       </div>
 
-      <TiltMap note={note} lens={lens} />
+      <TiltMap note={note} lens={lens} printNote={printNote} />
     </Section>
     </>
   )
@@ -367,7 +367,7 @@ function FlatStrip({ note, lens, set }: { note: Note; lens: LensState; set: (pat
           {note.frames.map((frame, i) => (
             <div key={frame.id} className="flex items-center justify-center border-r border-background text-[10px] font-medium tabular-nums last:border-r-0"
               style={{ width: `${((edges.at(i + 1) ?? 1) - (edges.at(i) ?? 0)) * 100}%`, backgroundColor: `color-mix(in oklch, ${swatch(note, i)} 35%, transparent)` }}>
-              {i + 1}
+              {frameNumber(note.frames, i)}
             </div>
           ))}
         </div>
@@ -411,7 +411,7 @@ function FramesRow({ axis, note, lens }: { axis: Axis; note: Note; lens: LensSta
             title={seen ? undefined : axis === 'y' ? 'Never seen tilting up or down' : 'Never seen tilting side to side'}
             className={cn('flex h-6 min-w-6 items-center justify-center gap-0.5 rounded px-1 text-[11px] font-medium tabular-nums', !seen && 'opacity-40')}
             style={{ backgroundColor: `color-mix(in oklch, ${swatch(note, i)} 35%, transparent)` }}>
-            {seen ? i + 1 : <><EyeOff className="size-3" />{i + 1}</>}
+            {seen ? frameNumber(note.frames, i) : <><EyeOff className="size-3" />{frameNumber(note.frames, i)}</>}
           </span>
         )
       })}
@@ -426,7 +426,7 @@ const MAP_RES = 72
  * shows, with a dot at the current tilt. The bands run along the ridges. Only a picture: clicking swaps it for the
  * print (the thread's frames woven under the ridges, `PrintCanvas`) and back.
  */
-function TiltMap({ note, lens }: { note: Note; lens: LensState }) {
+function TiltMap({ note, lens, printNote }: { note: Note; lens: LensState; printNote: Note }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const box = useRef<HTMLDivElement>(null)
   const range = lens.viewDeg
@@ -477,7 +477,7 @@ function TiltMap({ note, lens }: { note: Note; lens: LensState }) {
         >
           <canvas ref={canvas} width={MAP_RES} height={MAP_RES} className={cn('absolute inset-0 size-full [image-rendering:pixelated] opacity-80', print && 'invisible')} />
           {print ? (
-            size && <PrintCanvas note={note} lens={lens} ridges={ridges} sizePx={size.width} />
+            size && <PrintCanvas note={printNote} ridges={ridges} sizePx={size.width} />
           ) : (
             <>
               <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-foreground/20" />
@@ -487,12 +487,37 @@ function TiltMap({ note, lens }: { note: Note; lens: LensState }) {
           )}
         </div>
       </Explain>
-      {print && (
-        <div className="grid grid-cols-2 gap-2">
-          <ScrubField label="Ridges" title="Ridges drawn across the thread, magnified: real ones are far finer" value={ridges}
-            min={PRINT_RIDGES.min} max={PRINT_RIDGES.max} onChange={(v) => setPrintView({ ridges: v })} />
+      {print && <RidgesField ridges={ridges} />}
+    </div>
+  )
+}
+
+/** How many ridges the print draws across the thread; remembered per browser, like the view */
+function RidgesField({ ridges }: { ridges: number }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <ScrubField label="Ridges" title="Ridges drawn across the thread, magnified: real ones are far finer" value={ridges}
+        min={PRINT_RIDGES.min} max={PRINT_RIDGES.max} onChange={(v) => setPrintView({ ridges: v })} />
+    </div>
+  )
+}
+
+/**
+ * The whole thread's print, every section cut under its own ridges: what the thread editor shows in place of a lens
+ * while angles are mixed and no section is selected.
+ */
+export function ThreadPrint({ note }: { note: Note }) {
+  const box = useRef<HTMLDivElement>(null)
+  const ridges = usePrintView((s) => s.ridges)
+  const size = useElementSize(box)
+  return (
+    <div className="flex flex-col gap-2">
+      <Explain caption="The print, magnified: each section's frames cut into strips under its own ridges. The lit strips show at this tilt.">
+        <div ref={box} role="img" aria-label="Print" className="relative aspect-square w-full overflow-hidden rounded-md border border-border/60 bg-muted/60">
+          {size && <PrintCanvas note={note} ridges={ridges} sizePx={size.width} />}
         </div>
-      )}
+      </Explain>
+      <RidgesField ridges={ridges} />
     </div>
   )
 }

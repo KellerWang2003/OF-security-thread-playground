@@ -10,6 +10,7 @@ import { reportError } from '../cloud/notices'
 import type { ExportFormat } from '../lib/exportMedia'
 import { RESOLUTIONS, exportSize } from '../lib/exportRender'
 import type { Project } from '../lib/types'
+import { usePatternOffsets } from '../lib/patternOffset'
 import { useTilt } from '../tilt/tilt'
 
 const FORMATS = [{ value: 'mp4' as const, label: 'MP4' }, { value: 'gif' as const, label: 'GIF' }]
@@ -66,12 +67,13 @@ export function ExportDialog({ project, selectedId, open, onOpenChange }: {
   const frameNumbers = useTilt((s) => s.frameNumbers)
   // The lamp switch left on holds the whole video up to the light, as # carries frame numbers into it
   const backlit = useTilt((s) => s.backlit)
+  const offsets = usePatternOffsets((s) => s.offsets)
 
   const notes = project.notes.filter((n) => chosen.has(n.id))
   const several = notes.length > 1
   const allChosen = notes.length === project.notes.length
   const options = { format, notes, separate: several && separate, height, fps, loops: format === 'gif' ? 1 : loops, sheen, perspective, frameNumbers, backlit,
-    background: format === 'gif' && transparent ? undefined : background }
+    background: format === 'gif' && transparent ? undefined : background, offsets }
   const size = exportSize(notes, options)
   const busy = progress !== undefined
   const files = options.separate ? notes.length : 1
