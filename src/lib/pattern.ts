@@ -652,8 +652,8 @@ function growInto(pattern: ThreadPattern, rect: Rect, widthMm: number): ThreadSe
 /**
  * Every empty area of the repeat (or only the one around `at`) filled, so the thread carries on as it looks next to
  * it: a section that shares a whole side with the gap grows over it (a lane cut short runs on again), otherwise a
- * new section is placed there (`placeSection`), like the one it sits in line with, else the one it borders most. The id is the
- * section over the largest gap, to select. Undefined when there's no gap.
+ * new section is placed there (`placeSection`), like the one it sits in line with, else the one it borders most.
+ * The id is the section over the largest gap, to select. Undefined when there's no gap.
  */
 export function fillGaps(pattern: ThreadPattern, widthMm: number, at?: PatternPoint): { pattern: ThreadPattern; id: string } | undefined {
   let next = pattern, first: string | undefined
