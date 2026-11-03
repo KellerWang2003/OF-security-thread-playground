@@ -65,7 +65,7 @@ export function ProjectPanel({
   const isOpen = (id: string) => overrides[id] ?? id === selectedId
 
   return (
-    <Panel className={cn('absolute top-3 left-3 flex w-[224px]', aboveTilt ? 'max-h-[calc(100%-312px)] min-h-12' : 'max-h-[calc(100%-120px)]', 'flex-col rounded-[calc(var(--radius)+0.375rem+1px)]')}>
+    <Panel className={cn('absolute top-3 left-3 flex w-[224px]', aboveTilt ? 'max-h-[calc(100%-312px)] min-h-12' : 'max-h-[calc(100%-120px)]', 'flex-col')}>
       <div className="flex items-center justify-between gap-1 p-1.5">
         <Button variant="ghost" size="sm" className="rounded-lg px-1.5" onClick={() => (location.hash = '')}>
           <ChevronLeft />

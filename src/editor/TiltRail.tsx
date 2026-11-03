@@ -46,7 +46,7 @@ export function TiltRail({ limit = TILT_LIMIT, playback }: {
 }) {
   const recording = useTilt((s) => s.recording)
   return (
-    <Panel className="absolute bottom-[108px] left-3 flex flex-col gap-1.5 rounded-[calc(var(--radius)+0.375rem+1px)] p-1.5">
+    <Panel className="absolute bottom-[108px] left-3 flex flex-col gap-1.5 p-1.5">
       <Pad
         limit={limit}
         playback={playback}

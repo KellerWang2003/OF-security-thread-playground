@@ -58,7 +58,7 @@ export function TimelineBar({
   return (
     <Panel
       className={cn(
-        'absolute bottom-3 left-3 flex h-[88px] items-stretch gap-2 p-2 rounded-[calc(var(--radius)+0.5rem+1px)]',
+        'absolute bottom-3 left-3 flex h-[88px] items-stretch gap-2 p-2',
         note && (besidePanel ? 'right-[calc(var(--panel-w)+20px)]' : 'right-3'),
       )}
     >

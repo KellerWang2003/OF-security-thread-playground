@@ -26,9 +26,12 @@ import { LENGTH_UNITS, lengthField, setLengthUnit, useLengthUnit, type LengthUni
 const round = (value: number) => Math.round(value * 100) / 100
 const twoDecimals = (value: number) => String(round(value))
 
-/** A floating panel over the canvas, see-through enough to show the banknotes under it (Keller); fields inside have solid fills instead */
+/**
+ * A floating panel over the canvas, see-through enough to show the banknotes under it (Keller); fields inside have solid
+ * fills instead. Every floating panel has the same corners (Keller): `rounded-lg` controls inset 6 px, plus the border
+ */
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('rounded-lg border border-border/70 bg-background/85 shadow-panel backdrop-blur', className)}>{children}</div>
+  return <div className={cn('rounded-[calc(var(--radius)+0.375rem+1px)] border border-border/70 bg-background/85 shadow-panel backdrop-blur', className)}>{children}</div>
 }
 
 interface NumberInput {

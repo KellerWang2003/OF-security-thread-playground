@@ -578,7 +578,7 @@ export function Canvas({
         // opens under it, with the zoom controls, then Export, in the same place whatever is selected.
         // Its own pointer events, or the canvas captures the pointer and the buttons never get a click
         <div className="absolute top-3 right-3 w-(--panel-w)" onPointerDown={(e) => e.stopPropagation()}>
-          <Panel className="flex h-11 items-center gap-0.5 rounded-[calc(var(--radius)+0.375rem+1px)] pr-1.5 pl-1.5">
+          <Panel className="flex h-11 items-center gap-0.5 pr-1.5 pl-1.5">
             <IconButton className="rounded-lg" label="Zoom out" onClick={() => zoomAround(1 / 1.25, size.width / 2, size.height / 2)}>
               <Minus />
             </IconButton>

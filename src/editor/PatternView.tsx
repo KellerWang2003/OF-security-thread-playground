@@ -1,7 +1,7 @@
 import { Maximize, Minus, Plus } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import { IconButton, Labeled, LengthField } from '../components/controls'
+import { IconButton, Labeled, LengthField, Panel } from '../components/controls'
 import { ThreadArt } from '../components/NoteView'
 import { imageBox, placeOf, uprightBox, type UprightBox } from '../lib/artwork'
 import { clamp } from '../lib/frames'
@@ -401,12 +401,13 @@ export function PatternView({ note, projectId, selectedId, onSelect, onThreadCli
       </div>
       </div>
 
-      {/* Zoom, as on the canvas; its own pointer events, so a click never starts a pan */}
-      <div className="pointer-events-auto absolute top-3 right-3 flex items-center gap-0.5 rounded-lg border border-border/70 bg-background p-0.5 shadow-panel [&>[data-slot=button]]:rounded-[calc(var(--radius)-3px)]"
-        onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-        <IconButton label="Zoom out" onClick={() => setView(zoomAround(view, 1 / 1.25, 0, 0, fit))}><Minus /></IconButton>
-        <IconButton label="Zoom in" onClick={() => setView(zoomAround(view, 1.25, 0, 0, fit))}><Plus /></IconButton>
-        <IconButton label="Fit" onClick={refit}><Maximize /></IconButton>
+      {/* Zoom, as in the canvas's corner bar; its own pointer events, so a click never starts a pan */}
+      <div className="pointer-events-auto absolute top-3 right-3" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+        <Panel className="flex h-11 items-center gap-0.5 px-1.5">
+          <IconButton className="rounded-lg" label="Zoom out" onClick={() => setView(zoomAround(view, 1 / 1.25, 0, 0, fit))}><Minus /></IconButton>
+          <IconButton className="rounded-lg" label="Zoom in" onClick={() => setView(zoomAround(view, 1.25, 0, 0, fit))}><Plus /></IconButton>
+          <IconButton className="rounded-lg" label="Fit" onClick={refit}><Maximize /></IconButton>
+        </Panel>
       </div>
       </div>
     </div>
