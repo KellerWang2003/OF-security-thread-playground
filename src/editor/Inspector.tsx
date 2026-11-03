@@ -16,12 +16,14 @@ import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
 import { ChecksDrawer, ContinuousSection } from './DesignChecks'
 import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
+import { FramePanel } from './FramePanel'
 import { MagneticInkPanel } from './MagneticInkPanel'
 import { PanelResizer } from './PanelResizer'
 import { FitTileButton, ThreadWidthField, TileLengthField } from './ThreadSizeFields'
 import { WatermarkPanel } from './WatermarkPanel'
 import { WindowsCard } from './WindowsCard'
 import { setFaceImage, type NoteRef } from './frameActions'
+import { useTimelineFrame } from './useTimelineFrame'
 import type { Layer } from './layerActions'
 
 type Change = (note: Note) => Note
@@ -216,6 +218,7 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
         <WindowsCard note={note} noteRef={noteRef} selectedWindowId={selectedWindowId} onWindowSelect={onWindowSelect} />
       </Section>
 
+      <TimelineFrame note={note} noteRef={noteRef} />
       <LensEffect note={note} noteRef={noteRef} />
       <PrintOffset note={note} onWindowSelect={onWindowSelect} />
       </Group>
@@ -237,6 +240,15 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
     </Panel>
     </>
   )
+}
+
+/**
+ * The frame the timeline is on, its place and its fill, as in Thread Studio's Frames tab: Keller wants them here too,
+ * since they are normal controls. Its own component, so only it follows the tilt
+ */
+function TimelineFrame({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
+  const { frame, index, show } = useTimelineFrame(note)
+  return <FramePanel note={note} noteRef={noteRef} frame={frame} index={index} onShow={show} />
 }
 
 /**

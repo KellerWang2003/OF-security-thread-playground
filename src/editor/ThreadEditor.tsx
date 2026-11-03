@@ -16,7 +16,6 @@ import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
 import { Drawer, Group, IconButton, Labeled, Panel, PartTab, Section, SwitchField, TabStrip } from '../components/controls'
 import { canStepNote, useHistory } from '../lib/history'
-import { tiltForPosition } from '../lib/lens'
 import {
   addBlankSection,
   duplicateSection,
@@ -27,19 +26,16 @@ import {
   playbackTilt,
   preparePattern,
   removeSection,
-  sectionMix,
   sectionSlots,
   sectionView,
   setSectionLens,
   setSectionTrack,
-  timelineSection,
   updateSection,
 } from '../lib/pattern'
 import { PATTERN_PRESETS, presetPattern } from '../lib/patternPresets'
 import { checkPattern, warningCount, type PatternCheck } from '../lib/patternRules'
 import { stepNote, updateNote } from '../lib/store'
 import type { Note, Project, ThreadPattern, ThreadSection } from '../lib/types'
-import { setTilt, useTilt } from '../tilt/tilt'
 import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
 import { Explain, RidgeIcon, swatch } from './LensVisuals'
 import { PanelResizer } from './PanelResizer'
@@ -48,6 +44,7 @@ import { PatternView } from './PatternView'
 import { FramePanel } from './FramePanel'
 import { TiltRail } from './TiltRail'
 import { TimelineBar } from './TimelineBar'
+import { useTimelineFrame } from './useTimelineFrame'
 
 /**
  * One banknote's thread pattern, full screen. Top: back, the banknote, the ridges and undo. Left: Mixed angles, the
@@ -85,18 +82,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
   const selectedSectionId = selected?.id
   // The frame the timeline is on, for the section it follows (the selected one, else the first): the right panel
   // shows it, and its image can be handled on the thread
-  const followed = timelineSection(note, selectedSectionId)
-  const currentIndex = useTilt((s) => sectionMix(note, followed, { x: s.angleX, y: s.angle }).current)
-  const current = note.frames.at(currentIndex) ?? note.frames[0]
-  /** Tilts to the middle of a frame, as a click on its clip does: the first strip of the followed section that shows it */
-  const showFrame = (i: number) => {
-    const lengths = note.frames.map((f) => f.length)
-    const strip = Math.max(0, followed.slots.indexOf(i))
-    const before = lengths.slice(0, strip).reduce((sum, l) => sum + l, 0)
-    const total = lengths.reduce((sum, l) => sum + l, 0)
-    const at = tiltForPosition(followed.lens, (before + (lengths.at(strip) ?? 0) / 2) / total)
-    setTilt({ source: 'slider', target: at.y, targetX: at.x })
-  }
+  const timelineFrame = useTimelineFrame(note, selectedSectionId)
   const canRemove = pattern.sections.length > 1
   const noteRef = { projectId: project.id, noteId: note.id }
   const checks = checkPattern(note)
@@ -173,7 +159,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
 
       {/* The whole editor, behind the panels, as on the canvas; the thread fits between them, and fits again once turned */}
       <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={selectOnThread} ridges={ridges} ridgeOpacity={ridgeOpacity}
-        frame={note.frames.indexOf(current)} onThreadClick={() => setTab('frames')}
+        frame={timelineFrame.index} onThreadClick={() => setTab('frames')}
         limit={lens.viewDeg} room="top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[248px]" />
 
       <Panel className="absolute top-3 right-3 left-3 flex h-11 items-center gap-2 rounded-[calc(var(--radius)+0.375rem+1px)] pr-1.5 pl-1.5">
@@ -283,7 +269,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
         {/* The frame the timeline is on: where its image sits, and what it shows */}
         <TabsContent value="frames" className="min-h-0 overflow-y-auto">
           <Group>
-            <FramePanel note={note} noteRef={noteRef} frame={current} index={note.frames.indexOf(current)} onShow={showFrame} />
+            <FramePanel note={note} noteRef={noteRef} frame={timelineFrame.frame} index={timelineFrame.index} onShow={timelineFrame.show} />
           </Group>
         </TabsContent>
         </Tabs>

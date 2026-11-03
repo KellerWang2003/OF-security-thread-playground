@@ -233,8 +233,16 @@ describe('username workspace editor', () => {
 
     // Small labels say what each control is
     for (const label of ['Direction', 'Width', 'Tile length', 'Position', 'Effect', 'Seen flat']) expect(screen.getByText(label, { exact: true })).toBeDefined()
-    // The artwork printed on the thread is set in Thread Studio, not here
-    expect(screen.queryByRole('switch', { name: 'Background' })).toBeNull()
+    // The frame the timeline is on, picked and filled right here as in Thread Studio's Frames tab, since they are
+    // normal controls (Keller); there is no Image gap any more
+    for (const label of ['Frame', 'Fill']) expect(screen.getByText(label, { exact: true })).toBeDefined()
+    const current = screen.getAllByRole('button', { name: /^Frame \d$/ }).findIndex((b) => b.getAttribute('aria-pressed') === 'true')
+    expect(current).toBeGreaterThanOrEqual(0)
+    await user.click(screen.getByRole('button', { name: 'Background', exact: true }))
+    expect(note().frames[current].kind).toBe('none')
+    expect(screen.getByRole('switch', { name: 'Background colour' })).toBeDefined()
+    await user.click(screen.getByRole('button', { name: 'Colour', exact: true }))
+    expect(note().frames[current].kind).toBe('color')
     expect(screen.queryByTitle('Space between complete image copies along the thread')).toBeNull()
 
     // The lens's controls, edited for this banknote right here; Thread Studio opens from the canvas, not the panel
