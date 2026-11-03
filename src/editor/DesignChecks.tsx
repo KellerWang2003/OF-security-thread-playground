@@ -21,7 +21,7 @@ export function ContinuousSection({ note, noteRef }: { note: Note; noteRef: Note
   const check = note.continuous
   return (
     <Section nested>
-      <SwitchField label="Continuous" title="Check that the design carries on where its edges meet its neighbours' on the print sheet"
+      <SwitchField label="Continuous check" title="Check that the design carries on where its edges meet its neighbours' on the print sheet"
         checked={check !== undefined}
         onChange={(on) => update(({ continuous: _check, ...n }) => (on ? { ...n, continuous: { cutMm: CUT_MM.initial } } : n))} />
       {check && (
@@ -61,9 +61,9 @@ function DriftFields({ noteId, cutMm }: { noteId: string; cutMm: number }) {
 const useChecksDrawer = create<{ open: boolean }>(() => ({ open: false }))
 
 /**
- * At the Banknote tab's foot, for an uploaded design, as Thread Studio's Checks: with Continuous on, whether the design is
- * at the banknote's size and its edges join; then whether the paper is light under the watermark and around the thread.
- * Warnings only, closed by default, the number of checks with something to look at beside its title.
+ * At the Banknote tab's foot, for an uploaded design, as Thread Studio's Checks: with the Continuous check on, whether
+ * the design is at the banknote's size and its edges join; then whether the paper is light under the watermark and around
+ * the thread. Warnings only, closed by default, the number of checks with something to look at beside its title.
  */
 export function ChecksDrawer({ note }: { note: Note }) {
   const open = useChecksDrawer((s) => s.open)
