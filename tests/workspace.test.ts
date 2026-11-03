@@ -6,6 +6,7 @@ import { openWorkspace, closeWorkspace, importBrowserProjects, useWorkspace, put
 import { readArtwork, readCache } from '../src/cloud/cache'
 import { updateNote, findNote, updateProject, undoProject, redoProject } from '../src/lib/store'
 import { createRepository } from '../src/cloud/repository'
+import { createDemoProject } from '../src/lib/demo'
 
 vi.mock('../src/cloud/repository', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/cloud/repository')>()
@@ -14,6 +15,8 @@ vi.mock('../src/cloud/repository', async (importOriginal) => {
     save: async (record: import('../src/cloud/sync').CachedProject) => ({ project: record.project, revision: record.revision, deleted: record.deleted }),
   })) }
 })
+// The demo is drawn on a canvas, which these tests run without
+vi.mock('../src/lib/demo', () => ({ createDemoProject: vi.fn() }))
 afterEach(() => { closeWorkspace(); vi.clearAllMocks(); vi.unstubAllGlobals() })
 
 describe('username workspaces and browser import', () => {
@@ -84,25 +87,21 @@ describe('username workspaces and browser import', () => {
     await legacy.deleteProject(project.id)
   })
   it('keeps demo edits in memory without adding projects or saving them', async () => {
-    const template = createProject('Shared demo source')
-    template.notes.push(createNote({ name: 'Demo banknote', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' }))
-    const original = structuredClone(template)
+    vi.mocked(createDemoProject).mockImplementation(async () => {
+      const demo = createProject('Demo source')
+      demo.notes.push(createNote({ name: 'Demo banknote', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' }))
+      return demo
+    })
     const save = vi.fn(async (record: import('../src/cloud/sync').CachedProject) => ({ project: record.project, revision: record.revision, deleted: record.deleted }))
     vi.stubGlobal('location', { hash: '' })
-    vi.mocked(createRepository).mockReturnValue({
-      list: async () => [],
-      save,
-      demo: async () => template,
-    })
+    vi.mocked(createRepository).mockReturnValue({ list: async () => [], save })
     await openWorkspace('demo-copy-test')
     const copy = await openDemoPreview()
-    expect(copy.id).not.toBe(template.id)
-    expect(copy.notes[0].id).not.toBe(template.notes[0].id)
-    expect(copy.notes[0].frames[0].id).not.toBe(template.notes[0].frames[0].id)
+    expect(useWorkspace.getState().demoPreview).toBe(copy)
+    expect(location.hash).toBe('#/demo')
     expect(useWorkspace.getState().projects).toEqual([])
     updateNote(copy.id, copy.notes[0].id, (note) => ({ ...note, name: 'My edits' }))
     expect(findNote(copy.id, copy.notes[0].id)?.name).toBe('My edits')
-    expect(template).toEqual(original)
     expect(save).not.toHaveBeenCalled()
     expect(hasPendingSaves()).toBe(false)
     expect((await readCache('demo-copy-test')).some((record) => record.project.id === copy.id)).toBe(false)

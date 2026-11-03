@@ -50,6 +50,15 @@ export async function storeImage(blob: Blob) {
   return id
 }
 
+/** Stores artwork under an id of the caller's (the demo's fixed ones), unless it was stored this session already */
+export async function storeImageAs(id: string, blob: Blob) {
+  const original = imageWorkspace()
+  if (urls.has(id)) return
+  await writeArtwork(original, id, blob)
+  if (workspace !== original) throw new Error('The workspace changed. Try again.')
+  urls.set(id, URL.createObjectURL(blob))
+}
+
 export async function copyImage(id: string) {
   const original = imageWorkspace()
   const blob = await readArtwork(original, id) ?? await downloadArtwork(original, id)

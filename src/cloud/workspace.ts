@@ -6,7 +6,6 @@ import { createRepository, projectImageIds } from './repository'
 import { ProjectSync, type SyncStatus } from './sync'
 import * as legacy from '../lib/db'
 import { createDemoProject } from '../lib/demo'
-import { remapTracks } from '../lib/pattern'
 import { setImageWorkspace } from '../lib/images'
 import type { Project } from '../lib/types'
 
@@ -65,21 +64,15 @@ export async function openWorkspace(workspace: string) {
   }
 }
 
-/** A fresh demo exists only in memory and never enters the save queue. */
+/**
+ * A fresh demo exists only in memory and never enters the save queue. It comes with the app (`createDemoProject`),
+ * built with fresh ids each time; the shared template in Supabase is no longer read.
+ */
 export async function openDemoPreview() {
   const { workspace } = useWorkspace.getState()
   const token = generation
   if (!workspace) throw new Error('Open a workspace first.')
-  const template = await createRepository(workspace).demo?.()
-  const now = Date.now()
-  const project = template ? {
-    ...structuredClone(template), id: crypto.randomUUID(), createdAt: now, updatedAt: now,
-    notes: template.notes.map((note) => {
-      const frames = note.frames.map((frame) => ({ ...frame, id: crypto.randomUUID() }))
-      const pattern = remapTracks(structuredClone(note.pattern), new Map(note.frames.map((f, i) => [f.id, frames[i].id])))
-      return { ...structuredClone(note), id: crypto.randomUUID(), frames, ...(pattern ? { pattern } : {}) }
-    }),
-  } : await createDemoProject()
+  const project = await createDemoProject()
   if (token !== generation) throw new Error('The workspace changed. Try again.')
   useWorkspace.setState({ demoPreview: project })
   location.hash = '#/demo'

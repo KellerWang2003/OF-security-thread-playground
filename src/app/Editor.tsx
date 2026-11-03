@@ -1,6 +1,6 @@
 import { undoProject, redoProject, updateNote } from '../lib/store'
 import { beginHistoryGroup, endHistoryGroup, breakHistoryGroup } from '../lib/history'
-import { pressLight, releaseLight, togglePlayback } from '../tilt/tilt'
+import { pressLight, releaseLight, springToFlat, togglePlayback, useTilt } from '../tilt/tilt'
 import { playbackLens, playbackTilt } from '../lib/pattern'
 import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -83,6 +83,18 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     // Only on opening the project, not every time the last note is deleted
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id])
+
+  // The demo opens playing its playlist, so its banknotes move before anyone knows to tilt them. Leaving it stops
+  // playback and goes back to flat, so the next project opens still
+  const [playsOnOpen] = useState(() => isDemo && project.notes.some((n) => n.tilt.moves?.length))
+  useEffect(() => {
+    if (!playsOnOpen) return
+    if (useTilt.getState().source !== 'wobble') togglePlayback()
+    return () => {
+      if (useTilt.getState().source === 'wobble') togglePlayback()
+      springToFlat()
+    }
+  }, [playsOnOpen])
 
   // Escape leaves window editing or placing the watermark, otherwise clears the selection, unless a field or dialog is handling it
   useEffect(() => {

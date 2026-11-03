@@ -30,7 +30,7 @@ Vercel uses the Vite preset, `npm run build`, and `dist`. `vercel.json` records 
 
 **Untitled project** was imported from the original Dia browser into `keller`, with its artwork and banknote settings. **Silly bird demo** was published as the shared template in the reserved `public-demos` namespace. Its original five images were verified byte for byte. The original browser stores remain untouched.
 
-The Demo button opens a temporary editor preview using the shared template. It has no project-list card and never enters the cloud save queue or the local project cache. Edits remain in memory and are discarded on Exit demo, navigating back, reloading, or signing out. The next visit starts fresh. Template artwork may be cached for rendering. The canonical template remains read-only through the app API, and `public-demos` is reserved so it cannot be selected as an ordinary username.
+The Demo button opens a temporary editor preview of the demo built into the app (`src/lib/demo.ts`); the shared template described here is no longer read, and stays in the database as it was. It has no project-list card and never enters the cloud save queue or the local project cache. Edits remain in memory and are discarded on Exit demo, navigating back, reloading, or signing out. The next visit starts fresh. Its artwork is drawn in the browser and kept in the workspace's local artwork cache for rendering; it is never uploaded. The canonical template remains read-only through the app API, and `public-demos` is reserved so it cannot be selected as an ordinary username.
 
 ## Saving and recovery
 

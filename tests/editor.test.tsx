@@ -6,7 +6,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import userEvent from '@testing-library/user-event'
 import App from '../src/App'
 import { addNote, updateNote, useProjects } from '../src/lib/store'
-import { createNote, migrateProject } from '../src/lib/notes'
+import { createNote, createProject, migrateProject } from '../src/lib/notes'
+import { createDemoProject } from '../src/lib/demo'
 import { newWatermark } from '../src/lib/watermark'
 import { presetPattern } from '../src/lib/patternPresets'
 import { setTilt, useTilt } from '../src/tilt/tilt'
@@ -42,12 +43,15 @@ vi.mock('../src/lib/relief', async (importOriginal) => {
 })
 vi.mock('../src/cloud/repository', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/cloud/repository')>()
-  const { createProject, createNote } = await import('../src/lib/notes')
   return { ...actual, createRepository: () => ({
     list: async () => [],
     save: async (record: import('../src/cloud/sync').CachedProject) => { saves(record); return { project: record.project, revision: record.revision, deleted: record.deleted } },
-    demo: async () => ({ ...createProject('Demo fixture'), notes: [createNote({ name: 'Demo banknote', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' })] }),
   }) }
+})
+// The demo's artwork is drawn on a canvas, which jsdom lacks: Demo opens one plain banknote instead
+vi.mock('../src/lib/demo', async () => {
+  const { createProject, createNote } = await import('../src/lib/notes')
+  return { createDemoProject: vi.fn(async () => ({ ...createProject('Demo fixture'), notes: [createNote({ name: 'Demo banknote', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' })] })) }
 })
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
@@ -411,6 +415,24 @@ describe('username workspace editor', () => {
     await screen.findByRole('textbox', { name: 'Username' })
     expect(localStorage.getItem('of-thread-workspace')).toBeNull()
     expect(saves).not.toHaveBeenCalled()
+  })
+
+  it('opens the demo playing its playlist, and stops and goes back to flat on leaving it', async () => {
+    const user = userEvent.setup()
+    vi.mocked(createDemoProject).mockImplementationOnce(async () => {
+      const note = createNote({ name: 'Playing banknote', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' })
+      return { ...createProject('Playing demo'), notes: [{ ...note, tilt: { ...note.tilt, moves: [{ id: 'swing', kind: 'y' }] } }] }
+    })
+    localStorage.setItem('of-thread-workspace', 'demo-play-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await screen.findByRole('button', { name: 'New project', exact: true })
+    await user.click(screen.getByRole('button', { name: 'Demo', exact: true }))
+    await screen.findByRole('button', { name: 'Exit demo' })
+    expect(useTilt.getState().source).toBe('wobble')
+    expect(screen.getByRole('button', { name: 'Pause', exact: true })).toBeDefined()
+    await user.click(screen.getByRole('button', { name: 'Exit demo' }))
+    await screen.findByRole('button', { name: 'New project', exact: true })
+    expect(useTilt.getState()).toMatchObject({ source: 'slider', target: 0, targetX: 0 })
   })
 
   it('toggles playback immediately with Space, ignores repeats and typing, and respects dialogs', async () => {

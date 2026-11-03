@@ -18,12 +18,15 @@ import { fitWatermark, moveWatermark, newWatermark } from '../src/lib/watermark'
 vi.mock('../src/cloud/client', () => ({ cloudConfigured: true }))
 vi.mock('../src/cloud/repository', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/cloud/repository')>()
-  const { createProject, createNote } = await import('../src/lib/notes')
   return { ...actual, createRepository: () => ({
     list: async () => [],
     save: async (record: import('../src/cloud/sync').CachedProject) => ({ project: record.project, revision: record.revision, deleted: record.deleted }),
-    demo: async () => ({ ...createProject('Demo fixture'), notes: [createNote({ name: 'Demo banknote', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' })] }),
   }) }
+})
+// The demo's artwork is drawn on a canvas, which jsdom lacks: Demo opens one plain banknote instead
+vi.mock('../src/lib/demo', async () => {
+  const { createProject, createNote } = await import('../src/lib/notes')
+  return { createDemoProject: async () => ({ ...createProject('Demo fixture'), notes: [createNote({ name: 'Demo banknote', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' })] }) }
 })
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })

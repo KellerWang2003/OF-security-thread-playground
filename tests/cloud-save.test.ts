@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { writeArtwork } from '../src/cloud/cache'
 import { createRepository, projectImageIds } from '../src/cloud/repository'
+import { DEMO_ART, demoProject } from '../src/lib/demo'
 import { createNote, createProject, migrateProject } from '../src/lib/notes'
 import type { Note, Project } from '../src/lib/types'
 
@@ -54,7 +55,24 @@ describe('saving to the cloud', () => {
     expect(cloud.uploads.toSorted()).toEqual([note.faceImageId, note.watermark!.imageId, note.frames[2].imageId].toSorted())
   })
 
-  it('opens the live demo, saved before these settings, with its banknotes as they were', () => {
+  it('saves the demo with all it shows: a watermark, placed images, every fill, two lanes and a playlist', async () => {
+    const demo = demoProject()
+    const [bird, lanes] = demo.notes
+    expect(bird.watermark?.imageId).toBe(DEMO_ART.portrait)
+    expect(lanes.frames.map((f) => f.kind)).toEqual(['color', 'image', 'none', 'image'])
+    expect(lanes.frames.filter((f) => f.kind === 'image').every((f) => f.place)).toBe(true)
+    expect(lanes.pattern?.mixed).toBe(true)
+    expect(lanes.pattern?.sections.map((s) => s.lens?.effect)).toEqual(['side', 'updown'])
+    expect(demo.notes.map((n) => n.tilt.moves?.map((m) => m.kind))).toEqual([['y', 'x', 'light'], ['y', 'x', 'light']])
+    // It opens as it was built: nothing for an old save's migrations to change
+    expect(migrateProject(structuredClone(demo))).toEqual(demo)
+    expect(projectImageIds(demo).toSorted()).toEqual([...DEMO_ART.faces, DEMO_ART.portrait, DEMO_ART.star, DEMO_ART.birdHead, ...DEMO_ART.birds].toSorted())
+    for (const id of projectImageIds(demo)) await writeArtwork('demo-save-test', id, new Blob(['art'], { type: 'image/png' }))
+    const saved = await createRepository('demo-save-test').save({ project: demo, revision: crypto.randomUUID(), baseRevision: null, deleted: false, dirty: true })
+    expect(saved.project).toEqual(demo)
+  })
+
+  it('opens the old shared demo, saved before these settings, with its banknotes as they were', () => {
     const demo = JSON.parse(readFileSync(new URL('../supabase/demo/demo-template.json', import.meta.url), 'utf8')) as Project
     const opened = migrateProject(structuredClone(demo))
     expect(opened.notes.map(({ pattern: _pattern, ...note }) => note)).toEqual(demo.notes)
