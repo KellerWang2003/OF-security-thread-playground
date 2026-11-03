@@ -310,9 +310,21 @@ describe('rules', () => {
     expect(issues(alone, 'hidden').map((i) => i.sectionId)).toEqual([a.id])
   })
 
-  it('4: shows a padded story', () => {
+  it('4: flags strips set for another number of frames, not a story that repeats frames on purpose', () => {
     const note = withPreset('split')
-    expect(issues(note, 'strips')).toEqual([{ text: 'Lane ↔: 3 frames on 5 strips', title: '2 2 3 4 4', sectionId: note.pattern!.sections[0].id }])
+    const side = note.pattern!.sections[0]
+    expect(sectionSlots(note.frames, side)).toEqual([1, 1, 2, 3, 3])
+    expect(issues(note, 'strips')).toEqual([])
+    expect(issues(withPreset('alternate'), 'strips')).toEqual([])
+    // A frame added after the lane's strips were set: its five strips are stretched over six
+    const added = { ...note, frames: frames(6) }
+    expect(issues(added, 'strips')).toEqual([{ text: 'Lane ↔: 5 strips set for 6 frames', title: '2 2 3 3 4 4', sectionId: side.id }])
+    // Picking its strips again fits them
+    expect(issues({ ...added, pattern: setSectionTrack(added, side.id, sectionSlots(added.frames, side)) }, 'strips')).toEqual([])
+    // A deleted frame leaves five strips over four frames; a story whose frames are all gone plays every frame
+    const deleted = { ...note, frames: note.frames.filter((f) => f.id !== 'f4') }
+    expect(issues(deleted, 'strips').map((i) => i.text)).toEqual(['Lane ↔: 5 strips set for 4 frames'])
+    expect(issues({ ...note, frames: frames(5).map((f) => ({ ...f, id: `new-${f.id}` })) }, 'strips')).toEqual([])
   })
 
   it('5: warns about sections too small to print, dead zones excluded', () => {

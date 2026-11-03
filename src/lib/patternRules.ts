@@ -20,7 +20,7 @@ import type { Note } from './types'
  * 1. Every window shows each tilt, wherever the print lands along the thread (it isn't registered to the banknote).
  * 2. Every section rests on the same frame, so the thread reads as one image flat.
  * 3. Frames only some sections show sit under ridges near parallel to their tilt's axis, so the other tilt is blind to them.
- * 4. Every section's print has one strip per frame; a shorter story is padded (shown, not blocked).
+ * 4. Every section's print has one strip per frame; strips set for another number of frames are stretched to fit (shown, not blocked).
  * 5. Sections are big enough to print, dead zones where angles meet excluded.
  * 6. Few ridge angles on one thread.
  */
@@ -244,11 +244,13 @@ export function checkPattern(note: RuleNote): PatternCheck[] {
 
   checks.push({
     id: 'strips', title: 'One strip count', level: 'info',
-    explain: 'Every section prints one strip per banknote frame; a shorter story repeats frames to fill them.',
+    explain: 'Every section prints one strip per banknote frame. Strips set for another number of frames (after adding or deleting one) are stretched to fit.',
+    // Only strips set for another number of frames: a story that repeats frames on purpose is fine, and one whose
+    // frames are all gone plays every frame in order
     issues: sections.flatMap((p) => {
-      const distinct = new Set(p.slots).size
-      return distinct < p.slots.length
-        ? [{ text: `${name(p)}: ${distinct} frames on ${p.slots.length} strips`, title: p.slots.map((f) => f + 1).join(' '), sectionId: p.section.id }]
+      const set = p.section.track?.filter((id) => note.frames.some((f) => f.id === id)).length
+      return set && set !== note.frames.length
+        ? [{ text: `${name(p)}: ${set} strips set for ${note.frames.length} frames`, title: p.slots.map((f) => f + 1).join(' '), sectionId: p.section.id }]
         : []
     }),
   })
