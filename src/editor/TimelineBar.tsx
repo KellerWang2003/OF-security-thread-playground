@@ -43,8 +43,6 @@ export function TimelineBar({
   noteRef,
   besidePanel,
   sectionId,
-  pickedFrameId,
-  onPickFrame,
 }: {
   projectId: string
   notes: Note[]
@@ -53,10 +51,6 @@ export function TimelineBar({
   besidePanel: boolean
   /** The thread section whose lens the track follows, in the thread editor */
   sectionId?: string
-  /** In the thread editor: the frame picked, whose fill the right panel shows */
-  pickedFrameId?: string
-  /** In the thread editor: a click on a clip picks its frame */
-  onPickFrame?: (id: string) => void
 }) {
   const source = useTilt((state) => state.source)
   const playing = source === 'wobble'
@@ -80,7 +74,7 @@ export function TimelineBar({
         </IconButton>
         <FrameSettings projectId={projectId} note={note ?? notes.at(0)} />
       </div>
-      {note && noteRef && <FrameTrack note={note} noteRef={noteRef} sectionId={sectionId} pickedFrameId={pickedFrameId} onPickFrame={onPickFrame} />}
+      {note && noteRef && <FrameTrack note={note} noteRef={noteRef} sectionId={sectionId} />}
     </Panel>
   )
 }
@@ -145,13 +139,7 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
  * cycle the current tilt is, wrapping around as the frames loop. Drag to scrub, scroll to move along,
  * ⌘-scroll to zoom.
  */
-function FrameTrack({ note, noteRef, sectionId, pickedFrameId, onPickFrame }: {
-  note: Note
-  noteRef: NoteRef
-  sectionId?: string
-  pickedFrameId?: string
-  onPickFrame?: (id: string) => void
-}) {
+function FrameTrack({ note, noteRef, sectionId }: { note: Note; noteRef: NoteRef; sectionId?: string }) {
   const scroller = useRef<HTMLDivElement>(null)
   const track = useRef<HTMLDivElement>(null)
   const gesture = useRef<{ mode: 'scrub' } | { mode: 'resize'; frameId: string; startX: number; startLength: number } | null>(null)
@@ -216,9 +204,6 @@ function FrameTrack({ note, noteRef, sectionId, pickedFrameId, onPickFrame }: {
             if (frame && noteRef) {
               gesture.current = { mode: 'resize', frameId: frame.id, startX: e.clientX, startLength: frame.length }
             } else {
-              // In the thread editor a click on a clip also picks its frame, for its fill in the right panel
-              const clip = el.closest<HTMLElement>('[data-frame-clip]')?.dataset.frameClip
-              if (clip) onPickFrame?.(clip)
               gesture.current = { mode: 'scrub' }
               scrubTo(e.clientX)
             }
@@ -253,10 +238,9 @@ function FrameTrack({ note, noteRef, sectionId, pickedFrameId, onPickFrame }: {
               <div
                 key={frame.id}
                 data-frame-clip={frame.id}
-                aria-selected={onPickFrame ? frame.id === pickedFrameId : undefined}
                 className={cn(
                   'group absolute bottom-1 overflow-hidden rounded-sm border bg-background',
-                  frame.id === pickedFrameId ? 'ring-2 ring-primary' : i === current && 'ring-1 ring-primary/30',
+                  i === current && 'ring-1 ring-primary/30',
                 )}
                 style={{ top: framesTop, left: left + 1, width: Math.max(width - 2, 4) }}
               >

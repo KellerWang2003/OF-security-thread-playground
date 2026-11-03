@@ -80,9 +80,11 @@ function strip() {
 }
 /** The selected section's length beside the thread, shown only while a section is selected */
 const sectionLength = () => screen.queryByTitle('The selected section\'s length along the thread')
+/** A point on the repeat being edited, the middle one: `along` mm into it, `across` a share of the thread's width */
 const at = (along: number, across: number) => {
   const { thickness, scale } = strip()
-  return { clientX: across * thickness, clientY: along * scale, pointerId: 1 }
+  const repeat = note().pattern?.repeatMm ?? 4
+  return { clientX: across * thickness, clientY: (repeat + along) * scale, pointerId: 1 }
 }
 /** Mixed-angle presets show only while Mixed angles is on: switch it on first when needed, then pick the preset */
 async function preset(user: ReturnType<typeof userEvent.setup>, editor: HTMLElement, label: string) {
@@ -132,7 +134,7 @@ describe('thread editor', () => {
     expect(sectionLength()!.querySelector('input')!.value).toBe('2.5')
 
     // Move it 1 mm along, until it meets the end of the repeat
-    const body = () => strip().element.querySelector(`[data-section-id="${drawn.id}"][data-copy="0"]`)!
+    const body = () => strip().element.querySelector(`[data-section-id="${drawn.id}"][data-copy="1"]`)!
     drag(body(), { along: 1.5, across: 0.85 }, { along: 2.6, across: 0.85 })
     expect(sections()[1]).toMatchObject({ startMm: 1.5, endMm: 4 })
 
@@ -231,7 +233,7 @@ describe('thread editor', () => {
 
     // Delete selects the next section in the list; the thread under the pointer is empty now, ready to draw on
     const third = sections()[1].id
-    fireEvent.pointerEnter(strip().element.querySelector(`[data-section-id="${third}"][data-copy="0"]`)!)
+    fireEvent.pointerEnter(strip().element.querySelector(`[data-section-id="${third}"][data-copy="1"]`)!)
     expect(strip().element.className).toContain('cursor-move')
     await user.keyboard('{Delete}')
     expect(strip().element.className).toContain('cursor-crosshair')
@@ -268,7 +270,7 @@ describe('thread editor', () => {
     // One undo takes the whole fill back; a double-click in the gap fills it too, in whichever repeat it's clicked
     await user.click(within(editor).getByRole('button', { name: 'Undo', exact: true }))
     expect(sections().map((s) => [s.name, s.endMm])).toEqual([['Lane ↔', 2], ['Lane ↕', 4]])
-    fireEvent.doubleClick(strip().element, at(7, 0.2))
+    fireEvent.doubleClick(strip().element, at(3, 0.2))
     expect(sections()).toEqual([side, updown])
 
     // A whole lane deleted. A section drawn beside the other lane takes its look and its name
@@ -280,11 +282,11 @@ describe('thread editor', () => {
     expect(within(editor).getByRole('heading', { name: 'Lane ↔ 2' })).toBeDefined()
     // Undone, a double-click fills the gap instead: the lane grows across the thread
     await user.click(within(editor).getByRole('button', { name: 'Undo', exact: true }))
-    fireEvent.doubleClick(strip().element, at(5, 0.8))
+    fireEvent.doubleClick(strip().element, at(1, 0.8))
     expect(sections()).toEqual([{ ...side, acrossEnd: 1 }])
     expect(within(editor).getByRole('heading', { name: 'Lane ↔' })).toBeDefined()
     // On a section, a double-click adds nothing
-    fireEvent.doubleClick(strip().element.querySelector(`[data-section-id="${side.id}"][data-copy="0"]`)!, at(1, 0.2))
+    fireEvent.doubleClick(strip().element.querySelector(`[data-section-id="${side.id}"][data-copy="1"]`)!, at(1, 0.2))
     expect(sections()).toHaveLength(1)
   })
 
@@ -415,9 +417,9 @@ describe('thread editor', () => {
       expect(sections().map((s) => s.name)).toEqual(names)
       // A preset never switches Mixed angles off
       expect(note().pattern!.mixed).toBe(true)
-      // The first section is selected, and each section is outlined in each of the three repeats shown
+      // The first section is selected; only the middle repeat's sections take the pointer, the copies either side follow
       expect(within(editor).getByRole('heading', { name: names[0] })).toBeDefined()
-      expect(strip().element.querySelectorAll('[data-section-id]')).toHaveLength(3 * names.length)
+      expect(strip().element.querySelectorAll('[data-section-id]')).toHaveLength(names.length)
     }
 
     // Each preset's picture keeps its own size inside its button, which would otherwise shrink an svg to an icon,
@@ -444,8 +446,8 @@ describe('thread editor', () => {
     const repeat = screen.getByTitle('Length of one repeat of the pattern along the thread').querySelector('input')!
     act(() => repeat.focus())
     const lane = strip().element.querySelector(`[data-section-id="${sections()[1].id}"][data-copy="1"]`)!
-    fireEvent.pointerDown(lane, { button: 0, buttons: 1, ...at(5, 0.75) })
-    fireEvent.pointerUp(lane, { button: 0, ...at(5, 0.75) })
+    fireEvent.pointerDown(lane, { button: 0, buttons: 1, ...at(1, 0.75) })
+    fireEvent.pointerUp(lane, { button: 0, ...at(1, 0.75) })
     expect(document.activeElement).not.toBe(repeat)
     expect(within(editor).getByRole('heading', { name: 'Lane ↕' })).toBeDefined()
     await user.keyboard('{Delete}')
@@ -479,33 +481,33 @@ describe('thread editor', () => {
     expect(within(editor).getByText('Lens angle').nextElementSibling!.textContent).toBe('45° /')
   })
 
-  it('tilts by dragging around the thread, always in perspective, and edits the measurements beside it', async () => {
+  it('pans when dragged around, tilts when dragged on with Tilt on, and edits the measurements beside the middle repeat', async () => {
     const user = await openDemo('thread-view-ui-test')
     await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     const { scale } = strip()
 
-    // A drag around the thread tilts it, as on the canvas, and never draws
+    // A drag around the thread pans the view; Tilt starts off, so the thread lies flat whatever the tilt
     const view = strip().element.parentElement!.parentElement!.parentElement!
-    fireEvent.pointerDown(view, { button: 0, buttons: 1, clientX: 10, clientY: 100, pointerId: 1 })
-    fireEvent.pointerMove(view, { buttons: 1, clientX: 10, clientY: 20, pointerId: 1 })
-    expect(useTilt.getState().target).toBe(15)
-    fireEvent.pointerUp(view, { button: 0, clientX: 10, clientY: 20, pointerId: 1 })
-    expect(sections()).toHaveLength(1)
-
-    // Tilted, the thread turns with it
-    act(() => setTilt({ source: 'drag', angle: 20, target: 20, angleX: 0, targetX: 0 }))
-    expect(strip().element.style.transform).toBe('rotateX(20deg) rotateY(0deg)')
-
-    // With Tilt off it lies flat, and a drag around it pans instead of tilting
-    await user.click(within(editor).getByRole('button', { name: 'Tilt', exact: true }))
-    expect(strip().element.style.transform).toBe('')
     const placed = strip().element.parentElement!.style.transform
     fireEvent.pointerDown(view, { button: 0, buttons: 1, clientX: 10, clientY: 100, pointerId: 1 })
     fireEvent.pointerMove(view, { buttons: 1, clientX: 40, clientY: 60, pointerId: 1 })
     fireEvent.pointerUp(view, { button: 0, clientX: 40, clientY: 60, pointerId: 1 })
-    expect(useTilt.getState().target).toBe(20)
+    expect(useTilt.getState().target).toBe(0)
     expect(strip().element.parentElement!.style.transform).not.toBe(placed)
+    act(() => setTilt({ source: 'drag', angle: 20, target: 20, angleX: 0, targetX: 0 }))
+    expect(strip().element.style.transform).toBe('')
+
+    // With Tilt on the thread turns with the tilt, and a drag on it tilts it rather than drawing
+    await user.click(within(editor).getByRole('button', { name: 'Tilt', exact: true }))
+    expect(strip().element.style.transform).toBe('rotateX(20deg) rotateY(0deg)')
+    act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
+    const on = at(1, 0.5)
+    fireEvent.pointerDown(strip().element, { button: 0, buttons: 1, ...on })
+    fireEvent.pointerMove(strip().element, { buttons: 1, ...on, clientY: on.clientY - 80 })
+    expect(useTilt.getState().target).toBe(15)
+    fireEvent.pointerUp(strip().element, { button: 0, ...on })
+    expect(sections()).toHaveLength(1)
     await user.click(within(editor).getByRole('button', { name: 'Tilt', exact: true }))
     act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
 
@@ -535,77 +537,67 @@ describe('thread editor', () => {
     expect(strip().element.querySelectorAll('pattern').length).toBeGreaterThan(0)
     expect(strip().element.querySelector('rect[fill^="url("]')).not.toBeNull()
 
-    // The panel sets the background under every frame, which lives only here; where the thread sits is set on the canvas
+    // Where the thread sits is set on the canvas, and there is no Image gap any more
     expect(within(editor).queryByRole('button', { name: 'Horizontal', exact: true })).toBeNull()
-    expect(within(editor).getByRole('heading', { name: 'Background' })).toBeDefined()
-    await user.click(within(editor).getByRole('switch', { name: 'Colour' }))
-    expect(note().thread.backgroundColor).toBe('#ffffff')
     expect(within(editor).queryByTitle('Space between complete image copies along the thread')).toBeNull()
   })
-  it('picks a frame by its clip and sets what it shows, its image placed in the repeat', async () => {
+  it('always shows the frame the timeline is on, with its fill, and its image handled on the middle repeat', async () => {
     const user = await openDemo('thread-frames-ui-test')
     await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
-    const clip = (i: number) => document.querySelectorAll<HTMLElement>('[data-frame-clip]')[i]
-    const pick = (i: number) => {
-      fireEvent.pointerDown(clip(i), { button: 0, buttons: 1, clientX: 20, pointerId: 1 })
-      fireEvent.pointerUp(clip(i), { button: 0, clientX: 20, pointerId: 1 })
-    }
-    // One thing picked at a time: the frame's group takes the section's place
-    expect(within(editor).getByRole('heading', { name: 'Whole thread' })).toBeDefined()
-    pick(1)
+    // The tilt arriving where the frame picker sent it (the spring that gets it there doesn't run here)
+    const arrive = () => act(() => { const s = useTilt.getState(); setTilt({ angle: s.target, angleX: s.targetX }) })
+
+    // The panel's frame numbers go to a frame, as its clip in the timeline does, and the panel follows
+    await user.click(within(editor).getByRole('button', { name: 'Frame 2', exact: true }))
+    arrive()
     expect(within(editor).getByRole('heading', { name: 'Frame 2' })).toBeDefined()
-    expect(within(editor).queryByRole('heading', { name: 'Whole thread' })).toBeNull()
-    expect(clip(1).getAttribute('aria-selected')).toBe('true')
+    await user.click(within(editor).getByRole('button', { name: 'Frame 1', exact: true }))
+    arrive()
+    expect(within(editor).getByRole('heading', { name: 'Frame 1' })).toBeDefined()
 
-    // Nothing, so the background shows, or a colour
-    await user.click(within(editor).getByRole('button', { name: 'None', exact: true }))
-    expect(note().frames[1].kind).toBe('none')
+    // Its fill: the background every frame shares, set right there, or a colour of its own
+    await user.click(within(editor).getByRole('button', { name: 'Background', exact: true }))
+    expect(note().frames[0].kind).toBe('none')
+    await user.click(within(editor).getByRole('switch', { name: 'Background colour' }))
+    expect(note().thread.backgroundColor).toBe('#ffffff')
     await user.click(within(editor).getByRole('button', { name: 'Colour', exact: true }))
-    expect(note().frames[1].kind).toBe('color')
+    expect(note().frames[0].kind).toBe('color')
+    expect(within(editor).queryByRole('switch', { name: 'Background colour' })).toBeNull()
 
-    // An image sits in the repeat: fitted at first, then where its fields put it
+    // An image sits in the repeat; its Place comes before its Fill, fitted at first, then where its fields put it
     act(() => updateNote(useProjects.getState().demoPreview!.id, note().id, (n) => ({
-      ...n, frames: n.frames.map((f, i) => (i === 1 ? { ...f, kind: 'image' as const, imageId: 'fixture-bird', aspect: 0.5 } : f)),
+      ...n, frames: n.frames.map((f, i) => (i === 0 ? { ...f, kind: 'image' as const, imageId: 'fixture-bird', aspect: 0.5 } : f)),
     })))
+    const titles = within(editor).getAllByRole('heading').map((h) => h.textContent)
+    expect(titles.indexOf('Place')).toBeLessThan(titles.indexOf('Fill'))
     const field = (title: string) => within(editor).getByTitle(title).querySelector('input')!
     // As wide as the 4 mm thread and half as tall: 2 mm of the 4 mm repeat, centred
     expect(field('Image position from the start of the repeat').value).toBe('1')
     fireEvent.change(field('Image position from the start of the repeat'), { target: { value: '0.5' } })
-    expect(note().frames[1].place).toEqual({ alongMm: 0.5, across: 0, size: 1 })
+    expect(note().frames[0].place).toEqual({ alongMm: 0.5, across: 0, size: 1 })
     fireEvent.change(field('Image width; its height follows the image'), { target: { value: '2' } })
-    expect(note().frames[1].place).toEqual({ alongMm: 0.5, across: 0, size: 0.5 })
+    expect(note().frames[0].place).toEqual({ alongMm: 0.5, across: 0, size: 0.5 })
     await user.click(within(editor).getByRole('button', { name: 'Fit to the repeat' }))
-    expect(note().frames[1].place).toBeUndefined()
+    expect(note().frames[0].place).toBeUndefined()
 
-    // With Tilt off the thread shows the picked frame all along, whatever the tilt
-    await user.click(within(editor).getByRole('button', { name: 'Tilt', exact: true }))
-    act(() => setTilt({ source: 'drag', angle: 40, target: 40, angleX: 0, targetX: 0 }))
-    expect(strip().element.querySelectorAll('img').length).toBeGreaterThan(0)
-    act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
-
-    // ...and the image has a box to drag there, as the watermark does, its copies in the other repeats following
+    // On the thread it drags straight away, in the middle repeat; once picked its corners resize it
     const { scale } = strip()
     const placer = () => strip().element.querySelector<HTMLElement>('[data-image-placer]')!
-    expect(strip().element.querySelectorAll('[data-image-copy]')).toHaveLength(2)
+    expect(parseFloat(placer().style.top) / scale).toBeCloseTo(4 + 1, 6)
+    expect(placer().querySelector('[data-corner]')).toBeNull()
     const dragBy = (target: HTMLElement, dx: number, dy: number) => {
       fireEvent.pointerDown(target, { button: 0, buttons: 1, clientX: 0, clientY: 0, pointerId: 1 })
       fireEvent.pointerMove(target, { buttons: 1, clientX: dx * scale, clientY: dy * scale, pointerId: 1 })
       fireEvent.pointerUp(target, { button: 0, clientX: dx * scale, clientY: dy * scale, pointerId: 1 })
     }
-    // Fitted it sits 1 mm into the repeat: 0.5 mm right and 2 mm down puts it 3 mm in
     dragBy(placer(), 0.5, 2)
-    expect(note().frames[1].place).toEqual({ alongMm: 3, across: 0.125, size: 1 })
-    // Past the repeat's end it carries on into the next, so let go it is held by the copy that starts in the first repeat
+    expect(note().frames[0].place).toEqual({ alongMm: 3, across: 0.125, size: 1 })
+    expect(strip().element.querySelectorAll('[data-image-copy]')).toHaveLength(2)
+    // Past the repeat's end it carries on into the next, so let go it is held by its copy in the middle repeat
     dragBy(placer(), 0, 2)
-    expect(note().frames[1].place).toEqual({ alongMm: 1, across: 0.125, size: 1 })
-    // A corner resizes it, keeping its proportions and the opposite corner
+    expect(note().frames[0].place).toEqual({ alongMm: 1, across: 0.125, size: 1 })
     dragBy(placer().querySelector<HTMLElement>('[data-corner="se"]')!, -1, 0)
-    expect(note().frames[1].place).toEqual({ alongMm: 1, across: 0.125, size: 0.75 })
-
-    // Escape lets go of the frame first
-    await user.keyboard('{Escape}')
-    expect(within(editor).queryByRole('heading', { name: 'Frame 2' })).toBeNull()
-    expect(screen.getByRole('region', { name: 'Thread editor' })).toBeDefined()
+    expect(note().frames[0].place).toEqual({ alongMm: 1, across: 0.125, size: 0.75 })
   })
 })

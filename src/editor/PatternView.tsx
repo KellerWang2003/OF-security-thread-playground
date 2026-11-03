@@ -19,6 +19,7 @@ import {
   placeSection,
   preparePattern,
   resizeEdge,
+  sectionAt,
   setRepeat,
   updateSection,
   type Edge,
@@ -42,11 +43,13 @@ type Gesture =
   | { mode: 'draw'; copy: number; from: PatternPoint; moved: boolean; rect?: Rect }
   | { mode: 'move'; id: string; start: ThreadSection; pattern: ThreadPattern; at: { along: number; across: number }; moved: boolean }
   | { mode: 'resize'; id: string; edge: Edge; pattern: ThreadPattern; copy: number }
-  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; moved: boolean }
+  | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; moved: boolean; on?: PatternPoint }
   | { mode: 'pan'; startX: number; startY: number; from: View; button: number; moved: boolean }
 
 /** Repeats shown: always three, however long the repeat (Keller) */
 const REPEATS = 3
+/** The repeat being edited: the middle one, the others either side copying it (Keller) */
+const MIDDLE = 1
 
 /** The view: px per mm, and where the thread's start (its top or left end, at the middle of its width) sits, px from the middle of the room */
 type View = { scale: number; x: number; y: number }
@@ -69,28 +72,30 @@ function fitView(box: { width: number; height: number }, repeatMm: number, width
 /**
  * The centre of the thread editor: the thread magnified over three repeats, in its own direction, showing
  * the real artwork at the current tilt, with the repeat's ends, each section's outline and, optionally, its ridges.
- * Drag on empty thread to draw a section (it takes the look of the section beside it, as Fill does, or plays plain
- * when it touches none), drag a section to move it or its edges to resize it (snapping to 0.5 mm along and twelfths
- * across); a click selects, and a double-click on an empty area fills it. Beside the first repeat, measurements to
- * read and edit: the repeat and the thread's thickness, and the selected section's length and width. Like the
- * canvas, a drag around the thread tilts it, in perspective (editing still lands where the pointer is), unless
- * `tilting` is off: then the thread lies flat, showing the frames of the current tilt, and a drag pans. Scrolling or a
- * middle-button drag pans, and pinching or ⌘/Ctrl-scrolling zooms. The
+ * The middle repeat is the one edited; the two either side copy it (Keller). A drag around the thread, or on those
+ * copies, pans. On the middle repeat the current frame's image (`frame`, the timeline's) drags straight away, and once
+ * picked its corners resize it (`ImagePlacer`). Elsewhere on it, with `tilting` on a drag tilts the thread, in
+ * perspective (a click still picks the section under it); off, the default, the thread lies flat and a drag on empty
+ * thread draws a section (it takes the look of the section beside it, as Fill does, or plays plain when it touches
+ * none), on a section moves it, on its edges resizes it (snapping to 0.5 mm along and twelfths across); a click
+ * selects, and a double-click on an empty area fills it. Beside the middle repeat, measurements to read and edit: the
+ * repeat and the thread's thickness, and the selected section's length and width. Scrolling or a middle-button drag
+ * also pans, and pinching or ⌘/Ctrl-scrolling zooms. The
  * view fills its parent, behind the floating panels, as the canvas does; the thread fits and centres in `room`
  * (Tailwind insets clear of the panels), and panned it runs on under them instead of being cut off at that box. A
  * longer repeat or a thicker thread keeps the zoom, so the thread itself grows.
  */
-export function PatternView({ note, projectId, selectedId, onSelect, ridges, tilting = true, soloFrame, limit = 90, room: roomClassName }: {
+export function PatternView({ note, projectId, selectedId, onSelect, ridges, tilting = false, frame, limit = 90, room: roomClassName }: {
   note: Note
   projectId: string
   selectedId?: string
   onSelect: (id: string | undefined) => void
   /** Hatch each section at its ridge angle */
   ridges: boolean
-  /** A drag around the thread tilts it, and the thread turns with the tilt; off, it lies flat and a drag pans */
+  /** A drag on the thread tilts it, and the thread turns with the tilt; off, it lies flat and a drag edits sections */
   tilting?: boolean
-  /** A frame (by index) shown over the whole thread, whatever the tilt: the frame picked while tilting is off */
-  soloFrame?: number
+  /** The frame the timeline is on (by index): its image can be moved and resized on the thread */
+  frame?: number
   /** How far a drag may tilt, either way */
   limit?: number
   /** Where the thread fits and centres, as Tailwind insets within the view */
@@ -125,6 +130,8 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   const latest = useRef({ view, fit: fitted?.scale })
   useEffect(() => { latest.current = { view, fit: fitted?.scale } })
   const [panning, setPanning] = useState(false)
+  // The current frame's image, once a click has picked it: its box and corners show
+  const [pickedImage, setPickedImage] = useState<string>()
 
   // Wheel needs a non-passive listener so the page never scrolls or zooms: scroll pans, pinch or ⌘/Ctrl-scroll zooms
   useEffect(() => {
@@ -163,7 +170,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   // What each section shows now: the view follows the tilt, re-rendering as it moves
   const tilt = { x: angleX, y: angle }
   const mixes = prepared.plain ? [lensMix(note, tilt)] : patternMix(note, tilt)
-  const shown = mixes.map((m) => (soloFrame !== undefined ? [soloFrame, soloFrame, soloFrame] : [m.base, m.blend > 0 ? m.next : m.base, m.current]))
+  const shown = mixes.map((m) => [m.base, m.blend > 0 ? m.next : m.base, m.current])
   const fill = { direction: thread.direction, scale, thicknessMm: thread.widthMm, lengthMm, repeatMm: repeat, offsetMm: 0 }
 
   /** A rect of copy `k`, in px within the strip */
@@ -189,13 +196,31 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   const alongCursor = vertical ? 'cursor-ns-resize' : 'cursor-ew-resize'
   const acrossCursor = vertical ? 'cursor-ew-resize' : 'cursor-ns-resize'
 
+  /** A drag that moves the view, from wherever it starts */
+  const startPan = (e: React.PointerEvent<HTMLElement>) => {
+    gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, from: view, button: e.button, moved: false }
+    setPanning(true)
+  }
+  /** A drag that tilts the thread, from where the tilt is heading (springing back on release unless the pad holds it) */
+  const startTilt = (e: React.PointerEvent<HTMLElement>, on?: PatternPoint) => {
+    const s = useTilt.getState()
+    const start = s.source === 'drag' ? s.target : s.angle
+    const startSide = s.source === 'drag' ? s.targetX : s.angleX
+    gesture.current = { mode: 'tilt', startX: e.clientX, startY: e.clientY, start, startSide, moved: false, on }
+    setTilt({ source: 'drag', target: start, targetX: startSide })
+  }
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
     e.stopPropagation()
     e.currentTarget.setPointerCapture(e.pointerId)
     // A field being typed in lets go, so Delete and Escape reach the sections
     if (document.activeElement instanceof HTMLElement && document.activeElement.closest('input, textarea')) document.activeElement.blur()
+    setPickedImage(undefined)
     const at = locate(e)
+    // Only the middle repeat is edited: on the copies either side a drag pans, as around the thread
+    if (copyOf(at.along) !== MIDDLE) return startPan(e)
+    if (tilting) return startTilt(e, { along: at.along - MIDDLE * repeat, across: at.across })
     const target = e.target as HTMLElement
     const handle = target.closest<HTMLElement>('[data-edge]')
     const body = target.closest<HTMLElement>('[data-section-id]')
@@ -207,8 +232,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
       onSelect(section.id)
       gesture.current = { mode: 'move', id: section.id, start: section, pattern, at, moved: false }
     } else {
-      const copy = copyOf(at.along)
-      gesture.current = { mode: 'draw', copy, from: { along: clamp(at.along - copy * repeat, 0, repeat), across: clamp(at.across, 0, 1) }, moved: false }
+      gesture.current = { mode: 'draw', copy: MIDDLE, from: { along: clamp(at.along - MIDDLE * repeat, 0, repeat), across: clamp(at.across, 0, 1) }, moved: false }
     }
   }
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -258,12 +282,12 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
     gesture.current = null
     setPanning(false)
     if (g?.mode === 'tilt') {
-      // A click without tilting clears the selection, as on the canvas
+      // A click without tilting picks the section under it, or clears the selection, as on the canvas
       if (g.moved && useTilt.getState().springBack) springToFlat()
-      else if (!g.moved) onSelect(undefined)
+      else if (!g.moved) onSelect(g.on && sectionAt(pattern, g.on)?.id)
       return
     }
-    // With tilting off a left drag pans instead, and a click still clears the selection
+    // A click where a drag would pan clears the selection
     if (g?.mode === 'pan' && g.button === 0 && !g.moved) onSelect(undefined)
     if (g?.mode !== 'draw') return
     setPreview(undefined)
@@ -281,31 +305,39 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   // A section deleted or undone away under the pointer never sees it leave
   const hovered = pattern.sections.some((s) => s.id === hover)
 
-  // The picked frame's image, placed by hand while the thread lies flat on it; every copy follows, one repeat apart
-  const solo = soloFrame !== undefined ? note.frames.at(soloFrame) : undefined
-  const placing = solo?.kind === 'image' && solo.aspect ? { frame: solo, aspect: solo.aspect } : undefined
-  const placed = placing && uprightBox(imageBox(placing.frame.place, placing.aspect, repeat, thread.widthMm, thread.direction), thread.direction)
+  // The current frame's image, handled on the middle repeat; every copy follows, one repeat apart
+  const current = frame !== undefined ? note.frames.at(frame) : undefined
+  const placing = current?.kind === 'image' && current.aspect ? { frame: current, aspect: current.aspect } : undefined
+  const inRepeat = placing && uprightBox(imageBox(placing.frame.place, placing.aspect, repeat, thread.widthMm, thread.direction), thread.direction)
+  // Repeat to strip, and back: the middle repeat starts one repeat along
+  const alongBy = (b: UprightBox, mm: number) => (vertical ? { ...b, y: b.y + mm } : { ...b, x: b.x + mm })
+  const placed = inRepeat && alongBy(inRepeat, MIDDLE * repeat)
   const placeImage = (next: UprightBox) => {
     if (!placing) return
+    const local = alongBy(next, -MIDDLE * repeat)
     updateNote(projectId, note.id, (n) => ({
       ...n,
-      frames: n.frames.map((f) => (f.id === placing.frame.id ? { ...f, place: placeOf(next, n.thread.widthMm, n.thread.direction) } : f)),
+      frames: n.frames.map((f) => (f.id === placing.frame.id ? { ...f, place: placeOf(local, n.thread.widthMm, n.thread.direction) } : f)),
     }))
   }
-  // Once let go, the box goes back to the copy that starts in the first repeat: the same image, one repeat on
+  // Once let go, the image is held by its copy that starts in the middle repeat: the same image, one repeat on
   const wrapImage = () => {
-    if (!placed) return
-    const along = vertical ? placed.y : placed.x
+    if (!inRepeat || !placed) return
+    const along = vertical ? inRepeat.y : inRepeat.x
     const wrapped = mod(along, repeat)
-    if (Math.abs(wrapped - along) > 1e-9) placeImage(vertical ? { ...placed, y: wrapped } : { ...placed, x: wrapped })
+    if (Math.abs(wrapped - along) > 1e-9) placeImage(alongBy(placed, wrapped - along))
+  }
+  const pointAt = (e: { clientX: number; clientY: number }) => {
+    const at = locate(e)
+    return vertical ? { x: at.across * thread.widthMm, y: at.along } : { x: at.along, y: at.across * thread.widthMm }
   }
 
   // A double-click on empty thread fills that whole gap, as Fill does: the section in line with it runs on, or new ones take its look
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('[data-section-id]')) return
     const at = locate(e)
-    const copy = copyOf(at.along)
-    const filled = fillGaps(pattern, thread.widthMm, { along: clamp(at.along - copy * repeat, 0, repeat), across: clamp(at.across, 0, 1) })
+    if (copyOf(at.along) !== MIDDLE) return
+    const filled = fillGaps(pattern, thread.widthMm, { along: clamp(at.along - MIDDLE * repeat, 0, repeat), across: clamp(at.across, 0, 1) })
     if (!filled) return
     write(filled.pattern)
     onSelect(filled.id)
@@ -314,20 +346,11 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   return (
     <div ref={box} className={cn('absolute inset-0 touch-none overflow-hidden', panning && 'cursor-grabbing')}
       onPointerDown={(e) => {
-        // Around the thread, a drag tilts it, as on the canvas, from where the tilt is heading (springing back on
-        // release unless the pad holds it); a middle-button drag pans, and so does any drag with tilting off
+        // Around the thread a drag pans, with either button; the thread tilts from the pad, or by dragging on it with Tilt on
         if (e.button !== 0 && e.button !== 1) return
         e.currentTarget.setPointerCapture(e.pointerId)
-        if (e.button === 1 || !tilting) {
-          gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, from: view, button: e.button, moved: false }
-          setPanning(true)
-          return
-        }
-        const s = useTilt.getState()
-        const start = s.source === 'drag' ? s.target : s.angle
-        const startSide = s.source === 'drag' ? s.targetX : s.angleX
-        gesture.current = { mode: 'tilt', startX: e.clientX, startY: e.clientY, start, startSide, moved: false }
-        setTilt({ source: 'drag', target: start, targetX: startSide })
+        setPickedImage(undefined)
+        startPan(e)
       }}
       onPointerMove={onPointerMove} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}
       onDoubleClick={(e) => { if (e.target === e.currentTarget) refit() }}>
@@ -339,15 +362,20 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
         role="group"
         aria-label="Thread pattern"
         data-pattern-view=""
-        className={cn('relative touch-none shadow-sm select-none', preview || !hovered ? 'cursor-crosshair' : 'cursor-move')}
+        className={cn('relative touch-none shadow-sm select-none', tilting ? 'cursor-grab' : preview || !hovered ? 'cursor-crosshair' : 'cursor-move')}
         style={{ width, height, transform: turned ? `rotateX(${angle}deg) rotateY(${angleX}deg)` : undefined }}
         // Moves and releases bubble up to the view's own handlers
         onPointerDown={onPointerDown}
         onDoubleClick={onDoubleClick}
       >
         <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: thread.backgroundColor, ...EMPTY }}>
-          <ThreadArt note={note} shown={shown} blends={mixes.map((m) => (soloFrame !== undefined ? 0 : m.blend))} fill={fill} />
+          <ThreadArt note={note} shown={shown} blends={mixes.map((m) => m.blend)} fill={fill} />
         </div>
+        {/* The copies either side, a little quieter than the repeat being edited */}
+        {[0, repeats - 1].map((k) => (
+          <div key={`copy-${k}`} aria-hidden="true" data-repeat-copy={k} className="pointer-events-none absolute bg-background/35"
+            style={vertical ? { left: 0, width, top: k * repeat * scale, height: repeat * scale } : { top: 0, height, left: k * repeat * scale, width: repeat * scale }} />
+        ))}
 
         <svg className="pointer-events-none absolute inset-0 overflow-visible" width={width} height={height} aria-hidden>
           <defs>
@@ -379,7 +407,8 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
           {preview && <rect {...place(preview.rect, preview.copy)} fill="none" className="stroke-primary" strokeWidth="2" strokeDasharray="5 3" />}
         </svg>
 
-        {Array.from({ length: repeats }, (_, k) => pattern.sections.map((s) => {
+        {!tilting && pattern.sections.map((s) => {
+          const k = MIDDLE
           const r = place(s, k)
           return (
             <div key={`hit-${k}-${s.id}`} data-section-id={s.id} data-copy={k} title={s.name} className="absolute"
@@ -388,16 +417,17 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
               {EDGES.map((edge) => <div key={edge} data-edge={edge} className={cn('absolute', isAlong(edge) ? alongCursor : acrossCursor)} style={edgeStyle(edge, vertical)} />)}
             </div>
           )
-        }))}
+        })}
 
         {placing && placed && (
-          <ImagePlacer box={placed} aspect={placing.aspect} scale={scale} onChange={placeImage} onDone={wrapImage}
-            others={Array.from({ length: repeats - 1 }, (_, k) => (vertical ? { x: 0, y: (k + 1) * repeat } : { x: (k + 1) * repeat, y: 0 }))} />
+          <ImagePlacer box={placed} aspect={placing.aspect} scale={scale} picked={pickedImage === placing.frame.id}
+            onPick={() => setPickedImage(placing.frame.id)} pointAt={pointAt} onChange={placeImage} onDone={wrapImage}
+            others={[-1, 1].map((k) => (vertical ? { x: 0, y: k * repeat } : { x: k * repeat, y: 0 }))} />
         )}
 
-        {/* Measurements on the first repeat, turning with the thread: the repeat and the selected section's length
+        {/* Measurements on the middle repeat, turning with the thread: the repeat and the selected section's length
             along it, either side; the thread's thickness and the section's width across it, at either end */}
-        <Measure side={vertical ? 'left' : 'top'} from={0} to={repeat * scale} label="Repeat">
+        <Measure side={vertical ? 'left' : 'top'} from={MIDDLE * repeat * scale} to={(MIDDLE + 1) * repeat * scale} label="Repeat">
           <ScrubField size="sm" className="w-[88px]" unit="mm" label="R" title="Length of one repeat of the pattern along the thread" value={repeat}
             min={REPEAT_LIMITS.min} max={REPEAT_LIMITS.max} step={ALONG_STEP} onChange={(v) => write(setRepeat(pattern, v))} />
         </Measure>
@@ -408,7 +438,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
         </Measure>
         {selected && (
           <>
-            <Measure side={vertical ? 'right' : 'bottom'} from={selected.startMm * scale} to={selected.endMm * scale} label="Section length" selected>
+            <Measure side={vertical ? 'right' : 'bottom'} from={(MIDDLE * repeat + selected.startMm) * scale} to={(MIDDLE * repeat + selected.endMm) * scale} label="Section length" selected>
               <ScrubField size="sm" className="w-[88px]" unit="mm" label="L" title="The selected section's length along the thread" value={selected.endMm - selected.startMm}
                 min={ALONG_STEP} max={repeat} step={ALONG_STEP} onChange={(v) => write(resizeEdge(pattern, selected.id, 'endMm', selected.startMm + v, false))} />
             </Measure>

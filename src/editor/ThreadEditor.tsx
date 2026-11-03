@@ -14,6 +14,7 @@ import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
 import { Drawer, Group, IconButton, Labeled, Panel, Section, SwitchField } from '../components/controls'
 import { canStepNote, useHistory } from '../lib/history'
+import { tiltForPosition } from '../lib/lens'
 import {
   addBlankSection,
   duplicateSection,
@@ -24,22 +25,24 @@ import {
   playbackTilt,
   preparePattern,
   removeSection,
+  sectionMix,
   sectionSlots,
   sectionView,
   setSectionLens,
   setSectionTrack,
+  timelineSection,
   updateSection,
 } from '../lib/pattern'
 import { PATTERN_PRESETS, presetPattern } from '../lib/patternPresets'
 import { checkPattern, warningCount, type PatternCheck } from '../lib/patternRules'
 import { stepNote, updateNote } from '../lib/store'
 import type { Note, Project, ThreadPattern, ThreadSection } from '../lib/types'
+import { setTilt, useTilt } from '../tilt/tilt'
 import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
 import { Explain, RidgeIcon, swatch } from './LensVisuals'
 import { PanelResizer } from './PanelResizer'
 import { PatternPicture } from './PatternPicture'
 import { PatternView } from './PatternView'
-import { BackgroundSettings } from './BackgroundSettings'
 import { FramePanel } from './FramePanel'
 import { TiltRail } from './TiltRail'
 import { TimelineBar } from './TimelineBar'
@@ -55,19 +58,10 @@ import { TimelineBar } from './TimelineBar'
 export function ThreadEditor({ project, note, onClose }: { project: Project; note: Note; onClose: () => void }) {
   const pattern = patternOf(note)
   const [selectedId, setSelectedId] = useState(() => pattern.sections.at(0)?.id)
-  // One thing picked at a time, as in Figma: a section on the thread or in the list, or a frame in the timeline
-  const [pickedFrameId, setPickedFrameId] = useState<string>()
-  const selectSection = (id: string | undefined) => {
-    setSelectedId(id)
-    setPickedFrameId(undefined)
-  }
-  const pickFrame = (id: string | undefined) => {
-    setPickedFrameId(id)
-    if (id) setSelectedId(undefined)
-  }
+  const selectSection = setSelectedId
   const [ridges, setRidges] = useState(false)
-  // Off, the thread lies flat so a frame can be worked on without it turning away (Keller)
-  const [tiltOn, setTiltOn] = useState(true)
+  // Off by default (Keller): the thread lies flat and a drag on it edits; the pad at the bottom left tilts it
+  const [tiltOn, setTiltOn] = useState(false)
   // Preview and Checks open one at a time, as an accordion, so the controls above always keep room
   const [info, setInfo] = useState<'preview' | 'checks'>()
   const openInfo = (part: 'preview' | 'checks') => (open: boolean) => setInfo(open ? part : undefined)
@@ -78,9 +72,20 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
   // A section undone away, or removed, is simply no longer selected
   const selected = pattern.sections.find((s) => s.id === selectedId)
   const selectedSectionId = selected?.id
-  // So is a frame deleted or undone away
-  const pickedIndex = note.frames.findIndex((f) => f.id === pickedFrameId)
-  const picked = pickedIndex < 0 ? undefined : note.frames[pickedIndex]
+  // The frame the timeline is on, for the section it follows (the selected one, else the first): the right panel
+  // shows it, and its image can be handled on the thread
+  const followed = timelineSection(note, selectedSectionId)
+  const currentIndex = useTilt((s) => sectionMix(note, followed, { x: s.angleX, y: s.angle }).current)
+  const current = note.frames.at(currentIndex) ?? note.frames[0]
+  /** Tilts to the middle of a frame, as a click on its clip does: the first strip of the followed section that shows it */
+  const showFrame = (i: number) => {
+    const lengths = note.frames.map((f) => f.length)
+    const strip = Math.max(0, followed.slots.indexOf(i))
+    const before = lengths.slice(0, strip).reduce((sum, l) => sum + l, 0)
+    const total = lengths.reduce((sum, l) => sum + l, 0)
+    const at = tiltForPosition(followed.lens, (before + (lengths.at(strip) ?? 0) / 2) / total)
+    setTilt({ source: 'slider', target: at.y, targetX: at.x })
+  }
   const canRemove = pattern.sections.length > 1
   const noteRef = { projectId: project.id, noteId: note.id }
   const checks = checkPattern(note)
@@ -112,8 +117,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return
       e.preventDefault()
       if (e.key === 'Escape') {
-        if (picked) setPickedFrameId(undefined)
-        else if (selectedSectionId) setSelectedId(undefined)
+        if (selectedSectionId) setSelectedId(undefined)
         else onClose()
       } else if (selectedSectionId && canRemove) {
         updateNote(project.id, note.id, (n) => ({ ...n, pattern: removeSection(patternOf(n), selectedSectionId) }))
@@ -122,7 +126,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
     }
     window.addEventListener('keydown', onKey, { capture: true })
     return () => window.removeEventListener('keydown', onKey, { capture: true })
-  }, [selectedSectionId, picked, canRemove, onClose, project.id, note.id, pattern])
+  }, [selectedSectionId, canRemove, onClose, project.id, note.id, pattern])
 
   // ⌘Z and ⇧⌘Z (or Ctrl+Y) undo and redo this banknote's steps only, caught before the canvas's project-wide undo
   useEffect(() => {
@@ -156,7 +160,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
 
       {/* The whole editor, behind the panels, as on the canvas; the thread fits between them, and fits again once turned */}
       <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={selectSection} ridges={ridges} tilting={tiltOn}
-        soloFrame={!tiltOn && picked ? pickedIndex : undefined}
+        frame={note.frames.indexOf(current)}
         limit={lens.viewDeg} room="top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[248px]" />
 
       <Panel className="absolute top-3 right-3 left-3 flex h-11 items-center gap-2 rounded-[calc(var(--radius)+0.375rem+1px)] pr-1.5 pl-1.5">
@@ -223,12 +227,10 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       <PanelResizer className="top-16" />
       <Panel className="absolute top-16 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          {/* The frame picked in the timeline: what it shows, and where its image sits in the repeat */}
-          {picked && (
-            <Group title={`Frame ${pickedIndex + 1}`}>
-              <FramePanel note={note} noteRef={noteRef} frame={picked} />
-            </Group>
-          )}
+          {/* The frame the timeline is on, always: where its image sits, and what it shows */}
+          <Group title={`Frame ${note.frames.indexOf(current) + 1}`}>
+            <FramePanel note={note} noteRef={noteRef} frame={current} index={note.frames.indexOf(current)} onShow={showFrame} />
+          </Group>
           {/* The selected section's frames; its length and width are edited beside the thread, its place by dragging it */}
           {selected && (
             <Group title={selected.name}>
@@ -255,9 +257,6 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
               <EffectSection key={pattern.mixed ? selectedSectionId : 'shared'} note={lensNote} set={setLens} printNote={note} preview={false} />
             </Group>
           )}
-          <Group title="Background">
-            <BackgroundSettings note={note} projectId={project.id} />
-          </Group>
         </div>
 
         {/* For information only, so fixed at the bottom under the controls, opening upwards one at a time */}
@@ -274,8 +273,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       </Panel>
 
       <TiltRail limit={lens.viewDeg} playback={{ projectId: project.id, tilt: playbackTilt(note), lens }} />
-      <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel sectionId={selectedSectionId}
-        pickedFrameId={picked?.id} onPickFrame={pickFrame} />
+      <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel sectionId={selectedSectionId} />
     </div>
   )
 }
