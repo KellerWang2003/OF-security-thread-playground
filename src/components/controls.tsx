@@ -298,8 +298,8 @@ const STRIP_FADE = 16
 /**
  * A side panel's part tabs (`PartTab`s), inside its `Tabs`: the strip scrolls sideways once there are more tabs than
  * fit, fades at an edge while more lie beyond, and keeps the open tab in sight (picking the watermark on the canvas
- * brings its tab round). The first pill's icon lines up with the panel's content and the banknote's name over it, its
- * fill reaching out past it.
+ * brings its tab round). The first pill's icon lines up with the panel's content under it, its fill reaching out past
+ * it.
  */
 export function TabStrip({ active, children }: { active: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)

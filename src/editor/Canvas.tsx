@@ -122,7 +122,8 @@ export function Canvas({
   /** The selected banknote shows flat with its watermark clear and its box to drag */
   placingWatermark?: boolean
   onExitPlacing?: () => void
-  onExport: () => void
+  /** Export, top right with the zoom controls; left out while the thread editor is open */
+  onExport?: () => void
   /** A click on a thread window opens it for editing */
   onEditWindow?: (noteId: string, windowId: string) => void
   /** A double-click on a thread, or the Edit thread button under the picked one, opens the thread editor; left out while it is open */
@@ -573,7 +574,7 @@ export function Canvas({
       </div>
 
       {current && size && (
-        // Top right, clear of the properties panel when one is open; Export floats here only without a selection
+        // Top right, clear of the properties panel when one is open: the zoom controls, then Export, always here
         // Its own pointer events, or the canvas captures the pointer and the buttons never get a click
         <div className={cn('absolute top-3 flex items-center gap-2', selected ? 'right-[calc(var(--panel-w)+20px)]' : 'right-3')} onPointerDown={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-0.5 rounded-lg border border-border/70 bg-background/85 p-0.5 shadow-panel backdrop-blur [&>[data-slot=button]]:rounded-[calc(var(--radius)-3px)]">
@@ -587,7 +588,7 @@ export function Canvas({
             <Maximize />
           </IconButton>
         </div>
-        {!selected && (
+        {onExport && (
           <Button className="shadow-panel" onClick={onExport}>
             <Share />
             Export

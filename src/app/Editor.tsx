@@ -240,7 +240,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
           </Button>
         </div>
       ) : (
-        <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} layer={shownLayer} onSelect={selectNote} onSelectLayer={selectLayer} onExitWindows={exitWindows} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} onExport={() => setExporting(true)}
+        <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} layer={shownLayer} onSelect={selectNote} onSelectLayer={selectLayer} onExitWindows={exitWindows} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} onExport={threadNote ? undefined : () => setExporting(true)}
           placingWatermark={placingWatermark} onExitPlacing={exitPlacing} onEditThread={threadNote ? undefined : editThread}
           onEditWindow={(noteId, windowId) => {
             selectLayer(noteId, 'thread')
@@ -265,7 +265,6 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
             <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
           )}
           {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} layer={shownLayer} onLayer={(next) => selectLayer(note.id, next)}
-            onExport={() => setExporting(true)}
             selectedWindowId={editingWindows ? selectedWindowId : undefined}
             onWindowSelect={(windowId) => {
               if (!windowId) return exitWindows()

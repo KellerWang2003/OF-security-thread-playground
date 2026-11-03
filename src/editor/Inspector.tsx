@@ -1,5 +1,5 @@
 import { reportError } from '../cloud/notices'
-import { Banknote, Columns2, Droplet, ImageUp, RectangleHorizontal, RectangleVertical, Rows2, Share, Shuffle, Trash2, TriangleAlert, X } from 'lucide-react'
+import { Banknote, Columns2, Droplet, ImageUp, RectangleHorizontal, RectangleVertical, Rows2, Shuffle, Trash2, TriangleAlert, X } from 'lucide-react'
 import { create } from 'zustand'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
@@ -32,11 +32,10 @@ type Change = (note: Note) => Note
  * time, so the panel never grows with features. Every control has a small label over it (`Labeled`) unless a word in
  * it or beside it already says what it is.
  */
-export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onWindowSelect, onExport, onPlaceWatermark, onRemoveWatermark }: {
+export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onWindowSelect, onPlaceWatermark, onRemoveWatermark }: {
   note: Note
   /** Picks a part of the banknote, as its row in the list does */
   onLayer: (layer: Layer) => void
-  onExport: () => void
   noteRef: NoteRef
   layer: Layer
   selectedWindowId?: string
@@ -87,23 +86,17 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
     <PanelResizer />
     <Panel className="absolute top-3 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-hidden">
       <Tabs value={layer} onValueChange={(next) => onLayer(next as Layer)} className="min-h-0 flex-1 gap-0">
-      {/* The header, as Figma's: the banknote, small since it is the one picked, with Export, the panel's main action;
-          then its parts as pill tabs with their icons from the list, scrolling sideways once there are more than fit */}
-      <div className="flex flex-col gap-2.5 border-b border-border px-4 pt-3 pb-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-xs font-medium text-muted-foreground">{note.name}</span>
-          <Button size="sm" onClick={onExport}><Share />Export</Button>
-        </div>
-        <div className="flex items-center gap-1">
-          <TabStrip active={layer}>
-            <PartTab value="note"><Banknote />Banknote</PartTab>
-            <PartTab value="thread">{thread.direction === 'vertical' ? <Columns2 /> : <Rows2 />}Thread</PartTab>
-            {note.watermark && <PartTab value="watermark"><Droplet />Watermark</PartTab>}
-          </TabStrip>
-          {layer === 'watermark' && note.watermark && (
-            <IconButton label="Remove watermark" size="icon-xs" className="-mr-1 shrink-0 text-muted-foreground" onClick={onRemoveWatermark}><Trash2 /></IconButton>
-          )}
-        </div>
+      {/* The banknote's parts as pill tabs at the very top, with their icons from the list, scrolling sideways once there
+          are more than fit. No header over them: Export is on the canvas, top right */}
+      <div className="flex items-center gap-1 border-b border-border px-4 pt-3 pb-2.5">
+        <TabStrip active={layer}>
+          <PartTab value="note"><Banknote />Banknote</PartTab>
+          <PartTab value="thread">{thread.direction === 'vertical' ? <Columns2 /> : <Rows2 />}Thread</PartTab>
+          {note.watermark && <PartTab value="watermark"><Droplet />Watermark</PartTab>}
+        </TabStrip>
+        {layer === 'watermark' && note.watermark && (
+          <IconButton label="Remove watermark" size="icon-xs" className="-mr-1 shrink-0 text-muted-foreground" onClick={onRemoveWatermark}><Trash2 /></IconButton>
+        )}
       </div>
 
       <TabsContent value="note" className="min-h-0 overflow-y-auto">
