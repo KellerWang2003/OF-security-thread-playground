@@ -13,9 +13,9 @@ import { cn } from '@/lib/utils'
 
 const round = (value: number) => Math.round(value * 100) / 100
 
-/** A floating panel over the canvas, a little see-through (Keller wants that kept); fields inside have solid fills instead */
+/** A floating panel over the canvas, see-through enough to show the banknotes under it (Keller); fields inside have solid fills instead */
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('rounded-lg border border-border/70 bg-background/95 shadow-panel backdrop-blur', className)}>{children}</div>
+  return <div className={cn('rounded-lg border border-border/70 bg-background/85 shadow-panel backdrop-blur', className)}>{children}</div>
 }
 
 /**
