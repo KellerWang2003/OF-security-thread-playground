@@ -35,12 +35,12 @@ export function PatternPicture({ note, pattern = note.pattern, width = 56, heigh
       <defs>
         {sections.map((s, i) => (
           <pattern key={s.section.id} id={`${uid}-${i}`} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform={`rotate(${-s.angle})`}>
-            <line x1="0" y1="2" x2="4" y2="2" stroke="currentColor" strokeWidth="1.1" />
+            <line x1="0" y1="2" x2="4" y2="2" stroke="currentColor" strokeWidth="1.3" />
           </pattern>
         ))}
       </defs>
       {Array.from({ length: repeats }, (_, k) => sections.map((s, i) => (
-        <rect key={`${k}-${s.section.id}`} {...box(s.section, k)} fill={`url(#${uid}-${i})`} className="text-foreground/55 stroke-background" strokeWidth="1" />
+        <rect key={`${k}-${s.section.id}`} {...box(s.section, k)} fill={`url(#${uid}-${i})`} className="text-foreground/75 stroke-background" strokeWidth="1" />
       )))}
     </svg>
   )

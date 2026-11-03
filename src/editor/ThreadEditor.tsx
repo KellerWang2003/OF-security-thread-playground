@@ -38,7 +38,7 @@ import { PATTERN_PRESETS, presetPattern } from '../lib/patternPresets'
 import { checkPattern, warningCount, type PatternCheck } from '../lib/patternRules'
 import { stepNote, updateNote } from '../lib/store'
 import type { Note, Project, ThreadPattern, ThreadSection } from '../lib/types'
-import { EffectSection, LensMenu, type SetLens } from './EffectSection'
+import { EffectSection, LensMenu, ThreadPrint, type SetLens } from './EffectSection'
 import { Explain, RidgeIcon, swatch } from './LensVisuals'
 import { PanelResizer } from './PanelResizer'
 import { PatternPicture } from './PatternPicture'
@@ -49,8 +49,9 @@ import { TimelineBar } from './TimelineBar'
 /**
  * One banknote's thread pattern, full screen. Top: back, the banknote, Mixed angles, the repeat and undo. Left: the
  * presets and the sections. Middle: the thread magnified, where sections are drawn, moved and resized. Right: the
- * selected section's area and frames, the lens (the section's own with mixed angles, otherwise the shared one) and
- * the rule checks. Bottom: the tilt pad and the playback bar, as on the canvas.
+ * selected section's area and frames, the lens (the section's own with mixed angles, otherwise the shared one; with
+ * mixed angles and nothing selected, the whole print) and the rule checks. Bottom: the tilt pad and the playback
+ * bar, as on the canvas.
  */
 export function ThreadEditor({ project, note, onClose }: { project: Project; note: Note; onClose: () => void }) {
   const pattern = patternOf(note)
@@ -123,7 +124,8 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
   }, [project.id, note.id])
 
   // The lens the right panel edits: the selected section as the lens sees it (its strips as frames, its own lens
-  // with mixed angles), or the banknote's own; with mixed angles every change lands on that section only
+  // with mixed angles), or the banknote's own; with mixed angles every change lands on that section only, and with
+  // nothing selected the panel shows the whole print instead
   const lensNote = selected ? sectionView(note, selected) : pattern.mixed ? undefined : note
   const setLens: SetLens = (patch) =>
     pattern.mixed && selectedSectionId
@@ -173,7 +175,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
                   edit(() => next)
                   setSelectedId(next.sections.at(0)?.id)
                 }}>
-                <PatternPicture note={note} pattern={presetPattern(note, preset.value)} width={vertical ? 20 : 72} height={vertical ? 40 : 20} />
+                <PatternPicture note={note} pattern={presetPattern(note, preset.value)} width={vertical ? 40 : 84} height={vertical ? 52 : 32} />
                 {preset.label}
               </Button>
             ))}
@@ -191,7 +193,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       <Panel className="absolute top-16 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-y-auto">
         {selected && (
           <Group title={selected.name}>
-            <Section nested title="Area">
+            <Section nested title="Area" action={<span className="text-[11px] text-muted-foreground">mm</span>}>
               <AreaFields section={selected} repeatMm={pattern.repeatMm} widthMm={note.thread.widthMm} vertical={vertical}
                 onChange={(edge, value) => edit((n) => resizeEdge(patternOf(n), selected.id, edge, value, false))} />
             </Section>
@@ -205,7 +207,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
             </Section>
           </Group>
         )}
-        {lensNote && (
+        {lensNote ? (
           <Group title="Lens" action={
             <div className="flex items-center gap-1">
               {!pattern.mixed && <span className="text-[11px] text-muted-foreground" title="Mixed angles is off: every section plays this lens">Shared</span>}
@@ -213,6 +215,13 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
             </div>
           }>
             <EffectSection key={pattern.mixed ? selectedSectionId : 'shared'} note={lensNote} set={setLens} printNote={note} />
+          </Group>
+        ) : (
+          // Mixed angles with nothing selected: no one lens to edit, so the print of them all together
+          <Group title="Lens" action={<span className="pr-1.5 text-[11px] text-muted-foreground" title="Mixed angles is on: each section plays its own lens">Mixed</span>}>
+            <Section nested>
+              <ThreadPrint note={note} />
+            </Section>
           </Group>
         )}
         <div ref={checksRef}>
@@ -297,7 +306,10 @@ function SectionList({ note, selectedId, onSelect, onAdd, onDuplicate, onRemove,
   )
 }
 
-/** The selected section's area: along the repeat from its start, and across from the thread's left or top edge, in mm */
+/**
+ * The selected section's area: along the repeat from its start, and across from the thread's left or top edge, in
+ * mm. The unit sits once on the Area title: in a narrow panel a unit in every field left too little room for values.
+ */
 function AreaFields({ section, repeatMm, widthMm, vertical, onChange }: {
   section: ThreadSection
   repeatMm: number
@@ -306,15 +318,15 @@ function AreaFields({ section, repeatMm, widthMm, vertical, onChange }: {
   onChange: (edge: Edge, value: number) => void
 }) {
   const across = (edge: 'acrossStart' | 'acrossEnd', label: string, title: string) => (
-    <ScrubField label={label} title={title} value={section[edge] * widthMm} min={0} max={widthMm} step={widthMm / 12} unit="mm"
+    <ScrubField label={label} title={title} value={section[edge] * widthMm} min={0} max={widthMm} step={widthMm / 12}
       onChange={(mm) => onChange(edge, mm / widthMm)} />
   )
   return (
     <div className="grid grid-cols-2 gap-2">
       <ScrubField label="Start" title="Where the section starts, from the start of the repeat" value={section.startMm} min={0} max={repeatMm}
-        step={ALONG_STEP} unit="mm" onChange={(mm) => onChange('startMm', mm)} />
+        step={ALONG_STEP} onChange={(mm) => onChange('startMm', mm)} />
       <ScrubField label="End" title="Where the section ends, from the start of the repeat" value={section.endMm} min={0} max={repeatMm}
-        step={ALONG_STEP} unit="mm" onChange={(mm) => onChange('endMm', mm)} />
+        step={ALONG_STEP} onChange={(mm) => onChange('endMm', mm)} />
       {vertical ? across('acrossStart', 'Left', "Left edge, from the thread's left edge") : across('acrossStart', 'Top', "Top edge, from the thread's top edge")}
       {vertical ? across('acrossEnd', 'Right', "Right edge, from the thread's left edge") : across('acrossEnd', 'Bottom', "Bottom edge, from the thread's top edge")}
     </div>
@@ -330,8 +342,9 @@ function TrackEditor({ note, section, onChange }: { note: Note; section: ThreadS
         <DropdownMenu key={strip}>
           <DropdownMenuTrigger render={
             <Button variant="outline" size="sm" aria-label={`Strip ${strip + 1}: frame ${frame + 1}`}
-              className="min-w-0 flex-1 px-0 tabular-nums"
-              style={{ flexGrow: note.frames[strip]?.length ?? 1, backgroundColor: `color-mix(in oklch, ${swatch(note, frame)} 35%, var(--background))` }} />
+              className="min-w-0 flex-1 px-0 tabular-nums hover:border-foreground/30 aria-expanded:border-foreground/30"
+              // Tinted like the frame strip and frame rows of the lens: mixing towards the background shifted the hue
+              style={{ flexGrow: note.frames[strip]?.length ?? 1, backgroundColor: `color-mix(in oklch, ${swatch(note, frame)} 35%, transparent)` }} />
           }>
             {frame + 1}
           </DropdownMenuTrigger>

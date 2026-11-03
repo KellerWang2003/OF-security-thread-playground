@@ -86,6 +86,9 @@ describe('thread editor', () => {
     // Select a lane in the list and delete it
     await user.click(within(editor).getByRole('button', { name: 'Lane ↕', exact: true }))
     expect((screen.getByTitle("Left edge, from the thread's left edge").querySelector('input')!).value).toBe('2')
+    // The unit sits once on the Area title, leaving the narrow fields room for their values
+    expect(screen.getByTitle("Left edge, from the thread's left edge").textContent).toBe('Left')
+    expect(within(editor).getByRole('heading', { name: 'Area' }).parentElement!.textContent).toBe('Areamm')
     await user.keyboard('{Delete}')
     expect(sections().map((s) => s.name)).toEqual(['Lane ↔'])
 
@@ -174,6 +177,31 @@ describe('thread editor', () => {
     await user.click(within(editor).getByRole('button', { name: 'Every frame in order', exact: true }))
     expect(sections()[2].track).toBeUndefined()
     expect(within(editor).queryByRole('button', { name: 'Corner rests on 2, the others on 1', exact: true })).toBeNull()
+  })
+
+  it('keeps a lens in the panel with nothing selected: the shared one, or with mixed angles the whole print', async () => {
+    const user = await openDemo('thread-deselect-ui-test')
+    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    const editor = screen.getByRole('region', { name: 'Thread editor' })
+    await user.keyboard('{Escape}')
+    expect(within(editor).queryByRole('heading', { name: 'Whole thread' })).toBeNull()
+    expect(within(editor).getByText('Shared')).toBeDefined()
+    expect(within(editor).getByRole('button', { name: 'Tilt map' })).toBeDefined()
+
+    // Mixed angles: no one lens to show, so the print of every section together
+    await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
+    await user.keyboard('{Escape}')
+    expect(within(editor).queryByRole('heading', { name: 'Lane ↔' })).toBeNull()
+    expect(within(editor).getByText('Mixed')).toBeDefined()
+    expect(within(editor).getByRole('img', { name: 'Print' }).querySelector('canvas')).not.toBeNull()
+    expect(within(editor).queryByRole('button', { name: 'Tilt map' })).toBeNull()
+    expect(within(editor).getByTitle('Ridges drawn across the thread, magnified: real ones are far finer')).toBeDefined()
+
+    // Selecting a section brings its own lens back
+    await user.click(within(editor).getByRole('button', { name: 'Lane ↕', exact: true }))
+    expect(within(editor).getByRole('button', { name: 'Tilt map' })).toBeDefined()
+    expect(within(editor).queryByText('Mixed')).toBeNull()
+    expect(within(editor).queryByRole('img', { name: 'Print' })).toBeNull()
   })
 
   it('previews where the print lands: an offset to type or shuffle, and the windows that miss a tilt there', async () => {

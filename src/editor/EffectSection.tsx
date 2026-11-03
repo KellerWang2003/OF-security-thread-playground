@@ -487,12 +487,37 @@ function TiltMap({ note, lens, printNote }: { note: Note; lens: LensState; print
           )}
         </div>
       </Explain>
-      {print && (
-        <div className="grid grid-cols-2 gap-2">
-          <ScrubField label="Ridges" title="Ridges drawn across the thread, magnified: real ones are far finer" value={ridges}
-            min={PRINT_RIDGES.min} max={PRINT_RIDGES.max} onChange={(v) => setPrintView({ ridges: v })} />
+      {print && <RidgesField ridges={ridges} />}
+    </div>
+  )
+}
+
+/** How many ridges the print draws across the thread; remembered per browser, like the view */
+function RidgesField({ ridges }: { ridges: number }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <ScrubField label="Ridges" title="Ridges drawn across the thread, magnified: real ones are far finer" value={ridges}
+        min={PRINT_RIDGES.min} max={PRINT_RIDGES.max} onChange={(v) => setPrintView({ ridges: v })} />
+    </div>
+  )
+}
+
+/**
+ * The whole thread's print, every section cut under its own ridges: what the thread editor shows in place of a lens
+ * while angles are mixed and no section is selected.
+ */
+export function ThreadPrint({ note }: { note: Note }) {
+  const box = useRef<HTMLDivElement>(null)
+  const ridges = usePrintView((s) => s.ridges)
+  const size = useElementSize(box)
+  return (
+    <div className="flex flex-col gap-2">
+      <Explain caption="The print, magnified: each section's frames cut into strips under its own ridges. The lit strips show at this tilt.">
+        <div ref={box} role="img" aria-label="Print" className="relative aspect-square w-full overflow-hidden rounded-md border border-border/60 bg-muted/60">
+          {size && <PrintCanvas note={note} ridges={ridges} sizePx={size.width} />}
         </div>
-      )}
+      </Explain>
+      <RidgesField ridges={ridges} />
     </div>
   )
 }
