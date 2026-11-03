@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode 
 import { cn } from '@/lib/utils'
 import { IconButton, Labeled, ScrubField } from '../components/controls'
 import { ThreadArt } from '../components/NoteView'
+import { imageBox, placeOf, uprightBox, type UprightBox } from '../lib/artwork'
 import { clamp } from '../lib/frames'
 import { lensMix } from '../lib/lens'
 import { THREAD_WIDTH } from '../lib/notes'
@@ -11,6 +12,7 @@ import {
   REPEAT_LIMITS,
   drawRect,
   fillGaps,
+  mod,
   moveRect,
   patternMix,
   patternOf,
@@ -25,6 +27,7 @@ import {
 import { updateNote } from '../lib/store'
 import type { Note, ThreadPattern, ThreadSection } from '../lib/types'
 import { setTilt, springToFlat, useTilt } from '../tilt/tilt'
+import { ImagePlacer } from './ImagePlacer'
 import { useElementSize } from './useElementSize'
 
 /** Px per mm the view never goes past, so a short repeat doesn't blow up into a blur */
@@ -278,6 +281,25 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   // A section deleted or undone away under the pointer never sees it leave
   const hovered = pattern.sections.some((s) => s.id === hover)
 
+  // The picked frame's image, placed by hand while the thread lies flat on it; every copy follows, one repeat apart
+  const solo = soloFrame !== undefined ? note.frames.at(soloFrame) : undefined
+  const placing = solo?.kind === 'image' && solo.aspect ? { frame: solo, aspect: solo.aspect } : undefined
+  const placed = placing && uprightBox(imageBox(placing.frame.place, placing.aspect, repeat, thread.widthMm, thread.direction), thread.direction)
+  const placeImage = (next: UprightBox) => {
+    if (!placing) return
+    updateNote(projectId, note.id, (n) => ({
+      ...n,
+      frames: n.frames.map((f) => (f.id === placing.frame.id ? { ...f, place: placeOf(next, n.thread.widthMm, n.thread.direction) } : f)),
+    }))
+  }
+  // Once let go, the box goes back to the copy that starts in the first repeat: the same image, one repeat on
+  const wrapImage = () => {
+    if (!placed) return
+    const along = vertical ? placed.y : placed.x
+    const wrapped = mod(along, repeat)
+    if (Math.abs(wrapped - along) > 1e-9) placeImage(vertical ? { ...placed, y: wrapped } : { ...placed, x: wrapped })
+  }
+
   // A double-click on empty thread fills that whole gap, as Fill does: the section in line with it runs on, or new ones take its look
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('[data-section-id]')) return
@@ -367,6 +389,11 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
             </div>
           )
         }))}
+
+        {placing && placed && (
+          <ImagePlacer box={placed} aspect={placing.aspect} scale={scale} onChange={placeImage} onDone={wrapImage}
+            others={Array.from({ length: repeats - 1 }, (_, k) => (vertical ? { x: 0, y: (k + 1) * repeat } : { x: (k + 1) * repeat, y: 0 }))} />
+        )}
 
         {/* Measurements on the first repeat, turning with the thread: the repeat and the selected section's length
             along it, either side; the thread's thickness and the section's width across it, at either end */}

@@ -8,21 +8,43 @@ export const alongOf = (acrossMm: number, aspect: number, direction: ThreadSetti
 /** Steps for placing an image on the thread, mm: finer than the window and watermark editors, as a thread is a few mm thick */
 export const IMAGE_STEP = 0.1
 
-/** The image's top-left corner in the repeat and its width, mm, upright on the banknote as it is drawn */
-export function uprightBox(box: ImageBox, direction: ThreadSettings['direction']) {
+/** An image as it is drawn, upright on the banknote: its top-left corner in the repeat and its size, mm */
+export interface UprightBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** The image's box upright: the repeat runs down a vertical thread and across a horizontal one */
+export function uprightBox(box: ImageBox, direction: ThreadSettings['direction']): UprightBox {
   return direction === 'vertical'
     ? { x: box.across, y: box.along, width: box.acrossSize, height: box.alongSize }
     : { x: box.along, y: box.across, width: box.alongSize, height: box.acrossSize }
 }
 
 /** The place an upright box (mm, in the repeat) gives an image on a thread `thicknessMm` thick */
-export function placeOf(upright: { x: number; y: number; width: number; height: number }, thicknessMm: number, direction: ThreadSettings['direction']) {
+export function placeOf(upright: UprightBox, thicknessMm: number, direction: ThreadSettings['direction']): ImagePlace {
   const vertical = direction === 'vertical'
   return {
     alongMm: vertical ? upright.y : upright.x,
     across: (vertical ? upright.x : upright.y) / thicknessMm,
     size: (vertical ? upright.width : upright.height) / thicknessMm,
   }
+}
+
+/** To the image step, without float noise */
+export const snapImage = (mm: number) => Math.round(Math.round(mm / IMAGE_STEP) * IMAGE_STEP * 1000) / 1000
+
+/** The box resized from one corner, the opposite corner staying put and the image keeping its proportions (`aspect`, height ÷ width) */
+export function dragImageCorner(box: UprightBox, corner: 'nw' | 'ne' | 'sw' | 'se', dx: number, dy: number, aspect: number): UprightBox {
+  const east = corner[1] === 'e', south = corner[0] === 's'
+  // Whichever way the corner is pulled further sets the size
+  const fromX = box.width + (east ? dx : -dx), fromY = (box.height + (south ? dy : -dy)) / aspect
+  const pulled = Math.abs(fromX - box.width) >= Math.abs(fromY - box.width) ? fromX : fromY
+  const width = Math.max(IMAGE_STEP, snapImage(pulled))
+  const height = width * aspect
+  return { width, height, x: east ? box.x : box.x + box.width - width, y: south ? box.y : box.y + box.height - height }
 }
 
 /** An image's box in one repeat, mm: its near end along the repeat, its near edge across the thread, and its size both ways */

@@ -584,6 +584,25 @@ describe('thread editor', () => {
     expect(strip().element.querySelectorAll('img').length).toBeGreaterThan(0)
     act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
 
+    // ...and the image has a box to drag there, as the watermark does, its copies in the other repeats following
+    const { scale } = strip()
+    const placer = () => strip().element.querySelector<HTMLElement>('[data-image-placer]')!
+    expect(strip().element.querySelectorAll('[data-image-copy]')).toHaveLength(2)
+    const dragBy = (target: HTMLElement, dx: number, dy: number) => {
+      fireEvent.pointerDown(target, { button: 0, buttons: 1, clientX: 0, clientY: 0, pointerId: 1 })
+      fireEvent.pointerMove(target, { buttons: 1, clientX: dx * scale, clientY: dy * scale, pointerId: 1 })
+      fireEvent.pointerUp(target, { button: 0, clientX: dx * scale, clientY: dy * scale, pointerId: 1 })
+    }
+    // Fitted it sits 1 mm into the repeat: 0.5 mm right and 2 mm down puts it 3 mm in
+    dragBy(placer(), 0.5, 2)
+    expect(note().frames[1].place).toEqual({ alongMm: 3, across: 0.125, size: 1 })
+    // Past the repeat's end it carries on into the next, so let go it is held by the copy that starts in the first repeat
+    dragBy(placer(), 0, 2)
+    expect(note().frames[1].place).toEqual({ alongMm: 1, across: 0.125, size: 1 })
+    // A corner resizes it, keeping its proportions and the opposite corner
+    dragBy(placer().querySelector<HTMLElement>('[data-corner="se"]')!, -1, 0)
+    expect(note().frames[1].place).toEqual({ alongMm: 1, across: 0.125, size: 0.75 })
+
     // Escape lets go of the frame first
     await user.keyboard('{Escape}')
     expect(within(editor).queryByRole('heading', { name: 'Frame 2' })).toBeNull()
