@@ -13,7 +13,8 @@ const imageName = (file: File) => file.name.replace(/\.[^.]+$/, '')
 
 /**
  * Adds uploaded images as frames, up to the 5-frame limit. Uploading two or more images while the thread
- * still holds only colour frames replaces those placeholders. Returns how many files did not fit.
+ * still holds only colour frames replaces those placeholders, each image taking one's place (and id, so
+ * section tracks keep their story). Returns how many files did not fit.
  */
 export async function addImageFrames({ projectId, noteId }: NoteRef, files: File[]) {
   const note = findNote(projectId, noteId)
@@ -23,8 +24,8 @@ export async function addImageFrames({ projectId, noteId }: NoteRef, files: File
   const room = replacePlaceholders ? MAX_FRAMES : MAX_FRAMES - note.frames.length
   const picked = images.slice(0, room)
   const added: Frame[] = await Promise.all(
-    picked.map(async (file) => ({
-      id: crypto.randomUUID(),
+    picked.map(async (file, i) => ({
+      id: (replacePlaceholders ? note.frames.at(i)?.id : undefined) ?? crypto.randomUUID(),
       kind: 'image' as const,
       color: '#ffffff',
       imageId: await storeImage(file),
