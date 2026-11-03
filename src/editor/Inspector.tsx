@@ -83,11 +83,12 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
 
   return (
     <>
-    <PanelResizer />
-    <Panel className="absolute top-3 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-hidden">
+    {/* Under the canvas's corner bar (zoom and Export), at the height Thread Studio's panel starts */}
+    <PanelResizer className="top-16" />
+    <Panel className="absolute top-16 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-hidden">
       <Tabs value={layer} onValueChange={(next) => onLayer(next as Layer)} className="min-h-0 flex-1 gap-0">
       {/* The banknote's parts as pill tabs at the very top, with their icons from the list, scrolling sideways once there
-          are more than fit. No header over them: Export is on the canvas, top right */}
+          are more than fit. No header over them: Export is in the corner bar above the panel */}
       <div className="flex items-center gap-1 border-b border-border px-4 pt-3 pb-2.5">
         <TabStrip active={layer}>
           <PartTab value="note"><Banknote />Banknote</PartTab>

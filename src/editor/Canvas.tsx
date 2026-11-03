@@ -3,7 +3,7 @@ import { Maximize, Minus, Plus, Share } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { IconButton } from '../components/controls'
+import { IconButton, Panel } from '../components/controls'
 import { NoteView } from '../components/NoteView'
 import { clamp } from '../lib/frames'
 import { lensState } from '../lib/lens'
@@ -122,7 +122,7 @@ export function Canvas({
   /** The selected banknote shows flat with its watermark clear and its box to drag */
   placingWatermark?: boolean
   onExitPlacing?: () => void
-  /** Export, top right with the zoom controls; left out while the thread editor is open */
+  /** Export, at the end of the corner bar after the zoom controls; left out while the thread editor is open */
   onExport?: () => void
   /** A click on a thread window opens it for editing */
   onEditWindow?: (noteId: string, windowId: string) => void
@@ -574,26 +574,27 @@ export function Canvas({
       </div>
 
       {current && size && (
-        // Top right, clear of the properties panel when one is open: the zoom controls, then Export, always here
+        // The corner bar, built like Thread Studio's top bar: fixed top right, as wide as the properties panel that
+        // opens under it, with the zoom controls, then Export, in the same place whatever is selected.
         // Its own pointer events, or the canvas captures the pointer and the buttons never get a click
-        <div className={cn('absolute top-3 flex items-center gap-2', selected ? 'right-[calc(var(--panel-w)+20px)]' : 'right-3')} onPointerDown={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-0.5 rounded-lg border border-border/70 bg-background/85 p-0.5 shadow-panel backdrop-blur [&>[data-slot=button]]:rounded-[calc(var(--radius)-3px)]">
-          <IconButton label="Zoom out" onClick={() => zoomAround(1 / 1.25, size.width / 2, size.height / 2)}>
-            <Minus />
-          </IconButton>
-          <IconButton label="Zoom in" onClick={() => zoomAround(1.25, size.width / 2, size.height / 2)}>
-            <Plus />
-          </IconButton>
-          <IconButton label="Fit all notes" onClick={() => jumpTo(fitView(notes, size))}>
-            <Maximize />
-          </IconButton>
-        </div>
-        {onExport && (
-          <Button className="shadow-panel" onClick={onExport}>
-            <Share />
-            Export
-          </Button>
-        )}
+        <div className="absolute top-3 right-3 w-(--panel-w)" onPointerDown={(e) => e.stopPropagation()}>
+          <Panel className="flex h-11 items-center gap-0.5 rounded-[calc(var(--radius)+0.375rem+1px)] pr-1.5 pl-1.5">
+            <IconButton className="rounded-lg" label="Zoom out" onClick={() => zoomAround(1 / 1.25, size.width / 2, size.height / 2)}>
+              <Minus />
+            </IconButton>
+            <IconButton className="rounded-lg" label="Zoom in" onClick={() => zoomAround(1.25, size.width / 2, size.height / 2)}>
+              <Plus />
+            </IconButton>
+            <IconButton className="rounded-lg" label="Fit all notes" onClick={() => jumpTo(fitView(notes, size))}>
+              <Maximize />
+            </IconButton>
+            {onExport && (
+              <Button size="sm" className="ml-auto" onClick={onExport}>
+                <Share />
+                Export
+              </Button>
+            )}
+          </Panel>
         </div>
       )}
     </div>
