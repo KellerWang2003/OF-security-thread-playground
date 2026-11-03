@@ -60,6 +60,8 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 const note = (): Note => useProjects.getState().demoPreview!.notes[0]
 /** One of Thread Studio's right panel tabs: Thread or Frames */
 const tab = (editor: HTMLElement, name: 'Thread' | 'Frames') => within(editor).getByRole('tab', { name })
+/** Whether a section is the selected one, by its row in the list (its strips only show once there are two or more) */
+const picked = (editor: HTMLElement, name: string) => within(editor).getByRole('button', { name, exact: true }).getAttribute('aria-pressed') === 'true'
 const sections = () => note().pattern!.sections
 
 async function openDemo(workspace: string) {
@@ -263,7 +265,9 @@ describe('thread editor', () => {
     const row = within(within(editor).getByRole('button', { name: 'Lane ↕', exact: true }).closest('li')!)
     await user.click(row.getByRole('button', { name: 'Delete', exact: true }))
     expect(sections().map((s) => s.name)).toEqual(['Lane ↔'])
-    expect(within(editor).getByRole('heading', { name: 'Lane ↔' })).toBeDefined()
+    expect(picked(editor, 'Lane ↔')).toBe(true)
+    // With one section left there's nothing to tell apart: its strips go, the timeline's order says it all
+    expect(within(editor).queryByRole('heading', { name: 'Strips' })).toBeNull()
   })
 
   it('fills the gap a deleted section leaves, from the No gaps check or with a double-click on it', async () => {
@@ -304,7 +308,7 @@ describe('thread editor', () => {
     await user.click(within(editor).getByRole('button', { name: 'Undo', exact: true }))
     fireEvent.doubleClick(strip().element, at(1, 0.8))
     expect(sections()).toEqual([{ ...side, acrossEnd: 1 }])
-    expect(within(editor).getByRole('heading', { name: 'Lane ↔' })).toBeDefined()
+    expect(picked(editor, 'Lane ↔')).toBe(true)
     // On a section, a double-click adds nothing
     fireEvent.doubleClick(strip().element.querySelector(`[data-section-id="${side.id}"][data-copy="1"]`)!, at(1, 0.2))
     expect(sections()).toHaveLength(1)
@@ -438,7 +442,8 @@ describe('thread editor', () => {
       // A preset never switches Mixed angles off
       expect(note().pattern!.mixed).toBe(true)
       // The first section is selected, and only its edges on the middle repeat take a drag; the copies either side follow
-      expect(within(editor).getByRole('heading', { name: names[0] })).toBeDefined()
+      expect(picked(editor, names[0])).toBe(true)
+      expect(!!within(editor).queryByRole('heading', { name: 'Strips' })).toBe(names.length > 1)
       expect(strip().element.querySelectorAll('[data-section-id]')).toHaveLength(3 * names.length)
       expect(strip().element.querySelectorAll('[data-edge]')).toHaveLength(4)
     }
@@ -592,8 +597,9 @@ describe('thread editor', () => {
     // Thread is the panel's tab at first, and a frame changing from elsewhere leaves it there; a click on the thread
     // turns to Frames
     expect(tab(editor, 'Thread').getAttribute('aria-selected')).toBe('true')
-    // Its strips are Strips there, so only the next tab is called Frames
-    expect(within(editor).getByRole('heading', { name: 'Strips' })).toBeDefined()
+    // With one section the Thread tab has no strips to pick (the timeline's order says it all), and only the next tab
+    // is called Frames
+    expect(within(editor).queryByRole('heading', { name: 'Strips' })).toBeNull()
     expect(within(editor).queryByRole('heading', { name: 'Frames' })).toBeNull()
     expect(within(editor).queryByRole('button', { name: 'Frame 2', exact: true })).toBeNull()
     act(() => setTilt({ source: 'slider', angle: 20, target: 20, angleX: 0, targetX: 0 }))

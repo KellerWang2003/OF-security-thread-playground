@@ -251,8 +251,9 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
         </div>
 
         <TabsContent value="thread" className="min-h-0 overflow-y-auto">
-          {/* The selected section's frames; its size comes from its edges on the thread */}
-          {selected && (
+          {/* The selected section's strips, only once there are sections to tell apart: with one, the timeline's order
+              says it all (Keller); its size comes from its edges on the thread */}
+          {selected && pattern.sections.length > 1 && (
             <Group title={selected.name}>
               <Section nested title="Strips" action={
                 <IconButton label="Every frame in order" size="icon-xs" disabled={isIdentity(sectionSlots(note.frames, selected))}
