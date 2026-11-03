@@ -384,7 +384,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, rid
         )}
 
         {/* Measurements on the middle repeat, turning with the thread: the repeat along it, the thickness across it */}
-        <Measure side={vertical ? 'left' : 'top'} from={MIDDLE * repeat * scale} to={(MIDDLE + 1) * repeat * scale} label="Repeat">
+        <Measure side={vertical ? 'left' : 'top'} from={MIDDLE * repeat * scale} to={(MIDDLE + 1) * repeat * scale} label="Repeat every">
           <LengthField size="sm" className="w-[88px]" label="R" title="Length of one repeat of the pattern along the thread" value={repeat}
             min={REPEAT_LIMITS.min} max={REPEAT_LIMITS.max} step={ALONG_STEP} onChange={(v) => write(setRepeat(pattern, v))} />
         </Measure>
