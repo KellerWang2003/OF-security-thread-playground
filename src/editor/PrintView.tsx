@@ -34,7 +34,7 @@ export function PrintCanvas({ note, ridges, sizePx }: { note: Note; ridges: numb
   const images = useFrameImages(note)
   const prepared = preparePattern(note)
   // The strip under each section's ridges now: the only part of a tilt that changes the picture
-  const current = useTilt((s) => patternMix(note, framesTiltOf(s)).map((m) => m.slot).join(','))
+  const current = useTilt((s) => patternMix(note, framesTiltOf(s, note.id)).map((m) => m.slot).join(','))
   const { thread, frames } = note
   const vertical = thread.direction === 'vertical'
   const { repeatMm } = prepared.pattern

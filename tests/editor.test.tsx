@@ -249,9 +249,9 @@ describe('username workspace editor', () => {
     }
     expect(open()).toBe('Thread')
     // Tilting by hand hands the frames back to the tilt, and the timeline follows it again
-    expect(useTilt.getState().frameTilt).toBeDefined()
+    expect(useTilt.getState().frameTilts[note().id]).toBeDefined()
     act(() => setTilt({ source: 'drag', target: 10 }))
-    expect(useTilt.getState().frameTilt).toBeUndefined()
+    expect(useTilt.getState().frameTilts[note().id]).toBeUndefined()
     act(() => setTilt({ source: 'slider', angle: 0, target: 0, angleX: 0, targetX: 0 }))
 
     // A drag along the track moves a frame in the order, the others sliding aside while it goes
@@ -287,7 +287,7 @@ describe('username workspace editor', () => {
     const track = clip(a).parentElement!
     fireEvent.pointerDown(track, { button: 0, buttons: 1, clientX: 30, pointerId: 1 })
     fireEvent.pointerUp(track, { button: 0, clientX: 30, pointerId: 1 })
-    const scrubbed = useTilt.getState().frameTilt
+    const scrubbed = useTilt.getState().frameTilts[note().id]
     expect(scrubbed).toBeDefined()
     expect(tilted()).toEqual([0, 0, 0, 0])
     expect(note().frames.map((f) => f.id)).toEqual([b, a])
@@ -295,8 +295,44 @@ describe('username workspace editor', () => {
     fireEvent.pointerDown(line, { button: 0, buttons: 1, clientX: 30, pointerId: 1 })
     fireEvent.pointerMove(line, { buttons: 1, clientX: 190, pointerId: 1 })
     fireEvent.pointerUp(line, { button: 0, clientX: 190, pointerId: 1 })
-    expect(useTilt.getState().frameTilt).not.toEqual(scrubbed)
+    expect(useTilt.getState().frameTilts[note().id]).not.toEqual(scrubbed)
     expect(tilted()).toEqual([0, 0, 0, 0])
+  })
+  it('scrubs only the banknote whose timeline it is, until a tilt syncs them all', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      callback: ResizeObserverCallback
+      constructor(callback: ResizeObserverCallback) { this.callback = callback }
+      observe() { this.callback([{ contentRect: { width: 1280, height: 720 } } as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      unobserve() {} disconnect() {}
+    })
+    for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
+    }
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'timeline-per-note-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const demo = useProjects.getState().demoPreview!
+    act(() => addNote(demo.id, createNote({ name: 'Other', x: 200, y: 0, widthMm: 100, heightMm: 50, color: '#654321' })))
+    act(() => setTilt({ source: 'hold', angle: 0, target: 0, angleX: 0, targetX: 0, frameNumbers: true }))
+    // The frame each banknote's thread shows, as its number on it
+    const shown = () => [...document.querySelectorAll('[data-frame-number]')].map((n) => n.textContent)
+    const before = shown()
+    expect(before).toHaveLength(2)
+
+    // A click on one of the first banknote's clips shows that frame on it alone (Keller: each timeline is its own)
+    const frames = useProjects.getState().demoPreview!.notes[0].frames
+    const other = before[0] === '1' ? 1 : 0
+    const clip = document.querySelector<HTMLElement>(`[data-frame-clip="${frames[other].id}"]`)!
+    fireEvent.pointerDown(clip, { button: 0, buttons: 1, clientX: 50, pointerId: 1 })
+    fireEvent.pointerUp(clip, { button: 0, clientX: 50, pointerId: 1 })
+    expect(shown()).toEqual([String(other + 1), before[1]])
+
+    // A tilt syncs them all again
+    act(() => setTilt({ source: 'hold', target: 0, targetX: 0 }))
+    expect(shown()).toEqual(before)
+    act(() => setTilt({ frameNumbers: false }))
   })
   it('names the thread’s size by its direction, leaves an image’s place to Thread Studio, and fills the background as a frame', async () => {
     const user = userEvent.setup()

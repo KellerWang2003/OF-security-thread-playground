@@ -36,11 +36,12 @@ interface TiltState {
    */
   light: number
   /**
-   * Where the timeline was scrubbed to, as the tilt that would show it: the frames show what it would while the
-   * banknotes keep their own tilt, as scrubbing picks a frame and never tilts (Keller: the timeline follows manual tilt,
-   * not the other way round). Any change of tilt hands the frames back to the tilt (`setTilt`)
+   * Where each banknote's timeline was scrubbed to, by banknote id, as the tilt that would show it: that banknote's
+   * frames show what it would while every banknote keeps the tilt, as scrubbing picks a frame and never tilts, and only
+   * on that banknote (Keller: each banknote's timeline is its own, and it follows manual tilt, not the other way round).
+   * Any change of tilt syncs every banknote back to it (`setTilt`)
    */
-  frameTilt?: { x: number; y: number }
+  frameTilts: Record<string, { x: number; y: number }>
 }
 
 // Preview state only: it is not part of a project and is not saved
@@ -60,24 +61,27 @@ export const useTilt = create<TiltState>()(() => ({
   backlit: false,
   peek: false,
   light: 0,
+  frameTilts: {},
 }))
 
-/** What moves the tilt; a change to any of these hands the frames back to it from the timeline */
+/** What moves the tilt; a change to any of these syncs every banknote's frames back to it */
 const TILT_KEYS = ['source', 'target', 'targetX', 'angle', 'angleX'] as const
+const IN_SYNC: TiltState['frameTilts'] = {}
 
 export const setTilt = (patch: Partial<TiltState>) =>
-  useTilt.setState(!('frameTilt' in patch) && TILT_KEYS.some((key) => key in patch) ? { ...patch, frameTilt: undefined } : patch)
+  useTilt.setState(!('frameTilts' in patch) && TILT_KEYS.some((key) => key in patch) ? { ...patch, frameTilts: IN_SYNC } : patch)
 
-/** The tilt the frames are shown at: the timeline's while it has been scrubbed, else the tilt itself */
-export const framesTiltOf = (s: Pick<TiltState, 'angle' | 'angleX' | 'frameTilt'>) => s.frameTilt ?? { x: s.angleX, y: s.angle }
+/** The tilt a banknote's frames are shown at: where its timeline was scrubbed to, else the tilt itself */
+export const framesTiltOf = (s: Pick<TiltState, 'angle' | 'angleX' | 'frameTilts'>, noteId: string) =>
+  s.frameTilts[noteId] ?? { x: s.angleX, y: s.angle }
 
 /**
- * Shows the frames as at `at` without tilting the banknotes, as scrubbing the timeline, a click on a clip or a frame
- * number does (Keller); playing stops, the banknotes staying where they were
+ * Shows a banknote's frames as at `at` without tilting it or touching the others, as scrubbing its timeline, a click on
+ * one of its clips or a frame number does (Keller); playing stops, the banknotes staying where they were
  */
-export function scrubFrames(at: { x: number; y: number }) {
-  const { source, angle, angleX } = useTilt.getState()
-  setTilt({ ...(source === 'wobble' ? { source: 'slider' as const, target: angle, targetX: angleX } : {}), frameTilt: at })
+export function scrubFrames(noteId: string, at: { x: number; y: number }) {
+  const { source, angle, angleX, frameTilts } = useTilt.getState()
+  setTilt({ ...(source === 'wobble' ? { source: 'slider' as const, target: angle, targetX: angleX } : {}), frameTilts: { ...frameTilts, [noteId]: at } })
 }
 
 /** Returns to flat, except on a locked axis, which stays where it was set */

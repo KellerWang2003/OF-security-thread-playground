@@ -128,19 +128,24 @@ describe('flat-to-upward playback', () => {
   })
 })
 
-describe('scrubbing the timeline', () => {
-  it('shows the frames it picks without tilting, stops playback, and hands them back to the next tilt', () => {
+describe('scrubbing a banknote’s timeline', () => {
+  it('shows that banknote’s frames where it was scrubbed, without tilting, and every tilt syncs them all again', () => {
     setTilt({ source: 'wobble', angle: 12, target: 12, angleX: 0, targetX: 0 })
-    scrubFrames({ x: 0, y: -20 })
-    // The banknotes stay where playback left them; only the frames go where the timeline was scrubbed (Keller)
-    expect(useTilt.getState()).toMatchObject({ source: 'slider', angle: 12, target: 12, frameTilt: { x: 0, y: -20 } })
-    expect(framesTiltOf(useTilt.getState())).toEqual({ x: 0, y: -20 })
-    // Settings that don't tilt leave the scrub alone; tilting by hand ends it
+    scrubFrames('a', { x: 0, y: -20 })
+    // The banknotes stay where playback left them; only banknote a's frames go where its timeline was scrubbed (Keller)
+    expect(useTilt.getState()).toMatchObject({ source: 'slider', angle: 12, target: 12, frameTilts: { a: { x: 0, y: -20 } } })
+    expect(framesTiltOf(useTilt.getState(), 'a')).toEqual({ x: 0, y: -20 })
+    expect(framesTiltOf(useTilt.getState(), 'b')).toEqual({ x: 0, y: 12 })
+    // Each banknote's timeline is its own
+    scrubFrames('b', { x: 0, y: 30 })
+    expect(framesTiltOf(useTilt.getState(), 'a')).toEqual({ x: 0, y: -20 })
+    expect(framesTiltOf(useTilt.getState(), 'b')).toEqual({ x: 0, y: 30 })
+    // Settings that don't tilt leave the scrubs alone; a tilt syncs every banknote back to it
     setTilt({ frameNumbers: true })
-    expect(useTilt.getState().frameTilt).toEqual({ x: 0, y: -20 })
+    expect(Object.keys(useTilt.getState().frameTilts)).toEqual(['a', 'b'])
     setTilt({ source: 'hold', target: 5, targetX: 0 })
-    expect(useTilt.getState().frameTilt).toBeUndefined()
-    expect(framesTiltOf(useTilt.getState())).toEqual({ x: 0, y: 12 })
+    expect(useTilt.getState().frameTilts).toEqual({})
+    expect(framesTiltOf(useTilt.getState(), 'a')).toEqual({ x: 0, y: 12 })
     setTilt({ frameNumbers: false })
   })
 })

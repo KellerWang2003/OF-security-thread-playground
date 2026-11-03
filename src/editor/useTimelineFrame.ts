@@ -10,7 +10,7 @@ import { framesTiltOf, scrubFrames, useTilt } from '../tilt/tilt'
  */
 export function useTimelineFrame(note: Note, sectionId?: string) {
   const followed = timelineSection(note, sectionId)
-  const current = useTilt((s) => sectionMix(note, followed, framesTiltOf(s)).current)
+  const current = useTilt((s) => sectionMix(note, followed, framesTiltOf(s, note.id)).current)
   const frame = note.frames.at(current) ?? note.frames[0]
   /** Shows the middle of a frame, as a click on its clip does, without tilting: the first strip of the followed section that shows it */
   const show = (i: number) => {
@@ -19,7 +19,7 @@ export function useTimelineFrame(note: Note, sectionId?: string) {
     const before = lengths.slice(0, strip).reduce((sum, l) => sum + l, 0)
     const total = lengths.reduce((sum, l) => sum + l, 0)
     const at = tiltForPosition(followed.lens, (before + (lengths.at(strip) ?? 0) / 2) / total)
-    scrubFrames(at)
+    scrubFrames(note.id, at)
   }
   return { frame, index: note.frames.indexOf(frame), show }
 }

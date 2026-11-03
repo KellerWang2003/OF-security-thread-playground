@@ -103,8 +103,8 @@ export function PatternView({ note, projectId, selectedId, onSelect, onThreadCli
   const angle = useTilt((s) => s.angle)
   const angleX = useTilt((s) => s.angleX)
   // The frames shown: the timeline's once it is scrubbed (Keller), else the tilt's
-  const shownAngle = useTilt((s) => framesTiltOf(s).y)
-  const shownAngleX = useTilt((s) => framesTiltOf(s).x)
+  const shownAngle = useTilt((s) => framesTiltOf(s, note.id).y)
+  const shownAngleX = useTilt((s) => framesTiltOf(s, note.id).x)
   const { thread } = note
   const vertical = thread.direction === 'vertical'
   const pattern = patternOf(note)
