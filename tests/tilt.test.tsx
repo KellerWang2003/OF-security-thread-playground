@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LIGHT_TAP_MS, lightTarget, pressLight, releaseLight, setTilt, togglePlayback, useTilt, useTiltLoop } from '../src/tilt/tilt'
+import { LIGHT_TAP_MS, framesTiltOf, lightTarget, pressLight, releaseLight, scrubFrames, setTilt, togglePlayback, useTilt, useTiltLoop } from '../src/tilt/tilt'
 import { LIGHT_RAMP_SECONDS } from '../src/lib/light'
 import { cyclePhase, frameMix, frameSpans, sliceRange } from '../src/lib/frames'
 import { lensState } from '../src/lib/lens'
@@ -125,6 +125,23 @@ describe('flat-to-upward playback', () => {
     setTilt({ source: 'drag', target: -30 })
     advance(2000)
     expect(useTilt.getState().angle).toBeCloseTo(-30, 1)
+  })
+})
+
+describe('scrubbing the timeline', () => {
+  it('shows the frames it picks without tilting, stops playback, and hands them back to the next tilt', () => {
+    setTilt({ source: 'wobble', angle: 12, target: 12, angleX: 0, targetX: 0 })
+    scrubFrames({ x: 0, y: -20 })
+    // The banknotes stay where playback left them; only the frames go where the timeline was scrubbed (Keller)
+    expect(useTilt.getState()).toMatchObject({ source: 'slider', angle: 12, target: 12, frameTilt: { x: 0, y: -20 } })
+    expect(framesTiltOf(useTilt.getState())).toEqual({ x: 0, y: -20 })
+    // Settings that don't tilt leave the scrub alone; tilting by hand ends it
+    setTilt({ frameNumbers: true })
+    expect(useTilt.getState().frameTilt).toEqual({ x: 0, y: -20 })
+    setTilt({ source: 'hold', target: 5, targetX: 0 })
+    expect(useTilt.getState().frameTilt).toBeUndefined()
+    expect(framesTiltOf(useTilt.getState())).toEqual({ x: 0, y: 12 })
+    setTilt({ frameNumbers: false })
   })
 })
 

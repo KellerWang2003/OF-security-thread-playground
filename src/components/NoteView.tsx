@@ -12,7 +12,7 @@ import { paintRelief, reliefPixels, useRelief } from '../lib/relief'
 import { useInkMask } from '../lib/inkMask'
 import { INK_BAR_LIGHT, barShift, inkRoll, inkShift } from '../lib/magneticInk'
 import type { PlacedLayer } from '../lib/layers'
-import { useTilt } from '../tilt/tilt'
+import { framesTiltOf, useTilt } from '../tilt/tilt'
 import { DesignTiles } from './DesignTiles'
 
 // Height ÷ width of each image, once loaded
@@ -208,8 +208,8 @@ export function ThreadArt({ note, shown, blends, fill }: {
 const SIDE_LIGHT = `rgba(255,255,255,${0.12 * SHADE_MAX})`
 const SIDE_DARK = `rgba(0,0,0,${0.08 * SHADE_MAX})`
 
-/** The tilt and light a live note follows */
-type LiveState = { angle: number; angleX: number; light: number }
+/** The tilt and light a live note follows, and the tilt its frames are shown at while the timeline has been scrubbed */
+type LiveState = { angle: number; angleX: number; light: number; frameTilt?: { x: number; y: number } }
 
 /**
  * The note with its thread, drawn at `scale` px per mm. The frame shown comes from the tilt (up/down `angle`,
@@ -268,7 +268,7 @@ export function NoteView({
   const mm = (value: number) => value * scale
   const face = useImageUrl(note.background === 'image' ? note.faceImageId : undefined)
   // Live notes re-render only when this changes, not on every animation frame
-  const liveShown = useTilt((s) => (live ? shownKey(note, s.angle, s.angleX) : ''))
+  const liveShown = useTilt((s) => (live ? shownKey(note, framesTiltOf(s).y, framesTiltOf(s).x) : ''))
   const shown = parseShown(live ? liveShown : shownKey(note, angle, angleX))
   const relief = useRelief(watermark)
   const light = useRef<HTMLCanvasElement>(null)
@@ -293,7 +293,9 @@ export function NoteView({
       const element = root.current
       if (!live || !element) return
       const { angle, angleX } = state
-      const blends = blendsAt(note, angle, angleX)
+      // The frames follow the timeline once it is scrubbed; the turn, shade and watermark follow the banknote's tilt
+      const frameTilt = framesTiltOf(state)
+      const blends = blendsAt(note, frameTilt.y, frameTilt.x)
       const style = tiltStyle(angle, angleX, blends[0] ?? 0, depth, revealOf(state), inkBar)
       element.style.transform = perspective ? style.rotate : ''
       for (const part of element.querySelectorAll<HTMLElement>('[data-tilt]')) {
@@ -306,7 +308,7 @@ export function NoteView({
   useLayoutEffect(() => {
     if (!live) return
     return useTilt.subscribe((state, previous) => {
-      if (state.angle !== previous.angle || state.angleX !== previous.angleX || state.light !== previous.light) apply.current(state)
+      if (state.angle !== previous.angle || state.angleX !== previous.angleX || state.light !== previous.light || state.frameTilt !== previous.frameTilt) apply.current(state)
     })
   }, [live])
 

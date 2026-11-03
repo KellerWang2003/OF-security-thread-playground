@@ -19,7 +19,7 @@ import {
 } from '../lib/pattern'
 import { updateNote } from '../lib/store'
 import type { Note, ThreadPattern, ThreadSection } from '../lib/types'
-import { setTilt, springToFlat, useTilt } from '../tilt/tilt'
+import { framesTiltOf, setTilt, springToFlat, useTilt } from '../tilt/tilt'
 import { ImagePlacer } from './ImagePlacer'
 import { FitTileButton, ThreadWidthField, TileLengthField } from './ThreadSizeFields'
 import { useElementSize } from './useElementSize'
@@ -102,6 +102,9 @@ export function PatternView({ note, projectId, selectedId, onSelect, onThreadCli
   const uid = useId().replace(/:/g, '')
   const angle = useTilt((s) => s.angle)
   const angleX = useTilt((s) => s.angleX)
+  // The frames shown: the timeline's once it is scrubbed (Keller), else the tilt's
+  const shownAngle = useTilt((s) => framesTiltOf(s).y)
+  const shownAngleX = useTilt((s) => framesTiltOf(s).x)
   const { thread } = note
   const vertical = thread.direction === 'vertical'
   const pattern = patternOf(note)
@@ -159,7 +162,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, onThreadCli
   const shift = vertical ? { x: view.x, y: view.y + height / 2 } : { x: view.x + width / 2, y: view.y }
 
   // What each section shows now: the view follows the tilt, re-rendering as it moves
-  const tilt = { x: angleX, y: angle }
+  const tilt = { x: shownAngleX, y: shownAngle }
   const mixes = prepared.plain ? [lensMix(note, tilt)] : patternMix(note, tilt)
   const shown = mixes.map((m) => [m.base, m.blend > 0 ? m.next : m.base, m.current])
   const fill = { direction: thread.direction, scale, thicknessMm: thread.widthMm, lengthMm, repeatMm: repeat, offsetMm: 0 }

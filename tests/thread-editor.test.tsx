@@ -607,8 +607,6 @@ describe('thread editor', () => {
     const user = await openDemo('thread-frames-ui-test')
     await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
-    // The tilt arriving where the frame picker sent it (the spring that gets it there doesn't run here)
-    const arrive = () => act(() => { const s = useTilt.getState(); setTilt({ angle: s.target, angleX: s.targetX }) })
 
     // Thread is the panel's tab at first, and a frame changing from elsewhere leaves it there; a click on the thread
     // turns to Frames
@@ -625,14 +623,14 @@ describe('thread editor', () => {
     fireEvent.pointerUp(strip().element, { button: 0, ...at(1, 0.5) })
     expect(tab(editor, 'Frames').getAttribute('aria-selected')).toBe('true')
 
-    // Its frame numbers go to a frame, as its clip in the timeline does, and the panel follows
+    // Its frame numbers go to a frame, as its clip in the timeline does, and the panel follows; the thread's tilt stays
+    // as it was, as the timeline never tilts (Keller)
     const frameButton = (n: number) => within(editor).getByRole('button', { name: `Frame ${n}`, exact: true })
     await user.click(frameButton(2))
-    arrive()
     expect(frameButton(2).getAttribute('aria-pressed')).toBe('true')
     await user.click(frameButton(1))
-    arrive()
     expect(frameButton(1).getAttribute('aria-pressed')).toBe('true')
+    expect([useTilt.getState().angle, useTilt.getState().target]).toEqual([0, 0])
 
     // Its fill, in a panel of its own as Figma's (Keller), + and − adding and removing it; the panel's second section is
     // the background colour under every frame, which an empty frame shows

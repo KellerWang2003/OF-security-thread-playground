@@ -20,7 +20,7 @@ import { pickFiles } from '../lib/images'
 import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
 import { framesMissed, playbackLens, playbackTilt, sectionMix, timelineSection } from '../lib/pattern'
 import type { Note } from '../lib/types'
-import { setRecording, setTilt, togglePlayback, useTilt } from '../tilt/tilt'
+import { framesTiltOf, scrubFrames, setRecording, setTilt, togglePlayback, useTilt } from '../tilt/tilt'
 import { FrameFillPanel } from './FillPicker'
 import { PlaybackPanel } from './PlaybackPanel'
 import { TILT_PANEL_PX } from './TiltRail'
@@ -166,7 +166,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
   const followed = timelineSection(note, sectionId)
   const { lens, tilt } = followed
   // Only the frame shown, so the track re-renders when it changes rather than on every animation frame
-  const current = useTilt((s) => sectionMix(note, followed, { x: s.angleX, y: s.angle }).current)
+  const current = useTilt((s) => sectionMix(note, followed, framesTiltOf(s)).current)
   // Frames a tilt plays somewhere on the thread yet never shows anywhere
   const unseen = framesMissed(note)
   const missed = (i: number) => unseen.at(i) ?? []
@@ -201,8 +201,8 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
     const rect = track.current?.getBoundingClientRect()
     if (!rect) return
     const u = clamp((clientX - rect.left - PAD) / (totalLength * pxPerUnit), 0, 1)
-    const at = tiltForPosition(lens, u)
-    setTilt({ source: 'timeline', target: at.y, targetX: at.x })
+    // It picks the frames shown and leaves the banknotes' tilt alone (Keller)
+    scrubFrames(tiltForPosition(lens, u))
   }
   /** Goes to the middle of a frame, as a click on its clip does */
   const goTo = (i: number) => scrubTo((track.current?.getBoundingClientRect().left ?? 0) + x((starts.at(i) ?? 0) + (lengths.at(i) ?? 0) / 2))
@@ -421,7 +421,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
  * scrubs, from anywhere in a wide grab area round it (Keller)
  */
 function Playhead({ lens, left, width }: { lens: LensState; left: number; width: number }) {
-  const phase = useTilt((s) => cyclePhase(cyclePosition(lens, { x: s.angleX, y: s.angle }), 1))
+  const phase = useTilt((s) => cyclePhase(cyclePosition(lens, framesTiltOf(s)), 1))
   return (
     <div data-playhead="" aria-label="Playhead" className="absolute inset-y-0 z-20 w-4 -translate-x-1/2 cursor-ew-resize" style={{ left: left + phase * width }}>
       <div className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary" />

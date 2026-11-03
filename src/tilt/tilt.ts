@@ -4,12 +4,8 @@ import { TILT_LIMIT, clamp } from '../lib/frames'
 import { LIGHT_RAMP_SECONDS } from '../lib/light'
 import { lightAt, tiltAt, type PlaybackPlan } from '../lib/moves'
 
-/**
- * drag springs back on release, slider scrubs within one cycle, timeline is the timeline scrubbing or going to a frame
- * (as slider, with the banknotes lying flat on the canvas meanwhile, as Thread Studio's thread does; Keller), hold stays
- * at a set angle
- */
-export type TiltSource = 'drag' | 'wobble' | 'slider' | 'timeline' | 'hold'
+/** drag springs back on release, slider scrubs within one cycle, hold stays at a set angle */
+export type TiltSource = 'drag' | 'wobble' | 'slider' | 'hold'
 
 interface TiltState {
   source: TiltSource
@@ -39,6 +35,12 @@ interface TiltState {
    * over LIGHT_RAMP_SECONDS, or what playback's moves say while playing (whichever is more)
    */
   light: number
+  /**
+   * Where the timeline was scrubbed to, as the tilt that would show it: the frames show what it would while the
+   * banknotes keep their own tilt, as scrubbing picks a frame and never tilts (Keller: the timeline follows manual tilt,
+   * not the other way round). Any change of tilt hands the frames back to the tilt (`setTilt`)
+   */
+  frameTilt?: { x: number; y: number }
 }
 
 // Preview state only: it is not part of a project and is not saved
@@ -60,7 +62,23 @@ export const useTilt = create<TiltState>()(() => ({
   light: 0,
 }))
 
-export const setTilt = (patch: Partial<TiltState>) => useTilt.setState(patch)
+/** What moves the tilt; a change to any of these hands the frames back to it from the timeline */
+const TILT_KEYS = ['source', 'target', 'targetX', 'angle', 'angleX'] as const
+
+export const setTilt = (patch: Partial<TiltState>) =>
+  useTilt.setState(!('frameTilt' in patch) && TILT_KEYS.some((key) => key in patch) ? { ...patch, frameTilt: undefined } : patch)
+
+/** The tilt the frames are shown at: the timeline's while it has been scrubbed, else the tilt itself */
+export const framesTiltOf = (s: Pick<TiltState, 'angle' | 'angleX' | 'frameTilt'>) => s.frameTilt ?? { x: s.angleX, y: s.angle }
+
+/**
+ * Shows the frames as at `at` without tilting the banknotes, as scrubbing the timeline, a click on a clip or a frame
+ * number does (Keller); playing stops, the banknotes staying where they were
+ */
+export function scrubFrames(at: { x: number; y: number }) {
+  const { source, angle, angleX } = useTilt.getState()
+  setTilt({ ...(source === 'wobble' ? { source: 'slider' as const, target: angle, targetX: angleX } : {}), frameTilt: at })
+}
 
 /** Returns to flat, except on a locked axis, which stays where it was set */
 export function springToFlat() {
@@ -148,7 +166,7 @@ export function useTiltLoop(plan: PlaybackPlan, limit = TILT_LIMIT) {
       } else {
         const light = approach(s.light, lightTarget(s), fade)
         ramp = light
-        const range = s.source === 'slider' || s.source === 'timeline' ? Math.max(limit, Math.abs(s.target), Math.abs(s.targetX)) : limit
+        const range = s.source === 'slider' ? Math.max(limit, Math.abs(s.target), Math.abs(s.targetX)) : limit
         const target = clamp(s.target, -range, range)
         const targetX = clamp(s.targetX, -range, range)
         velocity += ((target - s.angle) * stiffness - velocity * damping) * dt

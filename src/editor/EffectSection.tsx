@@ -559,10 +559,10 @@ export function ThreadPrint({ note }: { note: Note }) {
   )
 }
 
-/** The tilt map's dot; on its own so only it re-renders as the tilt moves */
+/** The tilt map's dot, where the frames shown are (the timeline's once scrubbed); on its own so only it re-renders as the tilt moves */
 function TiltMapDot({ range }: { range: number }) {
-  const angle = useTilt((s) => (s.source === 'hold' ? s.target : s.angle))
-  const angleX = useTilt((s) => (s.source === 'hold' ? s.targetX : s.angleX))
+  const angle = useTilt((s) => s.frameTilt?.y ?? (s.source === 'hold' ? s.target : s.angle))
+  const angleX = useTilt((s) => s.frameTilt?.x ?? (s.source === 'hold' ? s.targetX : s.angleX))
   const dot = { left: `${((clamp(angleX, -range, range) + range) / (2 * range)) * 100}%`, top: `${((range - clamp(angle, -range, range)) / (2 * range)) * 100}%` }
   return <div className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-foreground shadow" style={dot} />
 }

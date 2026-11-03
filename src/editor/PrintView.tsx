@@ -6,7 +6,7 @@ import { cutPattern, printedAt, type CutSource } from '../lib/print'
 import { copyStarts, imageBox } from '../lib/artwork'
 import { threadLength } from '../lib/thread'
 import type { Note } from '../lib/types'
-import { useTilt } from '../tilt/tilt'
+import { framesTiltOf, useTilt } from '../tilt/tilt'
 
 /** Strips the lens isn't showing at the current tilt fade to this much */
 const DIM = 0.45
@@ -34,7 +34,7 @@ export function PrintCanvas({ note, ridges, sizePx }: { note: Note; ridges: numb
   const images = useFrameImages(note)
   const prepared = preparePattern(note)
   // The strip under each section's ridges now: the only part of a tilt that changes the picture
-  const current = useTilt((s) => patternMix(note, { x: s.angleX, y: s.angle }).map((m) => m.slot).join(','))
+  const current = useTilt((s) => patternMix(note, framesTiltOf(s)).map((m) => m.slot).join(','))
   const { thread, frames } = note
   const vertical = thread.direction === 'vertical'
   const { repeatMm } = prepared.pattern

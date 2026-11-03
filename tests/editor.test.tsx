@@ -234,26 +234,25 @@ describe('username workspace editor', () => {
     const note = () => useProjects.getState().demoPreview!.notes[0]
     const open = () => screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent
     const clip = (id: string) => document.querySelector<HTMLElement>(`[data-frame-clip="${id}"]`)!
-    // The tilt arriving where the timeline sent it (the spring that gets it there doesn't run here)
-    const arrive = () => act(() => { const s = useTilt.getState(); setTilt({ angle: s.target, angleX: s.targetX }) })
+    const tilted = () => [useTilt.getState().angle, useTilt.getState().angleX, useTilt.getState().target, useTilt.getState().targetX]
     const [a, b] = note().frames.map((f) => f.id)
     expect(open()).toBe('Banknote')
 
-    // A click on a clip goes to that frame, and working on the frames turns the panel to the thread (Keller)
+    // A click on a clip shows that frame without tilting the banknote, and working on the frames turns the panel to the
+    // thread (Keller: the timeline follows manual tilt, never the other way round)
+    const still = tilted()
     for (const id of [a, b]) {
       fireEvent.pointerDown(clip(id), { button: 0, buttons: 1, clientX: 50, pointerId: 1 })
       fireEvent.pointerUp(clip(id), { button: 0, clientX: 50, pointerId: 1 })
-      arrive()
       expect(clip(id).classList.contains('ring-1')).toBe(true)
+      expect(tilted()).toEqual(still)
     }
     expect(open()).toBe('Thread')
-    // While the timeline has the tilt, the banknote lies flat, as Thread Studio's thread does (Keller); a drag turns it
-    const turn = () => document.querySelector<HTMLElement>('[data-note-body] .shadow-note')!.style.transform
-    expect(useTilt.getState().source).toBe('timeline')
-    expect(useTilt.getState().angle).not.toBe(0)
-    expect(turn()).toBe('')
-    act(() => setTilt({ source: 'drag' }))
-    expect(turn()).toContain('rotateX(')
+    // Tilting by hand hands the frames back to the tilt, and the timeline follows it again
+    expect(useTilt.getState().frameTilt).toBeDefined()
+    act(() => setTilt({ source: 'drag', target: 10 }))
+    expect(useTilt.getState().frameTilt).toBeUndefined()
+    act(() => setTilt({ source: 'slider', angle: 0, target: 0, angleX: 0, targetX: 0 }))
 
     // A drag along the track moves a frame in the order, the others sliding aside while it goes
     fireEvent.pointerDown(clip(a), { button: 0, buttons: 1, clientX: 0, pointerId: 1 })
@@ -288,14 +287,16 @@ describe('username workspace editor', () => {
     const track = clip(a).parentElement!
     fireEvent.pointerDown(track, { button: 0, buttons: 1, clientX: 30, pointerId: 1 })
     fireEvent.pointerUp(track, { button: 0, clientX: 30, pointerId: 1 })
-    expect([useTilt.getState().target, useTilt.getState().targetX]).not.toEqual([0, 0])
+    const scrubbed = useTilt.getState().frameTilt
+    expect(scrubbed).toBeDefined()
+    expect(tilted()).toEqual([0, 0, 0, 0])
     expect(note().frames.map((f) => f.id)).toEqual([b, a])
-    act(() => setTilt({ source: 'slider', angle: 0, target: 0, angleX: 0, targetX: 0 }))
     const line = document.querySelector<HTMLElement>('[data-playhead]')!
     fireEvent.pointerDown(line, { button: 0, buttons: 1, clientX: 30, pointerId: 1 })
     fireEvent.pointerMove(line, { buttons: 1, clientX: 190, pointerId: 1 })
     fireEvent.pointerUp(line, { button: 0, clientX: 190, pointerId: 1 })
-    expect([useTilt.getState().target, useTilt.getState().targetX]).not.toEqual([0, 0])
+    expect(useTilt.getState().frameTilt).not.toEqual(scrubbed)
+    expect(tilted()).toEqual([0, 0, 0, 0])
   })
   it('names the thread’s size by its direction, leaves an image’s place to Thread Studio, and fills the background as a frame', async () => {
     const user = userEvent.setup()
