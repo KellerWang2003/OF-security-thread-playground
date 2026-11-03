@@ -9,6 +9,7 @@ import { preparePattern } from '../src/lib/pattern'
 import { usePatternOffsets } from '../src/lib/patternOffset'
 import { ridgePhase, weave } from '../src/lib/print'
 import { addNote, updateNote, useProjects } from '../src/lib/store'
+import { setLengthUnit } from '../src/lib/units'
 import { createNote } from '../src/lib/notes'
 import { setTilt, useTilt } from '../src/tilt/tilt'
 import { TooltipProvider } from '../src/components/ui/tooltip'
@@ -50,6 +51,7 @@ beforeEach(() => {
     Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
   }
   localStorage.clear()
+  setLengthUnit('mm')
   location.hash = ''
   setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 })
 })
@@ -542,6 +544,14 @@ describe('thread editor', () => {
     expect(note().pattern!.repeatMm).toBe(40)
     expect(parseFloat(strip().element.style.height)).toBeCloseTo(3 * 40 * scale, 6)
     expect(strip().element.querySelectorAll('[data-repeat-edge]')).toHaveLength(2)
+    // They read and take the unit picked for every length, as the canvas's fields do
+    act(() => setLengthUnit('in'))
+    expect(field('Length of one repeat of the pattern along the thread').value).toBe('1.575')
+    type('Length of one repeat of the pattern along the thread', '1')
+    expect(note().pattern!.repeatMm).toBe(25.4)
+    type('Thread width vertically, or height horizontally', '4mm')
+    expect(note().thread.widthMm).toBe(4)
+    act(() => setLengthUnit('mm'))
     // Nothing is selected: only the thread's own measurements show
     await user.keyboard('{Escape}')
     expect(within(strip().element).queryByTitle('The selected section\'s length along the thread')).toBeNull()
@@ -591,6 +601,11 @@ describe('thread editor', () => {
     expect(field('Image position from the start of the repeat').value).toBe('1')
     fireEvent.change(field('Image position from the start of the repeat'), { target: { value: '0.5' } })
     expect(note().frames[0].place).toEqual({ alongMm: 0.5, across: 0, size: 1 })
+    // Left, it reads in the unit picked for every length
+    fireEvent.blur(field('Image position from the start of the repeat'))
+    act(() => setLengthUnit('cm'))
+    expect(field('Image position from the start of the repeat').value).toBe('0.05')
+    act(() => setLengthUnit('mm'))
     fireEvent.change(field('Image width; its height follows the image'), { target: { value: '2' } })
     expect(note().frames[0].place).toEqual({ alongMm: 0.5, across: 0, size: 0.5 })
     await user.click(within(editor).getByRole('button', { name: 'Fit to the repeat' }))

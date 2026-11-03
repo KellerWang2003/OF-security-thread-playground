@@ -1,7 +1,7 @@
 import { Maximize, Minus, Plus } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import { IconButton, Labeled, ScrubField } from '../components/controls'
+import { IconButton, Labeled, LengthField } from '../components/controls'
 import { ThreadArt } from '../components/NoteView'
 import { imageBox, placeOf, uprightBox, type UprightBox } from '../lib/artwork'
 import { clamp } from '../lib/frames'
@@ -391,11 +391,11 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, rid
 
         {/* Measurements on the middle repeat, turning with the thread: the repeat along it, the thickness across it */}
         <Measure side={vertical ? 'left' : 'top'} from={MIDDLE * repeat * scale} to={(MIDDLE + 1) * repeat * scale} label="Repeat">
-          <ScrubField size="sm" className="w-[88px]" unit="mm" label="R" title="Length of one repeat of the pattern along the thread" value={repeat}
+          <LengthField size="sm" className="w-[88px]" label="R" title="Length of one repeat of the pattern along the thread" value={repeat}
             min={REPEAT_LIMITS.min} max={REPEAT_LIMITS.max} step={ALONG_STEP} onChange={(v) => write(setRepeat(pattern, v))} />
         </Measure>
         <Measure side={vertical ? 'top' : 'left'} from={0} to={thickness} label="Thickness">
-          <ScrubField size="sm" className="w-[88px]" unit="mm" label="T" title="Thread width vertically, or height horizontally" value={thread.widthMm}
+          <LengthField size="sm" className="w-[88px]" label="T" title="Thread width vertically, or height horizontally" value={thread.widthMm}
             min={THREAD_WIDTH.min} max={THREAD_WIDTH.max} step={THREAD_WIDTH.step}
             onChange={(widthMm) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, widthMm } }))} />
         </Measure>
@@ -446,16 +446,14 @@ function solve3(m: number[], v: number[]): number[] {
 
 /**
  * A measurement beside the thread: a bracket over `from` to `to` (px along that side of the strip) and its labelled
- * field beyond it. Presses on it never reach the thread, so scrubbing or typing doesn't draw or tilt.
+ * field beyond it. Presses on it never reach the thread, so scrubbing or typing doesn't tilt it.
  */
-function Measure({ side, from, to, label, selected = false, children }: {
+function Measure({ side, from, to, label, children }: {
   side: 'left' | 'right' | 'top' | 'bottom'
   from: number
   to: number
   /** The small label over the field, as over every control in the panels */
   label: string
-  /** The selected section's, in the selection colour */
-  selected?: boolean
   children: ReactNode
 }) {
   const gap = 10
@@ -468,7 +466,7 @@ function Measure({ side, from, to, label, selected = false, children }: {
   return (
     <div className={cn('absolute flex items-center gap-1.5', { left: 'flex-row-reverse', right: 'flex-row', top: 'flex-col-reverse', bottom: 'flex-col' }[side])}
       style={place} data-measure="" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-      <div className={cn('shrink-0', bracket, selected ? 'border-primary' : 'border-foreground/40')} />
+      <div className={cn('shrink-0 border-foreground/40', bracket)} />
       <Labeled label={label} className="shrink-0 rounded-md bg-background p-1.5 shadow-xs">{children}</Labeled>
     </div>
   )

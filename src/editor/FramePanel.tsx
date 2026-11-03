@@ -2,7 +2,7 @@ import { ImageUp, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { reportError } from '../cloud/notices'
-import { ColorField, IconButton, Labeled, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
+import { ColorField, IconButton, Labeled, LengthField, Section, Segmented, SwitchField } from '../components/controls'
 import { IMAGE_STEP, imageBox, placeOf, uprightBox } from '../lib/artwork'
 import { pickFiles, useImageUrl } from '../lib/images'
 import { patternOf } from '../lib/pattern'
@@ -97,8 +97,6 @@ export function FramePanel({ note, noteRef, frame, index, onShow }: {
   )
 }
 
-const tidy = (mm: number) => Math.round(mm * 100) / 100
-
 function ImagePlaceFields({ note, frame, aspect, set }: { note: Note; frame: Frame; aspect: number; set: (patch: Partial<Frame>) => void }) {
   const { thread } = note
   const repeat = patternOf(note).repeatMm
@@ -119,16 +117,16 @@ function ImagePlaceFields({ note, frame, aspect, set }: { note: Note; frame: Fra
     }>
       <div className="grid grid-cols-2 gap-2">
         <Labeled label="From left">
-          <ScrubField label="X" title={vertical ? "Image position from the thread's left edge" : "Image position from the start of the repeat"} value={tidy(box.x)}
-            min={-box.width} max={room.x} step={IMAGE_STEP} unit="mm" onChange={(x) => move({ x })} />
+          <LengthField label="X" title={vertical ? "Image position from the thread's left edge" : "Image position from the start of the repeat"} value={box.x}
+            min={-box.width} max={room.x} step={IMAGE_STEP} onChange={(x) => move({ x })} />
         </Labeled>
         <Labeled label="From top">
-          <ScrubField label="Y" title={vertical ? 'Image position from the start of the repeat' : "Image position from the thread's top edge"} value={tidy(box.y)}
-            min={-box.height} max={room.y} step={IMAGE_STEP} unit="mm" onChange={(y) => move({ y })} />
+          <LengthField label="Y" title={vertical ? 'Image position from the start of the repeat' : "Image position from the thread's top edge"} value={box.y}
+            min={-box.height} max={room.y} step={IMAGE_STEP} onChange={(y) => move({ y })} />
         </Labeled>
         <Labeled label="Width">
-          <ScrubField label="W" title="Image width; its height follows the image" value={tidy(box.width)} min={IMAGE_STEP} max={Math.max(room.x, room.y) * 4}
-            step={IMAGE_STEP} unit="mm" onChange={(width) => move({ width })} />
+          <LengthField label="W" title="Image width; its height follows the image" value={box.width} min={IMAGE_STEP} max={Math.max(room.x, room.y) * 4}
+            step={IMAGE_STEP} onChange={(width) => move({ width })} />
         </Labeled>
       </div>
     </Section>
