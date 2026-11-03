@@ -108,6 +108,8 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
     e.currentTarget.setPointerCapture(e.pointerId)
+    // A field being typed in lets go, so Delete and Escape reach the sections
+    if (document.activeElement instanceof HTMLElement && document.activeElement.closest('input, textarea')) document.activeElement.blur()
     const at = locate(e)
     const target = e.target as HTMLElement
     const handle = target.closest<HTMLElement>('[data-edge]')

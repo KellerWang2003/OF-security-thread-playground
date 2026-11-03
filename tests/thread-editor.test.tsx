@@ -2,7 +2,7 @@
 import React from 'react'
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../src/App'
 import { usePatternOffsets } from '../src/lib/patternOffset'
@@ -211,5 +211,48 @@ describe('thread editor', () => {
     // A preview only: the project never holds it
     expect(Object.keys(note().pattern!).toSorted()).toEqual(['mixed', 'repeatMm', 'sections'])
     expect(JSON.parse(localStorage.getItem('of-playground.pattern-offsets')!)[note().id]).toBe(shuffled)
+  })
+
+  it('applies each preset, and the magnified thread follows the tilt section by section', async () => {
+    const user = await openDemo('thread-presets-ui-test')
+    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    const editor = screen.getByRole('region', { name: 'Thread editor' })
+    const presets: [string, string[]][] = [
+      ['Split band', ['Lane ↔', 'Lane ↕']],
+      ['Alternating', ['Block ↕', 'Block ↔']],
+      ['Chevron lock', ['Arm /', 'Arm \\']],
+      ['Single lens', ['Whole thread']],
+    ]
+    for (const [label, names] of presets) {
+      await user.click(within(editor).getByRole('button', { name: new RegExp(`^${label}`) }))
+      expect(sections().map((s) => s.name)).toEqual(names)
+      expect(note().pattern!.mixed).toBe(label !== 'Single lens')
+      // The first section is selected, and each section is outlined in each of the three repeats shown
+      expect(within(editor).getByRole('heading', { name: names[0] })).toBeDefined()
+      expect(strip().element.querySelectorAll('[data-section-id]')).toHaveLength(3 * names.length)
+    }
+
+    // Split band: tilting up or down changes only the ↕ lane, tilting sideways only the ↔ lane
+    await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
+    const colour = (i: number) => strip().element.querySelector<HTMLElement>(`[data-section="${i}"] > div`)!.style.backgroundColor
+    act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
+    const flat = [colour(0), colour(1)]
+    act(() => setTilt({ source: 'drag', angle: 20, target: 20, angleX: 0, targetX: 0 }))
+    expect(colour(0)).toBe(flat[0])
+    expect(colour(1)).not.toBe(flat[1])
+    act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 20, targetX: 20 }))
+    expect(colour(0)).not.toBe(flat[0])
+    expect(colour(1)).toBe(flat[1])
+
+    // Clicking a section on the thread lets go of a field being typed in, so Delete removes the section
+    const repeat = screen.getByTitle('Length of one repeat of the pattern along the thread').querySelector('input')!
+    act(() => repeat.focus())
+    const lane = strip().element.querySelector(`[data-section-id="${sections()[1].id}"][data-copy="1"]`)!
+    fireEvent.pointerDown(lane, { button: 0, buttons: 1, ...at(5, 0.75) })
+    fireEvent.pointerUp(lane, { button: 0, ...at(5, 0.75) })
+    expect(document.activeElement).not.toBe(repeat)
+    expect(within(editor).getByRole('heading', { name: 'Lane ↕' })).toBeDefined()
+    await user.keyboard('{Delete}')
+    expect(sections().map((s) => s.name)).toEqual(['Lane ↔'])
   })
 })
