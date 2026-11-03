@@ -306,7 +306,8 @@ describe('username workspace editor', () => {
     const layer = () => note().parentElement as HTMLElement
     const canvas = layer().parentElement as HTMLElement
     const left = parseFloat(note().style.left)
-    const readout = () => document.querySelector('[data-zoom-readout]')!.textContent
+    // How wide the banknote is drawn: it follows the zoom once the view is committed
+    const drawn = () => parseFloat((document.querySelector('[data-note-body]')!.firstElementChild as HTMLElement).style.width)
 
     fireEvent.wheel(canvas, { deltaX: 40, deltaY: 0 })
     fireEvent.wheel(canvas, { deltaX: 60, deltaY: 0 })
@@ -317,11 +318,14 @@ describe('username workspace editor', () => {
     await waitFor(() => expect(parseFloat(note().style.left)).toBeCloseTo(left - 100))
     expect(layer().style.transform).toBe('')
 
-    const before = readout()
+    const before = drawn()
     fireEvent.wheel(canvas, { deltaY: -40, ctrlKey: true, clientX: 0, clientY: 0 })
     await waitFor(() => expect(layer().style.transform).toContain('scale('))
-    await waitFor(() => expect(readout()).not.toBe(before))
+    expect(drawn()).toBe(before)
     await waitFor(() => expect(layer().style.transform).toBe(''))
+    expect(drawn()).toBeGreaterThan(before)
+    // No zoom percentage: nothing says what 100% is
+    expect(screen.queryByText(/^\d+%$/)).toBeNull()
   })
 
   it('edits the lens effect, Cycle included, for the selected banknote only', async () => {

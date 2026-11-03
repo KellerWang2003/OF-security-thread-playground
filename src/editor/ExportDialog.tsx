@@ -21,7 +21,7 @@ function SettingsGroup({ title, action, children }: { title: string; action?: Re
   return (
     <section className="flex flex-col gap-2.5">
       <div className="flex h-5 items-center justify-between">
-        <h3 className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">{title}</h3>
+        <h3 className="text-[11px] font-medium text-muted-foreground">{title}</h3>
         {action}
       </div>
       {children}

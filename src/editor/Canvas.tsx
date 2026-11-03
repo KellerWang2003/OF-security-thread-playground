@@ -194,10 +194,8 @@ export function Canvas({
     const g = gridStep(s)
     element.style.backgroundSize = `${g}px ${g}px`
     element.style.backgroundPosition = `${v.x}px ${v.y}px`
-    // Labels and the zoom readout stay their usual size and current while the layer scales
+    // Labels stay their usual size while the layer scales
     for (const label of content.current.querySelectorAll<HTMLElement>('[data-note-label], [data-keep-size]')) label.style.transform = k === 1 ? '' : `scale(${1 / k})`
-    const readout = element.querySelector('[data-zoom-readout]')?.firstChild
-    if (readout) readout.nodeValue = `${Math.round(v.zoom * 100)}%`
   }
   /** Ends a live pan or zoom: React draws the view for real */
   const commitView = () => {
@@ -580,15 +578,6 @@ export function Canvas({
           <IconButton label="Zoom out" onClick={() => zoomAround(1 / 1.25, size.width / 2, size.height / 2)}>
             <Minus />
           </IconButton>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-14 tabular-nums"
-            title="Zoom to 100% (about true size)"
-            onClick={() => zoomAround(1 / current.zoom, size.width / 2, size.height / 2)}
-          >
-            <span data-zoom-readout="">{`${Math.round(current.zoom * 100)}%`}</span>
-          </Button>
           <IconButton label="Zoom in" onClick={() => zoomAround(1.25, size.width / 2, size.height / 2)}>
             <Plus />
           </IconButton>
@@ -597,7 +586,7 @@ export function Canvas({
           </IconButton>
         </div>
         {!selected && (
-          <Button variant="outline" className="bg-background/95 shadow-panel backdrop-blur" onClick={onExport}>
+          <Button className="shadow-panel" onClick={onExport}>
             <Share />
             Export
           </Button>

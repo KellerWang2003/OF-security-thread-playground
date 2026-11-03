@@ -112,14 +112,14 @@ const clampValue = (value: number, min: number, max: number) => Math.min(max, Ma
 /** A top-level part in a side panel, with its nested sections; untitled under a tab that already names it */
 export function Group({ title, action, children }: { title?: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <div className={cn('flex flex-col border-b border-border/60', title && 'pt-3')}>
+    <div className={cn('flex flex-col border-b border-border', title && 'pt-3')}>
       {title && (
         <div className="flex h-5 items-center justify-between pr-2.5 pl-4">
           <h2 className="text-[13px] font-semibold">{title}</h2>
           {action}
         </div>
       )}
-      <div className="flex flex-col divide-y divide-border/40">{children}</div>
+      <div className="flex flex-col divide-y divide-border">{children}</div>
     </div>
   )
 }
@@ -127,7 +127,7 @@ export function Group({ title, action, children }: { title?: string; action?: Re
 /** One titled set of controls in the side panel; inside a Group it drops its divider */
 export function Section({ title, action, nested = false, children }: { title?: string; action?: ReactNode; nested?: boolean; children: ReactNode }) {
   return (
-    <section className={cn('flex flex-col gap-3', nested ? 'mx-4 py-3' : 'border-b border-border/60 px-4 py-3')}>
+    <section className={cn('flex flex-col gap-3', nested ? 'mx-4 py-3' : 'border-b border-border px-4 py-3')}>
       {(title || action) && (
         <div className="flex h-5 items-center justify-between">
           {title && <h3 className="text-[11px] font-medium text-muted-foreground">{title}</h3>}

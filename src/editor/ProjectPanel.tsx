@@ -93,7 +93,7 @@ export function ProjectPanel({
             render={
               <button
                 type="button"
-                className="flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+                className="flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground"
               />
             }
           >

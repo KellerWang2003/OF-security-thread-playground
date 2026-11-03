@@ -144,10 +144,9 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
     <div role="region" aria-label="Thread editor" data-thread-editor="" className="absolute inset-0 z-10 bg-background">
       <div className="absolute inset-0 bg-muted/40" />
 
-      <div className="absolute top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[272px]">
-        <PatternView note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={setSelectedId} ridges={ridges}
-          tiltDrag={tiltDrag} perspective={perspective} limit={lens.viewDeg} />
-      </div>
+      {/* The whole editor, behind the panels, as on the canvas; the thread fits between them */}
+      <PatternView note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={setSelectedId} ridges={ridges}
+        tiltDrag={tiltDrag} perspective={perspective} limit={lens.viewDeg} room="top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[272px]" />
 
       <Panel className="absolute top-3 right-3 left-3 flex h-11 items-center gap-2 rounded-[calc(var(--radius)+0.375rem+1px)] pr-1.5 pl-1.5">
         <IconButton className="rounded-lg" label="Back to the canvas" onClick={onClose}><ChevronLeft /></IconButton>
@@ -243,7 +242,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
         </div>
 
         {/* For information only, so fixed at the bottom under the controls, opening upwards one at a time */}
-        <div className="flex shrink-0 flex-col divide-y divide-border/60 border-t border-border/60">
+        <div className="flex shrink-0 flex-col divide-y divide-border border-t border-border">
           <InfoDrawer title="Preview" open={info === 'preview'} onOpenChange={openInfo('preview')} action={pattern.mixed && !lensNote
             ? <span className="text-[11px] text-muted-foreground" title="Mixed angles is on: each section plays its own lens">Mixed</span> : undefined}>
             {lensNote ? <LensPreview note={lensNote} printNote={note} /> : <ThreadPrint note={note} />}
@@ -310,7 +309,7 @@ function SectionList({ note, selectedId, onSelect, onAdd, onDuplicate, onRemove,
   return (
     <div className="flex min-h-0 flex-col">
       <div className="flex items-center justify-between py-1 pr-1.5 pl-3">
-        <h2 className="text-xs font-medium text-muted-foreground">Sections · {sections.length}</h2>
+        <h2 className="text-[11px] font-medium text-muted-foreground">Sections · {sections.length}</h2>
         <IconButton label="Add section" size="icon-xs" onClick={onAdd}><Plus /></IconButton>
       </div>
       <ul className="flex min-h-0 flex-col gap-0.5 overflow-y-auto px-1.5 pb-1.5">

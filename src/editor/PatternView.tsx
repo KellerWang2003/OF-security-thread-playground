@@ -1,6 +1,5 @@
 import { Maximize, Minus, Plus } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { IconButton } from '../components/controls'
 import { ThreadArt } from '../components/NoteView'
@@ -63,9 +62,11 @@ function layout(box: { width: number; height: number }, repeatMm: number, widthM
  * when it touches none), drag a section to move it or its edges to resize it (snapping to 0.5 mm along and twelfths
  * across); a click selects, and a double-click on an empty area fills it. Like the canvas, scrolling or dragging
  * around the thread pans, pinching or ⌘/Ctrl-scrolling zooms; with `tiltDrag` a drag on the thread tilts instead
- * of drawing, and with `perspective` the thread turns with the tilt (editing still lands where the pointer is).
+ * of drawing, and with `perspective` the thread turns with the tilt (editing still lands where the pointer is). The
+ * view fills its parent, behind the floating panels, as the canvas does; the thread fits and centres in `room`
+ * (Tailwind insets clear of the panels), and panned it runs on under them instead of being cut off at that box.
  */
-export function PatternView({ note, projectId, selectedId, onSelect, ridges, tiltDrag = false, perspective = false, limit = 90 }: {
+export function PatternView({ note, projectId, selectedId, onSelect, ridges, tiltDrag = false, perspective = false, limit = 90, room: roomClassName }: {
   note: Note
   projectId: string
   selectedId?: string
@@ -78,10 +79,13 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   perspective?: boolean
   /** How far a drag may tilt, either way */
   limit?: number
+  /** Where the thread fits and centres, as Tailwind insets within the view */
+  room?: string
 }) {
   const box = useRef<HTMLDivElement>(null)
   const strip = useRef<HTMLDivElement>(null)
-  const size = useElementSize(box)
+  const room = useRef<HTMLDivElement>(null)
+  const size = useElementSize(room)
   const gesture = useRef<Gesture | null>(null)
   const [preview, setPreview] = useState<{ rect: Rect; copy: number }>()
   const [hover, setHover] = useState<string>()
@@ -101,7 +105,8 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
       e.preventDefault()
       const v = viewRef.current
       if (e.ctrlKey || e.metaKey) {
-        const r = element.getBoundingClientRect()
+        // About the pointer, measured from the middle of the room, where the thread is centred
+        const r = (room.current ?? element).getBoundingClientRect()
         // Mouse wheels send big steps, trackpad pinches small ones; cap each step so neither jumps
         setView(zoomAround(v, Math.exp(-clamp(e.deltaY, -40, 40) * 0.01), e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2))
       } else {
@@ -118,7 +123,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   const pattern = patternOf(note)
   const repeat = pattern.repeatMm
   const view = size ? layout(size, repeat, thread.widthMm, vertical) : undefined
-  if (!view) return <div ref={box} className="absolute inset-0 overflow-hidden" />
+  if (!view) return <div ref={box} className="absolute inset-0 overflow-hidden"><div ref={room} className={cn('absolute inset-0', roomClassName)} /></div>
   const { repeats } = view
   const scale = view.scale * viewState.zoom
   const lengthMm = repeats * repeat
@@ -261,7 +266,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   }
 
   return (
-    <div ref={box} className={cn('absolute inset-0 flex touch-none items-center justify-center overflow-hidden', panning ? 'cursor-grabbing' : 'cursor-grab')}
+    <div ref={box} className={cn('absolute inset-0 touch-none overflow-hidden', panning ? 'cursor-grabbing' : 'cursor-grab')}
       onPointerDown={(e) => {
         // Around the thread, a drag pans the view
         if (e.button !== 0) return
@@ -271,7 +276,9 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
       }}
       onPointerMove={onPointerMove} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}
       onDoubleClick={(e) => { if (e.target === e.currentTarget) setView(FIT) }}>
-      <div className="relative shrink-0" style={{ width, height, transform: `translate(${viewState.x}px, ${viewState.y}px)`, perspective: depth }}>
+      {/* Lets presses through to the view, so they pan, except on the thread and the zoom controls */}
+      <div ref={room} className={cn('pointer-events-none absolute inset-0 flex items-center justify-center', roomClassName)}>
+      <div className="pointer-events-auto relative shrink-0" style={{ width, height, transform: `translate(${viewState.x}px, ${viewState.y}px)`, perspective: depth }}>
       <div
         ref={strip}
         role="group"
@@ -331,14 +338,12 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
       </div>
 
       {/* Zoom, as on the canvas; its own pointer events, so a click never starts a pan */}
-      <div className="absolute top-3 right-3 flex items-center gap-0.5 rounded-lg border border-border/70 bg-background p-0.5 shadow-panel [&>[data-slot=button]]:rounded-[calc(var(--radius)-3px)]"
+      <div className="pointer-events-auto absolute top-3 right-3 flex items-center gap-0.5 rounded-lg border border-border/70 bg-background p-0.5 shadow-panel [&>[data-slot=button]]:rounded-[calc(var(--radius)-3px)]"
         onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
         <IconButton label="Zoom out" onClick={() => setView((v) => zoomAround(v, 1 / 1.25, 0, 0))}><Minus /></IconButton>
-        <Button variant="ghost" size="sm" className="w-14 tabular-nums" title="Zoom to fit the repeats shown" onClick={() => setView(FIT)}>
-          {`${Math.round(viewState.zoom * 100)}%`}
-        </Button>
         <IconButton label="Zoom in" onClick={() => setView((v) => zoomAround(v, 1.25, 0, 0))}><Plus /></IconButton>
         <IconButton label="Fit" onClick={() => setView(FIT)}><Maximize /></IconButton>
+      </div>
       </div>
     </div>
   )
