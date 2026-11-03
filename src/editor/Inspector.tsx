@@ -2,7 +2,7 @@ import { Banknote, Columns2, Droplet, Magnet, RectangleHorizontal, RectangleVert
 import { create } from 'zustand'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
-import { Drawer, Group, IconButton, Labeled, LengthField, Panel, PartTab, Section, Segmented, TabStrip } from '../components/controls'
+import { Drawer, Group, IconButton, Labeled, LengthField, Panel, PartTab, Section, Segmented, SwitchField, TabStrip } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { LAYER_NAMES, fitLayers, isPlaced, moveLayersTo, type PlacedLayer } from '../lib/layers'
 import { NOTE_SIZE } from '../lib/notes'
@@ -219,7 +219,16 @@ function TimelineFrame({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
  */
 function LensEffect({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const set: SetLens = (patch) => updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, tilt: { ...n.tilt, ...patch } }))
-  if (patternOf(note).mixed) return null
+  // With Mixed angles each section plays its own lens, set in Thread Studio; the switch says so, and turning it off here
+  // brings back the one lens for every section (Keller missed the lens on a banknote with it on)
+  if (patternOf(note).mixed) {
+    return (
+      <Section nested title="Lens effect">
+        <SwitchField label="Mixed angles" title="Each section plays its own lens, set in Thread Studio; off, every section plays the one set here" checked
+          onChange={(mixed) => updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, pattern: { ...patternOf(n), mixed } }))} />
+      </Section>
+    )
+  }
   return <EffectSection note={note} set={set} title="Lens effect" action={<LensMenu note={note} set={set} />} preview={false} />
 }
 

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, EyeOff, MoreHorizontal } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, EyeOff, MoreHorizontal, TriangleAlert } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -130,6 +130,8 @@ export function EffectSection({ note, set, printNote = note, title, action, chil
       <Labeled label="Effect">
         <EffectPicker note={note} lens={lens} onChoose={chooseEffect} />
       </Labeled>
+      {/* Vertical ridges, as the Vertical effect has, can't be printed for the sponsor (Keller) */}
+      {Math.abs(lensAngle(lens)) === 90 && <SponsorWarning />}
 
       {/* Which tilt hides frames, then the Cycle, above where flat sits and how far each tilt reaches (Keller put the
           cycle first, 3 November), then the wobble allowance */}
@@ -269,11 +271,22 @@ function EffectPicker({ note, lens, onChoose }: { note: Note; lens: LensState; o
             <span className="flex min-w-0 flex-col gap-0.5 whitespace-normal">
               <span>{label}</span>
               <span className="text-[11px] leading-snug whitespace-normal text-muted-foreground">{description}</span>
+              {value === 'side' && <SponsorWarning className="text-[11px]" />}
             </span>
           </SelectItem>
         ))}
       </SelectContent>
     </Select>
+  )
+}
+
+/** Vertical ridges aren't supported by the sponsor (Keller), so wherever they are chosen this says so, in the warnings' amber */
+function SponsorWarning({ className }: { className?: string }) {
+  return (
+    <span className={cn('flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500', className)}>
+      <TriangleAlert className="size-3.5 shrink-0" />
+      Not supported by our sponsor, Oberthur
+    </span>
   )
 }
 

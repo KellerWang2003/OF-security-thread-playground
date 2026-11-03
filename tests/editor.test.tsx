@@ -426,12 +426,26 @@ describe('username workspace editor', () => {
     expect(screen.getByRole('button', { name: 'Tilt map' })).toBeDefined()
     expect(screen.getByText('Frames seen', { exact: true })).toBeDefined()
 
-    // With mixed angles there is no one lens: the drawer shows the whole print instead
+    // Vertical ridges can't be printed for the sponsor (Keller), which the section says
+    const sponsor = () => screen.queryByText('Not supported by our sponsor, Oberthur')
+    expect(sponsor()).toBeNull()
     const demo = useProjects.getState().demoPreview!
+    act(() => updateNote(demo.id, demo.notes[0].id, (n) => ({ ...n, tilt: { ...n.tilt, effect: 'side' } })))
+    expect(sponsor()).not.toBeNull()
+    act(() => updateNote(demo.id, demo.notes[0].id, (n) => ({ ...n, tilt: { ...n.tilt, effect: 'updown' } })))
+    expect(sponsor()).toBeNull()
+
+    // With mixed angles there is no one lens: the drawer shows the whole print instead, and the section says why, with
+    // the switch to turn it off and get the one lens back (Keller missed it on such a banknote)
     act(() => updateNote(demo.id, demo.notes[0].id, (n) => ({ ...n, pattern: { ...presetPattern(n, 'split'), mixed: true } })))
     expect(screen.getByText('Mixed', { exact: true })).toBeDefined()
     expect(screen.getByRole('img', { name: 'Print' })).toBeDefined()
     expect(screen.queryByRole('combobox', { name: 'Effect' })).toBeNull()
+    const mixed = screen.getByRole('switch', { name: 'Mixed angles' })
+    expect(mixed.getAttribute('aria-checked')).toBe('true')
+    await user.click(mixed)
+    expect(useProjects.getState().demoPreview!.notes[0].pattern!.mixed).toBe(false)
+    expect(screen.getByRole('combobox', { name: 'Effect' })).toBeDefined()
     expect(saves).not.toHaveBeenCalled()
   })
   it('outlines what a click would pick under the pointer, and only what is picked', async () => {
