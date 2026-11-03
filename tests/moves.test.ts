@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { playbackTilts } from '../src/lib/exportRender'
 import { lensState } from '../src/lib/lens'
 import {
-  HOLD_LIMITS, HOLD_SECONDS, LIGHT_FADE_SECONDS, LIGHT_HOLD_SECONDS, holdMoveSeconds, lightAt, lightHoldSeconds, moveFromRecording, movesOf, planLitPaths,
-  playbackPlan, recordingFromSamples, tiltAt,
+  HOLD_LIMITS, HOLD_SECONDS, LIGHT_FADE_SECONDS, LIGHT_HOLD_SECONDS, editableMoves, holdMoveSeconds, lightAt, lightHoldSeconds, moveFromRecording, movesOf,
+  planLitPaths, playbackPlan, recordingFromSamples, swingEnds, tiltAt,
 } from '../src/lib/moves'
 import { migrateProject } from '../src/lib/notes'
 import { SWEEP_SECONDS } from '../src/lib/playback'
@@ -60,6 +60,33 @@ describe('playback moves', () => {
     const migrated = migrateProject({ id: 'p', name: 'P', createdAt: 0, updatedAt: 0, notes: [note] }).notes[0].tilt
     expect(migrated.moves).toEqual(tilt.moves)
     expect(migrated).not.toHaveProperty('holdSeconds')
+  })
+})
+
+describe('default playlist', () => {
+  // A new banknote's lens: frames run 1 → 5 downwards
+  const fresh = { ...base, cycleDeg: 30, effect: 'updown', runY: 'down' } as TiltSettings
+
+  it('comes back to flat from a full cycle out: 30° → 0° on a new banknote', () => {
+    const plan = playbackPlan(fresh, lensState(fresh, frames))
+    expect(plan.seconds).toBeCloseTo(glide(30) + leg)
+    expect(tiltAt(plan, glide(30) / 2).y).toBeCloseTo(15)
+    expect(tiltAt(plan, glide(30)).y).toBeCloseTo(30)
+    expect(tiltAt(plan, glide(30) + leg / 2).y).toBeCloseTo(15)
+    expect(tiltAt(plan, plan.seconds - 1e-6).y).toBeCloseTo(0, 4)
+  })
+
+  it('follows the cycle, and starts on the other side when frames run the other way', () => {
+    const up = { ...fresh, cycleDeg: 40, runY: 'up' } as TiltSettings
+    expect(tiltAt(playbackPlan(up, lensState(up, frames)), glide(40)).y).toBeCloseTo(-40)
+  })
+
+  it('stays the default once the playlist is first edited, until its angles are set', () => {
+    const lens = lensState(fresh, frames)
+    const [move] = editableMoves(fresh, lens)
+    expect(swingEnds(move, lens)).toEqual({ start: { x: 0, y: 30 }, end: { x: 0, y: 0 } })
+    expect(swingEnds(move, lensState({ ...fresh, cycleDeg: 20 }, frames)).start.y).toBeCloseTo(20)
+    expect(swingEnds({ ...move, from: 10, y: -10 }, lens)).toEqual({ start: { x: 0, y: 10 }, end: { x: 0, y: -10 } })
   })
 })
 

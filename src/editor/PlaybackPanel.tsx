@@ -40,7 +40,7 @@ export function PlaybackPanel({ projectId, tilt, lens }: { projectId: string; ti
   const editMoves = (change: (list: PlaybackMove[]) => PlaybackMove[]) => set({ moves: change(editableMoves(tilt, lens)) })
   const removeRecording = (id: string) => {
     const left = editableMoves(tilt, lens).filter((m) => m.recordingId !== id)
-    set({ recordings: recordings.filter((r) => r.id !== id), moves: left.length ? left : [newMove('y')] })
+    set({ recordings: recordings.filter((r) => r.id !== id), moves: left.length ? left : movesOf({ ...tilt, moves: [] }, lens) })
   }
   const loopSeconds = playbackPlan(tilt, lens).seconds
   // Dragging a row's number reorders the playlist: the dragged row follows the pointer, the others make room

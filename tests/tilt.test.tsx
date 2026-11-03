@@ -12,7 +12,9 @@ import type { TiltSettings } from '../src/lib/types'
 vi.mock('../src/lib/playback', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/playback')>(), SWEEP_SECONDS: 1 }))
 
 const lensFor = (cycleDeg: number) => lensState({ cycleDeg, transition: 0 })
-const planFor = (cycleDeg: number, settings: Partial<TiltSettings> = {}) => playbackPlan({ cycleDeg, transition: 0, ...settings }, lensFor(cycleDeg))
+/** Up/down out to the cycle and back, unless the settings bring moves of their own */
+const planFor = (cycleDeg: number, settings: Partial<TiltSettings> = {}) =>
+  playbackPlan({ cycleDeg, transition: 0, moves: [{ id: 'm', kind: 'y', y: cycleDeg }], ...settings }, lensFor(cycleDeg))
 
 let now = 0
 let nextId = 0

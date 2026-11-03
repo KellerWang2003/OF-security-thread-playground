@@ -38,7 +38,10 @@ const JOIN_DEG_PER_SECOND = 60 / SWEEP_SECONDS
 const newId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Math.random()))
 export const newMove = (kind: PlaybackMove['kind'] = 'y'): PlaybackMove => ({ id: newId(), kind })
 
-/** The moves a project plays. Projects without a list play what the old Tilt setting chose, as before. */
+/**
+ * The moves a project plays. Projects without a list play the default: the tilt the old Tilt setting chose (up/down
+ * unless set), as default moves (see `swingEnds`).
+ */
 export function movesOf(tilt: TiltSettings, lens: LensState): PlaybackMove[] {
   if (tilt.moves?.length) return tilt.moves
   const choice = tilt.playTilt ?? 'y'
@@ -48,9 +51,12 @@ export function movesOf(tilt: TiltSettings, lens: LensState): PlaybackMove[] {
   return chosen.map((axis) => ({ id: `default-${axis}`, kind: axis }))
 }
 
-/** The moves as saved, or the ones playback falls back to, made a real list the first time one is edited */
+/**
+ * The moves as saved, or the default ones playback falls back to, made a real list the first time one is edited. The
+ * default moves keep their ids, so they stay the default until their angles are set.
+ */
 export function editableMoves(tilt: TiltSettings, lens: LensState): PlaybackMove[] {
-  return tilt.moves?.length ? tilt.moves : movesOf(tilt, lens).map((m) => newMove(m.kind))
+  return tilt.moves?.length ? tilt.moves : movesOf(tilt, lens)
 }
 
 /** How far a move goes on an axis when not set: one full cycle, or the viewing range when that tilt does nothing */
@@ -146,12 +152,18 @@ function moveSegments(move: PlaybackMove, lens: LensState, speed: number): Segme
 
 /**
  * Where an up/down or side move starts and ends. One that was never set swings once across a full cycle centred
- * on flat (−½ to +½ cycle), so every frame plays once; the fallback moves of old projects keep their sweep.
+ * on flat (−½ to +½ cycle), so every frame plays once. A default move (a project's playlist until it is set) comes
+ * back to flat from a full cycle out, playing the frames the way 1 → 5 runs and stopping on the rest frame: 30° → 0°
+ * up/down on a new banknote (Keller, 3 November).
  */
 export function swingEnds(move: PlaybackMove, lens: LensState): { start: Tilt2; end: Tilt2 } {
   const axis = move.kind === 'x' ? 'x' : 'y'
-  const untouched = move.from === undefined && move[axis] === undefined && !move.id.startsWith('default-')
-  if ((move.kind === 'y' || move.kind === 'x') && untouched) {
+  const untouched = (move.kind === 'y' || move.kind === 'x') && move.from === undefined && move[axis] === undefined
+  if (untouched && move.id.startsWith('default-')) {
+    const from = -defaultReach(lens, axis)
+    return { start: axis === 'y' ? { x: 0, y: from } : { x: from, y: 0 }, end: FLAT }
+  }
+  if (untouched) {
     const cycle = axis === 'y' ? lens.cycleY : lens.cycleX
     const dir = axis === 'y' ? lens.dirY : lens.dirX
     const half = (cycle ? Math.min(cycle / 2, SWEEP_MAX) : lens.viewDeg / 2) * dir

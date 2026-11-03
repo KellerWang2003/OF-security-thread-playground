@@ -84,20 +84,25 @@ describe('reveal on one tilt', () => {
 })
 
 describe('playback', () => {
-  it('sweeps each chosen tilt in turn, flat → full cycle → flat', () => {
+  it('plays the default on each chosen tilt in turn, gliding a full cycle out and sweeping back to flat', () => {
     const note = { frames: frames([10, 10, 10]), tilt: { cycleDeg: 40, cycleXDeg: 80, effect: 'both', runX: 'left', playTilt: 'both', transition: 0, speed: 1, curve: 'linear' } as TiltSettings }
-    // Four sweeps of 1⅓ s: 40 frames each at 30 fps
-    const tilts = playbackTilts(note, 30)
-    expect(tilts).toHaveLength(160)
-    expect(tilts[40].x).toBeCloseTo(0)
-    expect(tilts[40].y).toBeCloseTo(40)
-    // Diagonal 45°: the side tilt runs at the up/down cycle
-    expect(tilts[120].x).toBeCloseTo(-40)
-    expect(tilts[120].y).toBeCloseTo(0)
+    // At 9 fps each glide out (40° at 45°/s, 8⁄9 s) takes 8 frames and each sweep back (1⅓ s) 12
+    const tilts = playbackTilts(note, 9)
+    expect(tilts).toHaveLength(40)
+    expect(tilts[0]).toEqual({ x: 0, y: 0 })
+    // Frames run up on this lens, so up/down starts below flat
+    expect(tilts[8].y).toBeCloseTo(-40)
+    expect(tilts[14].y).toBeCloseTo(-20)
+    expect(tilts[20].x).toBeCloseTo(0)
+    expect(tilts[20].y).toBeCloseTo(0)
+    // Diagonal 45°: the side tilt runs at the up/down cycle, and its frames run left, so it starts right of flat
+    expect(tilts[28].x).toBeCloseTo(40)
+    expect(tilts[34].x).toBeCloseTo(20)
+    expect(tilts[34].y).toBeCloseTo(0)
   })
 
-  it('matches the up/down angles of a project from before lenses', () => {
-    const tilt = { cycleDeg: 30, transition: 0, speed: 1, curve: 'smooth' } as TiltSettings
+  it('sweeps an up/down move out to the cycle and back as projects from before lenses did', () => {
+    const tilt = { cycleDeg: 30, transition: 0, speed: 1, curve: 'smooth', moves: [{ id: 'a', kind: 'y', y: 30 }] } as TiltSettings
     const old = playbackAngles(tilt, 30)
     const now = playbackTilts({ tilt, frames: frames([1, 1]) }, 30)
     expect(now).toHaveLength(old.length)

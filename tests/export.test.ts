@@ -74,8 +74,8 @@ describe('layout', () => {
     expect(together.height).toBe(720)
     expect(apart.height).toBe(720)
     expect(apart.width).toBeLessThan(together.width)
-    // One sweep out and one back at 1×
-    expect(apart.seconds).toBeCloseTo(2 * SWEEP_SECONDS)
+    // The default playlist at 1×: a glide out to 30° at a 60° sweep's pace (half a sweep), then one sweep back to flat
+    expect(apart.seconds).toBeCloseTo(1.5 * SWEEP_SECONDS)
   })
 
   it('hits the chosen resolution with tilt, and keeps wide rows within 4K', () => {

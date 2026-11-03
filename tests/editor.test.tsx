@@ -519,7 +519,9 @@ describe('username workspace editor', () => {
       expect(note.tilt).toMatchObject({ transition: 0.6, speed: 2, curve: 'linear' })
       expect(note.tilt.moves?.map((m) => [m.kind, m.seconds])).toEqual([['y', undefined], ['hold', 0.4]])
     }
-    // A swing across the cycle (1 s at 2×: ⅔ s across and two ⅙ s glides from and back to flat) and the hold (0.2 s at 2×)
+    // The default Up/down stays as it was, 30° back to flat (1 s at 2×: a ⅓ s glide out and ⅔ s back), then the hold (0.2 s at 2×)
+    const field = (title: string) => (within(dialog).getByTitle(title).querySelector('input') as HTMLInputElement).value
+    expect([field('Up/down tilt the move starts from; negative tilts down'), field('Up/down tilt this move reaches; negative tilts down')]).toEqual(['30', '0'])
     expect(screen.getByText('1.2 s loop')).toBeDefined()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Playback settings' })).toBeNull())
