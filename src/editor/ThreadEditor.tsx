@@ -40,6 +40,7 @@ import { PanelResizer } from './PanelResizer'
 import { PatternPicture } from './PatternPicture'
 import { PatternView } from './PatternView'
 import { BackgroundSettings } from './BackgroundSettings'
+import { FramePanel } from './FramePanel'
 import { TiltRail } from './TiltRail'
 import { TimelineBar } from './TimelineBar'
 
@@ -54,6 +55,16 @@ import { TimelineBar } from './TimelineBar'
 export function ThreadEditor({ project, note, onClose }: { project: Project; note: Note; onClose: () => void }) {
   const pattern = patternOf(note)
   const [selectedId, setSelectedId] = useState(() => pattern.sections.at(0)?.id)
+  // One thing picked at a time, as in Figma: a section on the thread or in the list, or a frame in the timeline
+  const [pickedFrameId, setPickedFrameId] = useState<string>()
+  const selectSection = (id: string | undefined) => {
+    setSelectedId(id)
+    setPickedFrameId(undefined)
+  }
+  const pickFrame = (id: string | undefined) => {
+    setPickedFrameId(id)
+    if (id) setSelectedId(undefined)
+  }
   const [ridges, setRidges] = useState(false)
   // Off, the thread lies flat so a frame can be worked on without it turning away (Keller)
   const [tiltOn, setTiltOn] = useState(true)
@@ -67,6 +78,9 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
   // A section undone away, or removed, is simply no longer selected
   const selected = pattern.sections.find((s) => s.id === selectedId)
   const selectedSectionId = selected?.id
+  // So is a frame deleted or undone away
+  const pickedIndex = note.frames.findIndex((f) => f.id === pickedFrameId)
+  const picked = pickedIndex < 0 ? undefined : note.frames[pickedIndex]
   const canRemove = pattern.sections.length > 1
   const noteRef = { projectId: project.id, noteId: note.id }
   const checks = checkPattern(note)
@@ -79,12 +93,12 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
   // Removing the selected section selects the next one in the list, else the one before, so the panel stays on a section
   const remove = (id: string) => {
     edit((n) => removeSection(patternOf(n), id))
-    if (id === selectedId) setSelectedId(neighbourOf(pattern, id))
+    if (id === selectedId) selectSection(neighbourOf(pattern, id))
   }
   const added = (result: { pattern: ThreadPattern; id: string } | undefined) => {
     if (!result) return
     edit(() => result.pattern)
-    setSelectedId(result.id)
+    selectSection(result.id)
   }
 
   // Escape deselects, then goes back to the canvas; Delete removes the selected section. Caught before the
@@ -98,7 +112,8 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return
       e.preventDefault()
       if (e.key === 'Escape') {
-        if (selectedSectionId) setSelectedId(undefined)
+        if (picked) setPickedFrameId(undefined)
+        else if (selectedSectionId) setSelectedId(undefined)
         else onClose()
       } else if (selectedSectionId && canRemove) {
         updateNote(project.id, note.id, (n) => ({ ...n, pattern: removeSection(patternOf(n), selectedSectionId) }))
@@ -107,7 +122,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
     }
     window.addEventListener('keydown', onKey, { capture: true })
     return () => window.removeEventListener('keydown', onKey, { capture: true })
-  }, [selectedSectionId, canRemove, onClose, project.id, note.id, pattern])
+  }, [selectedSectionId, picked, canRemove, onClose, project.id, note.id, pattern])
 
   // ⌘Z and ⇧⌘Z (or Ctrl+Y) undo and redo this banknote's steps only, caught before the canvas's project-wide undo
   useEffect(() => {
@@ -140,7 +155,8 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       <div className="absolute inset-0 bg-muted/40" />
 
       {/* The whole editor, behind the panels, as on the canvas; the thread fits between them, and fits again once turned */}
-      <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={setSelectedId} ridges={ridges} tilting={tiltOn}
+      <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={selectSection} ridges={ridges} tilting={tiltOn}
+        soloFrame={!tiltOn && picked ? pickedIndex : undefined}
         limit={lens.viewDeg} room="top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[248px]" />
 
       <Panel className="absolute top-3 right-3 left-3 flex h-11 items-center gap-2 rounded-[calc(var(--radius)+0.375rem+1px)] pr-1.5 pl-1.5">
@@ -188,7 +204,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
                   // A preset never switches Mixed angles: it is only offered when it fits the setting
                   const next = { ...presetPattern(note, preset.value), mixed: pattern.mixed }
                   edit(() => next)
-                  setSelectedId(next.sections.at(0)?.id)
+                  selectSection(next.sections.at(0)?.id)
                 }}>
                 <PatternPicture note={note} pattern={presetPattern(note, preset.value)} width={vertical ? 40 : 76} height={vertical ? 52 : 29} />
                 {preset.label}
@@ -197,7 +213,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
           </div>
         </div>
         <Separator />
-        <SectionList note={note} selectedId={selectedSectionId} onSelect={setSelectedId}
+        <SectionList note={note} selectedId={selectedSectionId} onSelect={selectSection}
           onAdd={() => added(addBlankSection(pattern, note.thread.widthMm, selectedSectionId))}
           onDuplicate={(id) => added(duplicateSection(pattern, id, note.thread.widthMm))}
           onRemove={canRemove ? remove : undefined}
@@ -207,6 +223,12 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       <PanelResizer className="top-16" />
       <Panel className="absolute top-16 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {/* The frame picked in the timeline: what it shows, and where its image sits in the repeat */}
+          {picked && (
+            <Group title={`Frame ${pickedIndex + 1}`}>
+              <FramePanel note={note} noteRef={noteRef} frame={picked} />
+            </Group>
+          )}
           {/* The selected section's frames; its length and width are edited beside the thread, its place by dragging it */}
           {selected && (
             <Group title={selected.name}>
@@ -246,13 +268,14 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
           </Drawer>
           <Drawer title="Checks" open={info === 'checks'} onOpenChange={openInfo('checks')}
             action={warnings > 0 ? <span className="text-xs text-amber-600 tabular-nums dark:text-amber-500">{warnings}</span> : undefined}>
-            <CheckList checks={checks} onSelect={setSelectedId} onFillGaps={() => added(fillGaps(pattern, note.thread.widthMm))} />
+            <CheckList checks={checks} onSelect={selectSection} onFillGaps={() => added(fillGaps(pattern, note.thread.widthMm))} />
           </Drawer>
         </div>
       </Panel>
 
       <TiltRail limit={lens.viewDeg} playback={{ projectId: project.id, tilt: playbackTilt(note), lens }} />
-      <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel sectionId={selectedSectionId} />
+      <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel sectionId={selectedSectionId}
+        pickedFrameId={picked?.id} onPickFrame={pickFrame} />
     </div>
   )
 }

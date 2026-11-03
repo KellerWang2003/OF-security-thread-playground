@@ -77,7 +77,7 @@ function fitView(box: { width: number; height: number }, repeatMm: number, width
  * (Tailwind insets clear of the panels), and panned it runs on under them instead of being cut off at that box. A
  * longer repeat or a thicker thread keeps the zoom, so the thread itself grows.
  */
-export function PatternView({ note, projectId, selectedId, onSelect, ridges, tilting = true, limit = 90, room: roomClassName }: {
+export function PatternView({ note, projectId, selectedId, onSelect, ridges, tilting = true, soloFrame, limit = 90, room: roomClassName }: {
   note: Note
   projectId: string
   selectedId?: string
@@ -86,6 +86,8 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   ridges: boolean
   /** A drag around the thread tilts it, and the thread turns with the tilt; off, it lies flat and a drag pans */
   tilting?: boolean
+  /** A frame (by index) shown over the whole thread, whatever the tilt: the frame picked while tilting is off */
+  soloFrame?: number
   /** How far a drag may tilt, either way */
   limit?: number
   /** Where the thread fits and centres, as Tailwind insets within the view */
@@ -158,7 +160,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
   // What each section shows now: the view follows the tilt, re-rendering as it moves
   const tilt = { x: angleX, y: angle }
   const mixes = prepared.plain ? [lensMix(note, tilt)] : patternMix(note, tilt)
-  const shown = mixes.map((m) => [m.base, m.blend > 0 ? m.next : m.base, m.current])
+  const shown = mixes.map((m) => (soloFrame !== undefined ? [soloFrame, soloFrame, soloFrame] : [m.base, m.blend > 0 ? m.next : m.base, m.current]))
   const fill = { direction: thread.direction, scale, thicknessMm: thread.widthMm, lengthMm, repeatMm: repeat, offsetMm: 0 }
 
   /** A rect of copy `k`, in px within the strip */
@@ -322,7 +324,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, til
         onDoubleClick={onDoubleClick}
       >
         <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: thread.backgroundColor, ...EMPTY }}>
-          <ThreadArt note={note} shown={shown} blends={mixes.map((m) => m.blend)} fill={fill} />
+          <ThreadArt note={note} shown={shown} blends={mixes.map((m) => (soloFrame !== undefined ? 0 : m.blend))} fill={fill} />
         </div>
 
         <svg className="pointer-events-none absolute inset-0 overflow-visible" width={width} height={height} aria-hidden>

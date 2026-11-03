@@ -1,5 +1,5 @@
 import { reportError } from '../cloud/notices'
-import { ArrowLeft, Circle, Square, ArrowRight, EyeOff, Hash, ImagePlus, MoreHorizontal, Palette, Pause, Play, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { ArrowLeft, Circle, Square, ArrowRight, EyeOff, Hash, ImagePlus, MoreHorizontal, Pause, Play, Plus, SlidersHorizontal, SquareDashed, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -24,16 +24,7 @@ import type { Frame, Note } from '../lib/types'
 import { setRecording, setTilt, togglePlayback, useTilt } from '../tilt/tilt'
 import { PlaybackPanel } from './PlaybackPanel'
 import { TILT_PANEL_PX } from './TiltRail'
-import { addColorFrame, addImageFrames, deleteFrame, moveFrame, replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
-
-/** Opens the system colour picker without a visible input */
-function pickColor(initial: string, onPick: (color: string) => void) {
-  const input = document.createElement('input')
-  input.type = 'color'
-  input.value = initial
-  input.oninput = () => onPick(input.value)
-  input.click()
-}
+import { addEmptyFrame, addImageFrames, deleteFrame, moveFrame, updateFrame, type NoteRef } from './frameActions'
 
 const PAD = 12
 /** Height of one tilt-reach lane above the frames, in px */
@@ -52,6 +43,8 @@ export function TimelineBar({
   noteRef,
   besidePanel,
   sectionId,
+  pickedFrameId,
+  onPickFrame,
 }: {
   projectId: string
   notes: Note[]
@@ -60,6 +53,10 @@ export function TimelineBar({
   besidePanel: boolean
   /** The thread section whose lens the track follows, in the thread editor */
   sectionId?: string
+  /** In the thread editor: the frame picked, whose fill the right panel shows */
+  pickedFrameId?: string
+  /** In the thread editor: a click on a clip picks its frame */
+  onPickFrame?: (id: string) => void
 }) {
   const source = useTilt((state) => state.source)
   const playing = source === 'wobble'
@@ -83,7 +80,7 @@ export function TimelineBar({
         </IconButton>
         <FrameSettings projectId={projectId} note={note ?? notes.at(0)} />
       </div>
-      {note && noteRef && <FrameTrack note={note} noteRef={noteRef} sectionId={sectionId} />}
+      {note && noteRef && <FrameTrack note={note} noteRef={noteRef} sectionId={sectionId} pickedFrameId={pickedFrameId} onPickFrame={onPickFrame} />}
     </Panel>
   )
 }
@@ -148,7 +145,13 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
  * cycle the current tilt is, wrapping around as the frames loop. Drag to scrub, scroll to move along,
  * ⌘-scroll to zoom.
  */
-function FrameTrack({ note, noteRef, sectionId }: { note: Note; noteRef: NoteRef; sectionId?: string }) {
+function FrameTrack({ note, noteRef, sectionId, pickedFrameId, onPickFrame }: {
+  note: Note
+  noteRef: NoteRef
+  sectionId?: string
+  pickedFrameId?: string
+  onPickFrame?: (id: string) => void
+}) {
   const scroller = useRef<HTMLDivElement>(null)
   const track = useRef<HTMLDivElement>(null)
   const gesture = useRef<{ mode: 'scrub' } | { mode: 'resize'; frameId: string; startX: number; startLength: number } | null>(null)
@@ -213,6 +216,9 @@ function FrameTrack({ note, noteRef, sectionId }: { note: Note; noteRef: NoteRef
             if (frame && noteRef) {
               gesture.current = { mode: 'resize', frameId: frame.id, startX: e.clientX, startLength: frame.length }
             } else {
+              // In the thread editor a click on a clip also picks its frame, for its fill in the right panel
+              const clip = el.closest<HTMLElement>('[data-frame-clip]')?.dataset.frameClip
+              if (clip) onPickFrame?.(clip)
               gesture.current = { mode: 'scrub' }
               scrubTo(e.clientX)
             }
@@ -246,9 +252,11 @@ function FrameTrack({ note, noteRef, sectionId }: { note: Note; noteRef: NoteRef
             return (
               <div
                 key={frame.id}
+                data-frame-clip={frame.id}
+                aria-selected={onPickFrame ? frame.id === pickedFrameId : undefined}
                 className={cn(
                   'group absolute bottom-1 overflow-hidden rounded-sm border bg-background',
-                  i === current && 'ring-1 ring-primary/30',
+                  frame.id === pickedFrameId ? 'ring-2 ring-primary' : i === current && 'ring-1 ring-primary/30',
                 )}
                 style={{ top: framesTop, left: left + 1, width: Math.max(width - 2, 4) }}
               >
@@ -335,9 +343,9 @@ function FrameTrack({ note, noteRef, sectionId }: { note: Note; noteRef: NoteRef
               <ImagePlus />
               Upload images
             </DropdownMenuItem>
-            <DropdownMenuItem disabled={frames.length >= MAX_FRAMES} onClick={() => addColorFrame(noteRef)}>
-              <Palette />
-              Colour frame
+            <DropdownMenuItem disabled={frames.length >= MAX_FRAMES} onClick={() => addEmptyFrame(noteRef)}>
+              <SquareDashed />
+              Empty frame
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -357,6 +365,7 @@ function Playhead({ lens, left, width }: { lens: LensState; left: number; width:
   )
 }
 
+/** A clip's menu: move it along the timeline or delete it; what the frame shows is set in Thread Studio */
 function FrameMenu({ frame, index, count, noteRef }: { frame: Frame; index: number; count: number; noteRef: NoteRef }) {
   return (
     <DropdownMenu>
@@ -373,22 +382,6 @@ function FrameMenu({ frame, index, count, noteRef }: { frame: Frame; index: numb
         <MoreHorizontal />
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-44" side="top">
-        <DropdownMenuItem
-          onClick={async () => {
-            try {
-              const [file] = await pickFiles()
-              if (file) await replaceFrameImage(noteRef, frame.id, file)
-            } catch (error) { reportError(error) }
-          }}
-        >
-          <RefreshCw />
-          {frame.kind === 'image' ? 'Replace image' : 'Use an image'}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => pickColor(frame.color, (color) => updateFrame(noteRef, frame.id, { kind: 'color', color }))}>
-          <Palette />
-          {frame.kind === 'color' ? 'Change colour' : 'Use a colour'}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
         <DropdownMenuItem disabled={index === 0} onClick={() => moveFrame(noteRef, frame.id, -1)}>
           <ArrowLeft />
           Move earlier

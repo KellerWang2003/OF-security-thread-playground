@@ -15,6 +15,19 @@ import { TooltipProvider } from '../src/components/ui/tooltip'
 import type { Note } from '../src/lib/types'
 
 vi.mock('../src/cloud/client', () => ({ cloudConfigured: true }))
+// Artwork a test names `fixture-…` counts as already loaded, without uploading it (jsdom has no object URLs)
+vi.mock('../src/lib/images', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/lib/images')>()
+  const fixture = (id?: string) => (id?.startsWith('fixture-') ? `blob:${id}` : undefined)
+  return {
+    ...actual,
+    useImageUrl: (id?: string) => {
+      const url = actual.useImageUrl(fixture(id) ? undefined : id)
+      return fixture(id) ?? url
+    },
+    loadImageUrl: async (id: string) => fixture(id) ?? actual.loadImageUrl(id),
+  }
+})
 vi.mock('../src/cloud/repository', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/cloud/repository')>()
   const { createProject, createNote } = await import('../src/lib/notes')
@@ -528,5 +541,52 @@ describe('thread editor', () => {
     await user.click(within(editor).getByRole('switch', { name: 'Colour' }))
     expect(note().thread.backgroundColor).toBe('#ffffff')
     expect(within(editor).queryByTitle('Space between complete image copies along the thread')).toBeNull()
+  })
+  it('picks a frame by its clip and sets what it shows, its image placed in the repeat', async () => {
+    const user = await openDemo('thread-frames-ui-test')
+    await user.click(editThread())
+    const editor = screen.getByRole('region', { name: 'Thread editor' })
+    const clip = (i: number) => document.querySelectorAll<HTMLElement>('[data-frame-clip]')[i]
+    const pick = (i: number) => {
+      fireEvent.pointerDown(clip(i), { button: 0, buttons: 1, clientX: 20, pointerId: 1 })
+      fireEvent.pointerUp(clip(i), { button: 0, clientX: 20, pointerId: 1 })
+    }
+    // One thing picked at a time: the frame's group takes the section's place
+    expect(within(editor).getByRole('heading', { name: 'Whole thread' })).toBeDefined()
+    pick(1)
+    expect(within(editor).getByRole('heading', { name: 'Frame 2' })).toBeDefined()
+    expect(within(editor).queryByRole('heading', { name: 'Whole thread' })).toBeNull()
+    expect(clip(1).getAttribute('aria-selected')).toBe('true')
+
+    // Nothing, so the background shows, or a colour
+    await user.click(within(editor).getByRole('button', { name: 'None', exact: true }))
+    expect(note().frames[1].kind).toBe('none')
+    await user.click(within(editor).getByRole('button', { name: 'Colour', exact: true }))
+    expect(note().frames[1].kind).toBe('color')
+
+    // An image sits in the repeat: fitted at first, then where its fields put it
+    act(() => updateNote(useProjects.getState().demoPreview!.id, note().id, (n) => ({
+      ...n, frames: n.frames.map((f, i) => (i === 1 ? { ...f, kind: 'image' as const, imageId: 'fixture-bird', aspect: 0.5 } : f)),
+    })))
+    const field = (title: string) => within(editor).getByTitle(title).querySelector('input')!
+    // As wide as the 4 mm thread and half as tall: 2 mm of the 4 mm repeat, centred
+    expect(field('Image position from the start of the repeat').value).toBe('1')
+    fireEvent.change(field('Image position from the start of the repeat'), { target: { value: '0.5' } })
+    expect(note().frames[1].place).toEqual({ alongMm: 0.5, across: 0, size: 1 })
+    fireEvent.change(field('Image width; its height follows the image'), { target: { value: '2' } })
+    expect(note().frames[1].place).toEqual({ alongMm: 0.5, across: 0, size: 0.5 })
+    await user.click(within(editor).getByRole('button', { name: 'Fit to the repeat' }))
+    expect(note().frames[1].place).toBeUndefined()
+
+    // With Tilt off the thread shows the picked frame all along, whatever the tilt
+    await user.click(within(editor).getByRole('button', { name: 'Tilt', exact: true }))
+    act(() => setTilt({ source: 'drag', angle: 40, target: 40, angleX: 0, targetX: 0 }))
+    expect(strip().element.querySelectorAll('img').length).toBeGreaterThan(0)
+    act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
+
+    // Escape lets go of the frame first
+    await user.keyboard('{Escape}')
+    expect(within(editor).queryByRole('heading', { name: 'Frame 2' })).toBeNull()
+    expect(screen.getByRole('region', { name: 'Thread editor' })).toBeDefined()
   })
 })

@@ -45,9 +45,10 @@ export async function addImageFrames({ projectId, noteId }: NoteRef, files: File
   return images.length - picked.length
 }
 
-export function addColorFrame({ projectId, noteId }: NoteRef) {
+/** Adds an empty frame, which shows the thread's background until it gets a colour or an image in Thread Studio */
+export function addEmptyFrame({ projectId, noteId }: NoteRef) {
   updateNote(projectId, noteId, (n) =>
-    n.frames.length >= MAX_FRAMES ? n : { ...n, frames: [...n.frames, colorFrame(n.frames.length)] },
+    n.frames.length >= MAX_FRAMES ? n : { ...n, frames: [...n.frames, { ...colorFrame(n.frames.length), kind: 'none' as const, name: `Frame ${n.frames.length + 1}` }] },
   )
 }
 

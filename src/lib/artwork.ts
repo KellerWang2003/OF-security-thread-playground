@@ -5,6 +5,26 @@ import type { Frame, ImagePlace, Note, ThreadPattern, ThreadSettings } from './t
 export const alongOf = (acrossMm: number, aspect: number, direction: ThreadSettings['direction']) =>
   direction === 'vertical' ? acrossMm * aspect : acrossMm / aspect
 
+/** Steps for placing an image on the thread, mm: finer than the window and watermark editors, as a thread is a few mm thick */
+export const IMAGE_STEP = 0.1
+
+/** The image's top-left corner in the repeat and its width, mm, upright on the banknote as it is drawn */
+export function uprightBox(box: ImageBox, direction: ThreadSettings['direction']) {
+  return direction === 'vertical'
+    ? { x: box.across, y: box.along, width: box.acrossSize, height: box.alongSize }
+    : { x: box.along, y: box.across, width: box.alongSize, height: box.acrossSize }
+}
+
+/** The place an upright box (mm, in the repeat) gives an image on a thread `thicknessMm` thick */
+export function placeOf(upright: { x: number; y: number; width: number; height: number }, thicknessMm: number, direction: ThreadSettings['direction']) {
+  const vertical = direction === 'vertical'
+  return {
+    alongMm: vertical ? upright.y : upright.x,
+    across: (vertical ? upright.x : upright.y) / thicknessMm,
+    size: (vertical ? upright.width : upright.height) / thicknessMm,
+  }
+}
+
 /** An image's box in one repeat, mm: its near end along the repeat, its near edge across the thread, and its size both ways */
 export interface ImageBox {
   along: number
