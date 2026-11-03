@@ -1,17 +1,21 @@
 import { ImageUp, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Slider } from '@/components/ui/slider'
 import { Group, IconButton, ScrubField, Section, SwitchField } from '../components/controls'
 import { reportError } from '../cloud/notices'
 import { pickFiles, useImageUrl } from '../lib/images'
-import type { Note, Watermark } from '../lib/types'
-import { WATERMARK_MIN_MM, WATERMARK_STEP, maxWatermarkWidth, resizeWatermark } from '../lib/watermark'
+import { useReading } from '../lib/relief'
+import type { Note, Watermark, WatermarkLevels } from '../lib/types'
+import {
+  FULL_LEVELS, LEVELS_GAP, WATERMARK_MIN_MM, WATERMARK_STEP, gammaAt, maxWatermarkWidth, midtonesAt, resizeWatermark,
+} from '../lib/watermark'
 import type { NoteRef } from './frameActions'
 import { setWatermarkImage, updateWatermark } from './watermarkActions'
 
 /**
  * Right, under the Watermark tab: the selected banknote's watermark. One image, read only by brightness, as paper has no
- * colour: its light parts are thinner paper that lets more light through, or its dark parts with Invert. Where it sits
- * and how strongly it shows. Removing it is beside the tabs.
+ * colour: its light parts are thinner paper that lets more light through, or its dark parts with Invert. Its levels,
+ * Auto or by hand, then shape how thin. Where it sits and how strongly it shows. Removing it is beside the tabs.
  */
 export function WatermarkPanel({ note, watermark, noteRef, onPlace }: {
   note: Note
@@ -21,6 +25,9 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace }: {
   onPlace: () => void
 }) {
   const image = useImageUrl(watermark.imageId)
+  const reading = useReading(watermark)
+  // By hand, or Auto's for the image as read
+  const levels = watermark.levels ?? reading?.auto
   const change = (next: (w: Watermark, n: Note) => Watermark) => updateWatermark(noteRef, next)
 
   return (
@@ -57,7 +64,13 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace }: {
           )}
         </div>
         {watermark.imageId && (
-          <SwitchField label="Invert" checked={watermark.invert === true} onChange={(on) => change((w) => ({ ...w, invert: on }))} />
+          <>
+            <SwitchField label="Invert" checked={watermark.invert === true} onChange={(on) => change((w) => ({ ...w, invert: on }))} />
+            {/* Off, it keeps the levels Auto had, to set by hand; moving a handle turns it off too */}
+            <SwitchField label="Auto levels" title="Levels fitted to the image" checked={!watermark.levels}
+              onChange={(on) => change(({ levels: _byHand, ...w }) => (on ? w : { ...w, levels: levels ?? FULL_LEVELS }))} />
+            <LevelsSlider levels={levels} onChange={(next) => change((w) => ({ ...w, levels: next }))} />
+          </>
         )}
       </Section>
 
@@ -74,5 +87,41 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace }: {
         </div>
       </Section>
     </Group>
+  )
+}
+
+/** The levels slider's handles, left to right */
+const HANDLES = ['Where the watermark starts', 'Midtones', 'Where it is thinnest']
+/** Black, grey and white handles, as in Photoshop's Levels */
+const HANDLE_TONES = ['bg-neutral-900', 'bg-neutral-500', undefined]
+
+/** A share 0 to 1 from the slider's percent, without float dust */
+const share = (percent: number) => Math.round(percent * 10) / 1000
+
+/**
+ * Levels on how thin the paper is: where the watermark starts (anything fainter stays plain paper), its midtones, and
+ * where it reaches the thinnest paper. The midtones handle keeps its place between the ends as they move.
+ */
+function LevelsSlider({ levels, onChange }: { levels: WatermarkLevels | undefined; onChange: (levels: WatermarkLevels) => void }) {
+  const { low, high, gamma } = levels ?? FULL_LEVELS
+  const percent = (x: number) => Math.round(x * 1000) / 10
+  return (
+    <Slider
+      value={[percent(low), percent(low + (high - low) * midtonesAt(gamma)), percent(high)]}
+      min={0}
+      max={100}
+      step={1}
+      minStepsBetweenValues={1}
+      disabled={!levels}
+      thumbLabel={(i) => HANDLES[i]}
+      thumbClassName={(i) => HANDLE_TONES[i]}
+      onValueChange={(value, { activeThumbIndex: i }) => {
+        if (!levels || !Array.isArray(value)) return
+        const [lo, mid, hi] = value.map(share)
+        if (i === 0) onChange({ ...levels, low: Math.min(lo, high - LEVELS_GAP) })
+        else if (i === 2) onChange({ ...levels, high: Math.max(hi, low + LEVELS_GAP) })
+        else onChange({ ...levels, gamma: gammaAt((mid - low) / (high - low)) })
+      }}
+    />
   )
 }

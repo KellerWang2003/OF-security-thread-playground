@@ -76,7 +76,7 @@ describe('exported light', () => {
   it('draws the watermark over the design and under the thread as light through it, at its reveal, and nothing else differently', () => {
     const note = { ...createNote({ name: 'N', x: 0, y: 0, widthMm: 100, heightMm: 50, color: '#336699' }), watermark: { imageId: 'w', xMm: 10, yMm: 5, widthMm: 20, heightMm: 30, depth: 0.6 } }
     const canvas = { width: 1, height: 1 } as unknown as HTMLCanvasElement
-    const relief = { canvas, url: 'blob:light' }
+    const relief = { canvas }
     /** Every image drawn, and every fill, with the blend and opacity it was drawn at */
     const draw = (reveal?: number, tilt = 0) => {
       const calls: { what: string; blend: string; alpha: number; at?: number[] }[] = []

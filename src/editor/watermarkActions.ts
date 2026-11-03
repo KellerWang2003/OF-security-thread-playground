@@ -31,14 +31,15 @@ export function updateWatermark({ projectId, noteId }: NoteRef, change: (waterma
   updateNote(projectId, noteId, (n) => (n.watermark ? { ...n, watermark: fitWatermark(change(n.watermark, n), n) } : n))
 }
 
-/** Uploads the watermark's image (its proportions set the height), or removes it */
+/** Uploads the watermark's image (its proportions set the height; it starts on Auto levels), or removes it */
 export async function setWatermarkImage(ref: NoteRef, file: File | undefined) {
   const old = findNote(ref.projectId, ref.noteId)?.watermark?.imageId
   if (file) {
     const [imageId, aspect] = await Promise.all([storeImage(file), imageAspect(file)])
     updateWatermark(ref, (w, n) => withWatermarkImage(w, imageId, aspect, n))
   } else {
-    updateWatermark(ref, ({ imageId: _removed, ...rest }) => rest)
+    // Its levels were for that image
+    updateWatermark(ref, ({ imageId: _removed, levels: _levels, ...rest }) => rest)
   }
   if (old) await removeImage(old)
 }

@@ -117,7 +117,7 @@ export interface PlaybackMove {
  * A watermark made in the paper: an image that is faint flat and shows clearly tilted or held to the light. Paper has
  * no colour of its own, so only each pixel's brightness counts: the light parts of the image are thinner paper, which
  * lets more light through, or the dark parts when inverted; its background counts as plain paper. It only ever gets
- * lighter.
+ * lighter. Its levels then shape how thin that reading makes the paper.
  * Placed by its top-left corner in mm from the banknote's top-left; its height follows the image's proportions.
  */
 export interface Watermark {
@@ -131,6 +131,21 @@ export interface Watermark {
   depth: number
   /** The dark parts of the image are the thinner paper instead of the light ones */
   invert?: boolean
+  /** Levels set by hand; absent means Auto, fitted to the image as it is read (relief.ts) */
+  levels?: WatermarkLevels
+}
+
+/**
+ * Levels on how thin a watermark's paper is, from 0 (plain) to 1 (the thinnest), after its image is read. They
+ * reshape that reading, so they mean the same with Invert on or off, and plain paper always stays plain.
+ */
+export interface WatermarkLevels {
+  /** Where the watermark starts: this thin or less stays plain paper */
+  low: number
+  /** Where it reaches the thinnest paper: this thin or more is the thinnest */
+  high: number
+  /** Midtones, as in Photoshop's Levels: above 1 brightens them, below 1 darkens them (0.1 to 9.99) */
+  gamma: number
 }
 
 /**

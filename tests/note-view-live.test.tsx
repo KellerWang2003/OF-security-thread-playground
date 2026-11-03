@@ -6,10 +6,18 @@ import { tiltReveal, watermarkOpacity } from '../src/lib/light'
 import { createNote } from '../src/lib/notes'
 import { setTilt } from '../src/tilt/tilt'
 
-// The watermark's relief is worked out from its image on a canvas, which jsdom lacks
+// The watermark's light layer is worked out from its image on a canvas, which jsdom lacks: each is named for what it
+// was drawn from, and painting one onto the watermark's canvas notes its name there
+const lights = vi.hoisted(() => ({ made: new Map<string, { name: string }>(), painted: new Map<unknown, string>() }))
 vi.mock('../src/lib/relief', () => ({
-  useRelief: (watermark?: { imageId?: string; invert?: boolean }) =>
-    watermark?.imageId ? { url: `blob:light-${watermark.imageId}${watermark.invert ? '-inverted' : ''}` } : undefined,
+  useRelief: (watermark?: { imageId?: string; invert?: boolean; levels?: { low: number } }) => {
+    if (!watermark?.imageId) return undefined
+    const name = `light-${watermark.imageId}${watermark.invert ? '-inverted' : ''}${watermark.levels ? `-from-${watermark.levels.low}` : ''}`
+    if (!lights.made.has(name)) lights.made.set(name, { name })
+    return lights.made.get(name)
+  },
+  reliefPixels: (_relief: unknown, px: number) => ({ width: Math.min(400, Math.round(px)), height: Math.min(400, Math.round(px)) }),
+  paintRelief: (canvas: HTMLCanvasElement, relief: { name: string }) => lights.painted.set(canvas, relief.name),
 }))
 
 afterEach(() => {
@@ -67,9 +75,11 @@ describe("a NoteView's watermark", () => {
     const watermark = mark(container)
     // Light through thinner paper, colour-dodged over the design so it only ever brightens it
     expect(watermark.style.mixBlendMode).toBe('color-dodge')
-    expect(watermark.style.backgroundImage).toContain('blob:light-mark')
+    expect(lights.painted.get(watermark)).toBe('light-mark')
     expect(watermark.style.left).toBe('20px')
     expect(watermark.style.width).toBe('60px')
+    // As many pixels as it shows at
+    expect((watermark as HTMLCanvasElement).width).toBe(60)
     expect(watermark.compareDocumentPosition(container.querySelector('[data-thread]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(opacity(container)).toBeCloseTo(watermarkOpacity(0.6, 0))
 
@@ -133,10 +143,20 @@ describe("a NoteView's watermark", () => {
 
   it('lets the dark parts of its image through instead when inverted', () => {
     const { container, rerender } = render(<NoteView note={withWatermark()} scale={1} live />)
-    expect(mark(container).style.backgroundImage).not.toContain('inverted')
+    expect(lights.painted.get(mark(container))).toBe('light-mark')
     rerender(<NoteView note={{ ...withWatermark(), watermark: { ...withWatermark().watermark, invert: true } }} scale={1} live />)
-    expect(mark(container).style.backgroundImage).toContain('blob:light-mark-inverted')
+    expect(lights.painted.get(mark(container))).toBe('light-mark-inverted')
     expect(mark(container).style.mixBlendMode).toBe('color-dodge')
+  })
+
+  it('draws through its levels, and again at the size it shows at when zoomed', () => {
+    const levels = { low: 0.2, high: 0.7, gamma: 1 }
+    const { container, rerender } = render(<NoteView note={{ ...withWatermark(), watermark: { ...withWatermark().watermark, levels } }} scale={1} live />)
+    expect(lights.painted.get(mark(container))).toBe('light-mark-from-0.2')
+    expect((mark(container) as HTMLCanvasElement).width).toBe(30)
+    rerender(<NoteView note={{ ...withWatermark(), watermark: { ...withWatermark().watermark, levels } }} scale={4} live />)
+    expect((mark(container) as HTMLCanvasElement).width).toBe(120)
+    expect(lights.painted.get(mark(container))).toBe('light-mark-from-0.2')
   })
 
   it('draws nothing until it has an image', () => {

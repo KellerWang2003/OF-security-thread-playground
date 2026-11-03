@@ -7,7 +7,7 @@ import { useImageUrl } from '../lib/images'
 import { patternMix, preparePattern, sectionClip, shownLabel } from '../lib/pattern'
 import { imageTiles, threadWindowMask, windowEdges } from '../lib/thread'
 import type { Frame, Note } from '../lib/types'
-import { useRelief } from '../lib/relief'
+import { paintRelief, reliefPixels, useRelief } from '../lib/relief'
 import { useTilt } from '../tilt/tilt'
 
 // Height ÷ width of each image, once loaded
@@ -236,6 +236,15 @@ export function NoteView({
   const liveShown = useTilt((s) => (live ? shownKey(note, s.angle, s.angleX) : ''))
   const shown = parseShown(live ? liveShown : shownKey(note, angle, angleX))
   const relief = useRelief(watermark)
+  const light = useRef<HTMLCanvasElement>(null)
+  // As many pixels as the watermark shows at on this screen, up to the light layer's own
+  const lightSize = relief && watermark ? reliefPixels(relief, watermark.widthMm * scale * (globalThis.devicePixelRatio || 1)) : undefined
+  const lightWidth = lightSize?.width ?? 1
+  const lightHeight = lightSize?.height ?? 1
+  useLayoutEffect(() => {
+    // Again whenever its size changes too, as that clears it
+    if (light.current && relief && lightWidth * lightHeight > 0) paintRelief(light.current, relief)
+  }, [relief, lightWidth, lightHeight])
   const depth = watermark?.depth ?? 0
   const revealOf = (state: LiveState) => reveal ?? watermarkReveal(state.light, { x: state.angleX, y: state.angle })
 
@@ -296,12 +305,13 @@ export function NoteView({
       {face && <img src={face} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />}
 
       {watermarkBox && watermark?.imageId && (
-        // Light through thinner paper (relief.ts), colour-dodged over the design: it only ever brightens it, in
-        // proportion, so it keeps the note's own colours and dark print stays dark. Its opacity is how much of that
-        // light comes through. The thread lies over it, unchanged. On the canvas it takes a press, faint or clear, so it
-        // drags as the thread does; not with no depth to show.
-        <div data-watermark={note.id} className={cn('absolute', live && depth > 0 ? 'cursor-move' : 'pointer-events-none')}
-          {...part('watermark', { ...watermarkBox, backgroundImage: relief && `url(${relief.url})`, backgroundSize: '100% 100%', mixBlendMode: 'color-dodge' })} />
+        // Light through thinner paper (relief.ts, through its levels), colour-dodged over the design: it only ever
+        // brightens it, in proportion, so it keeps the note's own colours and dark print stays dark. Its opacity is how
+        // much of that light comes through. The thread lies over it, unchanged. On the canvas it takes a press, faint or
+        // clear, so it drags as the thread does; not with no depth to show.
+        <canvas ref={light} data-watermark={note.id} width={lightWidth} height={lightHeight}
+          className={cn('absolute', live && depth > 0 ? 'cursor-move' : 'pointer-events-none')}
+          {...part('watermark', { ...watermarkBox, mixBlendMode: 'color-dodge' })} />
       )}
 
       {showWindowCuts && thread.windows.enabled && (

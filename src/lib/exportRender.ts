@@ -89,7 +89,7 @@ export function tiltedBounds(width: number, height: number, tilt: Tilt2 | number
 export interface NoteAssets {
   face?: HTMLImageElement
   frames: Map<string, HTMLImageElement>
-  /** The watermark worked out as light through thinner paper, colour-dodged over the design (relief.ts) */
+  /** The watermark worked out as light through thinner paper, through its levels, colour-dodged over the design (relief.ts) */
   relief?: Relief
 }
 
@@ -111,7 +111,7 @@ export async function loadNoteAssets(note: Note): Promise<NoteAssets> {
   const frames = new Map<string, HTMLImageElement>()
   const [face, relief] = await Promise.all([
     note.background === 'image' && note.faceImageId ? loadArtwork(note.faceImageId) : undefined,
-    note.watermark?.imageId ? loadRelief({ imageId: note.watermark.imageId, invert: note.watermark.invert }) : undefined,
+    note.watermark?.imageId ? loadRelief({ imageId: note.watermark.imageId, invert: note.watermark.invert, levels: note.watermark.levels }) : undefined,
     ...note.frames.map(async (frame) => {
       if (frame.kind !== 'image' || !frame.imageId) return
       const img = await loadArtwork(frame.imageId)
@@ -162,7 +162,10 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     // note's own colours, at how much of that light comes through, under the thread
     ctx.globalCompositeOperation = 'color-dodge'
     ctx.globalAlpha = watermarkOpacity(watermark.depth, options.reveal ?? watermarkReveal(0, { x: angleX, y: angle }))
+    // Scaled down as smoothly as the canvas draws it, so fine detail doesn't turn to grain
+    ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(assets.relief.canvas, mm(watermark.xMm), mm(watermark.yMm), mm(watermark.widthMm), mm(watermark.heightMm))
+    ctx.imageSmoothingQuality = 'low'
     ctx.globalAlpha = 1
     ctx.globalCompositeOperation = 'source-over'
   }

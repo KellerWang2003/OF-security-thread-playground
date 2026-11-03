@@ -28,6 +28,18 @@ vi.mock('../src/lib/images', async (importOriginal) => {
     loadImageUrl: async (id: string) => fixture(id) ?? actual.loadImageUrl(id),
   }
 })
+// jsdom can't read an image's pixels: a fixture reads as one Auto fits from 10% to 80%
+vi.mock('../src/lib/relief', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/lib/relief')>()
+  const fixture = { key: 'fixture', thin: new Uint8ClampedArray(), width: 0, height: 0, auto: { low: 0.1, high: 0.8, gamma: 1 } }
+  return {
+    ...actual,
+    useReading: (watermark?: { imageId?: string }) => {
+      const reading = actual.useReading(watermark)
+      return watermark?.imageId?.startsWith('fixture-') ? fixture : reading
+    },
+  }
+})
 vi.mock('../src/cloud/repository', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/cloud/repository')>()
   const { createProject, createNote } = await import('../src/lib/notes')
@@ -598,6 +610,28 @@ describe('username workspace editor', () => {
     expect(watermark()).toEqual({ ...moved, invert: true })
     await user.click(screen.getByRole('switch', { name: 'Invert' }))
     expect(watermark()).toEqual(moved)
+
+    // Levels start on Auto, fitted to the image; moving a handle sets them by hand and turns Auto off
+    const autoLevels = () => screen.getByRole('switch', { name: 'Auto levels' })
+    // jsdom has no layout, so the slider keeps its handles hidden (unnamed to a role query) until it could place them
+    const handle = (name: string) => screen.getByLabelText(name)
+    expect(autoLevels().getAttribute('aria-checked')).toBe('true')
+    expect(handle('Where the watermark starts').getAttribute('aria-valuenow')).toBe('10')
+    expect(handle('Midtones').getAttribute('aria-valuenow')).toBe('45')
+    expect(handle('Where it is thinnest').getAttribute('aria-valuenow')).toBe('80')
+    fireEvent.keyDown(handle('Where the watermark starts'), { key: 'ArrowRight' })
+    expect(watermark()).toEqual({ ...moved, levels: { low: 0.11, high: 0.8, gamma: 1 } })
+    expect(autoLevels().getAttribute('aria-checked')).toBe('false')
+    // The midtones handle keeps its place between the ends; left of the middle brightens them
+    expect(handle('Midtones').getAttribute('aria-valuenow')).toBe('45.5')
+    fireEvent.keyDown(handle('Midtones'), { key: 'ArrowLeft' })
+    expect(watermark()!.levels!.gamma).toBeGreaterThan(1)
+    // Auto again leaves them unsaid; switched off, it keeps Auto's to set by hand
+    await user.click(autoLevels())
+    expect(watermark()).toEqual(moved)
+    await user.click(autoLevels())
+    expect(watermark()).toEqual({ ...moved, levels: { low: 0.1, high: 0.8, gamma: 1 } })
+    await user.click(autoLevels())
 
     // The lamp on the pad switches it off again
     await user.click(screen.getByRole('button', { name: 'Hold up to the light' }))
