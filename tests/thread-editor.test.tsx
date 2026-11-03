@@ -184,6 +184,27 @@ describe('thread editor', () => {
     expect(within(editor).queryByRole('button', { name: 'Corner rests on 2, the others on 1', exact: true })).toBeNull()
   })
 
+  it('selects the next section after a delete, else the one before', async () => {
+    const user = await openDemo('thread-delete-select-ui-test')
+    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    const editor = screen.getByRole('region', { name: 'Thread editor' })
+    await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
+    // Splitting the first lane puts the new half straight after it, selected
+    await user.click(within(editor).getByRole('button', { name: 'Add section', exact: true }))
+    expect(sections().map((s) => s.name)).toEqual(['Lane ↔', 'Section 3', 'Lane ↕'])
+    expect(within(editor).getByRole('heading', { name: 'Section 3' })).toBeDefined()
+
+    // Delete selects the next section in the list
+    await user.keyboard('{Delete}')
+    expect(sections().map((s) => s.name)).toEqual(['Lane ↔', 'Lane ↕'])
+    expect(within(editor).getByRole('heading', { name: 'Lane ↕' })).toBeDefined()
+    // The last one has no next: the one before it is selected
+    const row = within(within(editor).getByRole('button', { name: 'Lane ↕', exact: true }).closest('li')!)
+    await user.click(row.getByRole('button', { name: 'Delete', exact: true }))
+    expect(sections().map((s) => s.name)).toEqual(['Lane ↔'])
+    expect(within(editor).getByRole('heading', { name: 'Lane ↔' })).toBeDefined()
+  })
+
   it('keeps a lens in the panel with nothing selected: the shared one, or with mixed angles the whole print', async () => {
     const user = await openDemo('thread-deselect-ui-test')
     await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))

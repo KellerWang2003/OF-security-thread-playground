@@ -74,9 +74,10 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
 
   /** Saves a pattern worked out from the banknote as it is when saved */
   const edit = (change: (n: Note) => ThreadPattern) => updateNote(project.id, note.id, (n) => ({ ...n, pattern: change(n) }))
+  // Removing the selected section selects the next one in the list, else the one before, so the panel stays on a section
   const remove = (id: string) => {
     edit((n) => removeSection(patternOf(n), id))
-    if (id === selectedId) setSelectedId(undefined)
+    if (id === selectedId) setSelectedId(neighbourOf(pattern, id))
   }
   const added = (result: { pattern: ThreadPattern; id: string } | undefined) => {
     if (!result) return
@@ -99,12 +100,12 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
         else onClose()
       } else if (selectedSectionId && canRemove) {
         updateNote(project.id, note.id, (n) => ({ ...n, pattern: removeSection(patternOf(n), selectedSectionId) }))
-        setSelectedId(undefined)
+        setSelectedId(neighbourOf(pattern, selectedSectionId))
       }
     }
     window.addEventListener('keydown', onKey, { capture: true })
     return () => window.removeEventListener('keydown', onKey, { capture: true })
-  }, [selectedSectionId, canRemove, onClose, project.id, note.id])
+  }, [selectedSectionId, canRemove, onClose, project.id, note.id, pattern])
 
   // ⌘Z and ⇧⌘Z (or Ctrl+Y) undo and redo this banknote's steps only, caught before the canvas's project-wide undo
   useEffect(() => {
@@ -237,6 +238,12 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel sectionId={selectedSectionId} />
     </div>
   )
+}
+
+/** The section to select once `id` is removed: the next in the list, else the one before */
+function neighbourOf(pattern: ThreadPattern, id: string) {
+  const i = pattern.sections.findIndex((s) => s.id === id)
+  return i < 0 ? undefined : (pattern.sections[i + 1] ?? pattern.sections[i - 1])?.id
 }
 
 /** The sections, in drawing order, each with its ridges; double-click a name to rename it */
