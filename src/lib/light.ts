@@ -2,17 +2,16 @@ import { clamp } from './frames'
 import type { Tilt2 } from './lens'
 
 /**
- * How clearly the watermark shows. In reflected light it is all but invisible, as on a real banknote (Keller, 3
- * November: a dollar's watermark can't be seen until it is held up to the light): next to nothing flat, a little more
- * as the banknote tilts either way, most from WATERMARK_TILT_DEG on. Held to the light (the lamp, L, or a Hold to light
- * move) it shows clearly at any tilt. Nothing else changes: the design and the thread look the same in any light.
- * Both views and the export use these numbers.
+ * How clearly the watermark shows (Keller, 3 November). Flat in reflected light it is only a hint; tilting the banknote
+ * either way brings it out with no light needed, clear from WATERMARK_TILT_DEG on; held to the light (the lamp, L, or a
+ * Hold to light move) it shows clearly even flat. Nothing else changes: the design and the thread look the same in any
+ * light. Both views and the export use these numbers.
  */
 
-/** Share of the watermark's depth that shows flat in reflected light: next to nothing */
-export const WATERMARK_FAINT = 0.02
-/** Share of its depth that shows tilted in reflected light, from WATERMARK_TILT_DEG on: a little more, far from held to the light */
-export const WATERMARK_TILTED = 0.1
+/** Share of the watermark's depth that shows flat in reflected light: only a hint */
+export const WATERMARK_FAINT = 0.05
+/** Share of its depth that tilting alone shows, from WATERMARK_TILT_DEG on: all of it, as clear as held to the light */
+export const WATERMARK_TILTED = 1
 /** Tilt, whichever way, from which tilting shows the watermark as much as it can */
 export const WATERMARK_TILT_DEG = 30
 /** Seconds the light switch takes to fade the light in or out */

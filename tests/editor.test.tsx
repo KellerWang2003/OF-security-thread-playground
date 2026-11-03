@@ -562,7 +562,7 @@ describe('username workspace editor', () => {
     const { xMm } = watermark()!
     fireEvent.keyDown(placing()!, { key: 'ArrowRight' })
     expect(watermark()!.xMm).toBe(xMm + 0.5)
-    fireEvent.change(screen.getByTitle('How strongly the watermark shows held to the light').querySelector('input')!, { target: { value: '30' } })
+    fireEvent.change(screen.getByTitle('How strongly the watermark shows at its clearest, tilted or held to the light').querySelector('input')!, { target: { value: '30' } })
     expect(watermark()!.depth).toBe(0.3)
 
     // Escape ends placing and keeps the watermark selected
