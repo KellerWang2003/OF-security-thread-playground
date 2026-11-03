@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { clamp } from './frames'
-import { AUTO_CLIP, AUTO_MIN_SHARE, SPECKLE_SPREADS, luma, paperOf, sourceOf } from './relief'
+import { AUTO_CLIP, AUTO_MIN_SHARE, SPECKLE_SPREADS, type Detail, canvasDetail, exportDetail, luma, paperOf, readSource, sourceOf } from './relief'
 import type { MagneticInk } from './types'
 
 /**
  * Where magnetic ink goes on its image: how much ink each pixel takes, worked out once per image and Invert and kept as
  * a mask, which the canvas clips the ink's colours and bar to (a CSS mask over them) and the export draws through. The
- * image's pixels come from the watermark's reader (`sourceOf`, at most 1024 px), which keeps them for both.
+ * image's pixels come from the watermark's reader (`sourceOf`, 1024 px, or 2048 zoomed in), which keeps them for both.
  */
 
 /**
@@ -57,18 +57,16 @@ export interface InkMask {
   url: string
 }
 
-/** Masks kept, the latest first: each image's two readings and a few more, so Invert, undo and redo never wait */
-const MASKS_KEPT = 6
+/** Masks kept, the latest first: each image both ways round at both details and a few more, so Invert, undo, redo and zooming never wait */
+const MASKS_KEPT = 10
 
-const maskKey = (imageId: string, invert: boolean | undefined) => `${imageId}|${invert ? 'invert' : ''}`
+const maskKey = (imageId: string, invert: boolean | undefined, detail: Detail) => `${imageId}@${detail.vector}/${detail.raster}|${invert ? 'invert' : ''}`
 const building = new Map<string, Promise<InkMask | undefined>>()
 const ready = new Map<string, InkMask>()
 const recent: string[] = []
 
-async function build(imageId: string, invert: boolean, key: string): Promise<InkMask | undefined> {
-  const source = await sourceOf(imageId)
-  if (!source) return undefined
-  const { data, width, height } = source
+/** How much ink each pixel of an image's pixels takes, as a canvas whose alpha it is */
+function maskCanvas({ data, width, height }: { data: Uint8ClampedArray; width: number; height: number }, invert: boolean) {
   const coverage = inkCoverage(data, width, height, invert)
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -78,7 +76,16 @@ async function build(imageId: string, invert: boolean, key: string): Promise<Ink
   const image = ctx.createImageData(width, height)
   for (let p = 0; p < coverage.length; p++) image.data[p * 4 + 3] = coverage[p]
   ctx.putImageData(image, 0, 0)
-  return { key, canvas, url: canvas.toDataURL() }
+  return canvas
+}
+
+async function build(imageId: string, invert: boolean, key: string, detail: Detail): Promise<InkMask | undefined> {
+  const source = await sourceOf(imageId, detail)
+  const canvas = source && maskCanvas(source, invert)
+  if (!canvas) return undefined
+  // Saved as a PNG in the background, so a big mask doesn't hold up the page
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve))
+  return { key, canvas, url: blob ? URL.createObjectURL(blob) : canvas.toDataURL() }
 }
 
 /** Keeps the latest masks and lets the older ones go */
@@ -87,17 +94,19 @@ function remember(key: string) {
   if (at >= 0) recent.splice(at, 1)
   recent.unshift(key)
   for (const old of recent.splice(MASKS_KEPT)) {
+    const mask = ready.get(old)
+    if (mask?.url.startsWith('blob:')) URL.revokeObjectURL(mask.url)
     building.delete(old)
     ready.delete(old)
   }
 }
 
-/** Magnetic ink's mask, read the way its Invert says */
-export function loadInkMask(imageId: string, invert: boolean | undefined): Promise<InkMask | undefined> {
-  const key = maskKey(imageId, invert)
+/** Magnetic ink's mask, read the way its Invert says, at `detail` (the usual without) */
+export function loadInkMask(imageId: string, invert: boolean | undefined, detail: Detail = canvasDetail()): Promise<InkMask | undefined> {
+  const key = maskKey(imageId, invert, detail)
   let mask = building.get(key)
   if (!mask) {
-    const made = build(imageId, invert === true, key).catch(() => undefined)
+    const made = build(imageId, invert === true, key, detail).catch(() => undefined)
     void made.then((done) => {
       if (done && building.get(key) === made) ready.set(key, done)
     })
@@ -109,13 +118,25 @@ export function loadInkMask(imageId: string, invert: boolean | undefined): Promi
 }
 
 /**
- * Magnetic ink's mask for the canvas, once worked out. Switching Invert keeps the last mask showing until the new one is
- * ready, so the ink never blinks out.
+ * Magnetic ink's mask for an export, drawn `px` across in it: read from the whole image, as uploaded (an SVG at least as
+ * big as it is drawn). Read afresh and not kept, as it can be far bigger than the canvas needs
  */
-export function useInkMask(ink: Pick<MagneticInk, 'imageId' | 'invert'> | undefined): InkMask | undefined {
+export async function exportInkMask(imageId: string, invert: boolean | undefined, px: number): Promise<InkMask | undefined> {
+  const source = await readSource(imageId, exportDetail(px)).catch(() => undefined)
+  const canvas = source && maskCanvas(source, invert === true)
+  return canvas && { key: '', canvas, url: '' }
+}
+
+/**
+ * Magnetic ink's mask for the canvas, once worked out: in more detail once it shows `shownPx` device pixels across, past
+ * what the usual reading has. Switching Invert, or zooming in, keeps the last mask showing until the new one is ready,
+ * so the ink never blinks out.
+ */
+export function useInkMask(ink: Pick<MagneticInk, 'imageId' | 'invert'> | undefined, shownPx?: number): InkMask | undefined {
   const imageId = ink?.imageId
   const invert = ink?.invert === true
-  const key = imageId ? maskKey(imageId, invert) : undefined
+  const detail = canvasDetail(shownPx)
+  const key = imageId ? maskKey(imageId, invert, detail) : undefined
   const [loaded, setLoaded] = useState<{ key: string; imageId: string; mask?: InkMask }>()
   const exact = key ? ready.get(key) ?? (loaded?.key === key ? loaded.mask : undefined) : undefined
   const previous = imageId && loaded?.imageId === imageId ? loaded.mask : undefined
@@ -123,12 +144,12 @@ export function useInkMask(ink: Pick<MagneticInk, 'imageId' | 'invert'> | undefi
   useEffect(() => {
     if (!imageId || !key || exact) return
     let live = true
-    void loadInkMask(imageId, invert).then((mask) => {
+    void loadInkMask(imageId, invert, detail).then((mask) => {
       if (live) setLoaded({ key, imageId, mask })
     })
     return () => {
       live = false
     }
-  }, [imageId, invert, key, exact])
+  }, [imageId, invert, key, exact, detail])
   return exact ?? previous
 }

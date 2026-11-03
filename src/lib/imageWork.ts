@@ -70,6 +70,8 @@ export interface Picture {
   source: CanvasImageSource
   width: number
   height: number
+  /** An SVG, which draws sharp at any size: its width and height are only its own size, if it has one */
+  vector: boolean
 }
 
 function loadElement(url: string) {
@@ -83,19 +85,21 @@ function loadElement(url: string) {
 
 /**
  * The image at `url`, at most `maxPx` on its longest side for reading its pixels: shrunk in the background, drawn at
- * `quality` as a canvas would, or where that can't be done, the whole image as the page loads it (its size 0 for an
- * SVG without one of its own)
+ * `quality` as a canvas would, or where that can't be done, the whole image as the page loads it. An SVG always comes
+ * whole from the page (the worker can't read one), to be drawn at whatever size its reader needs (its size is 0 if it
+ * has none of its own)
  */
 export async function pictureOf(url: string, maxPx: number, quality: ImageSmoothingQuality = 'low'): Promise<Picture> {
-  if (canWorkOffThread()) {
+  const blob = await fetch(url).then((response) => response.blob()).catch(() => undefined)
+  const vector = blob?.type === 'image/svg+xml'
+  if (blob && !vector && canWorkOffThread()) {
     try {
-      const blob = await (await fetch(url)).blob()
       const { bitmap } = (await run({ kind: 'shrink', blob, maxPx, quality })) as ShrinkDone
-      return { source: bitmap, width: bitmap.width, height: bitmap.height }
+      return { source: bitmap, width: bitmap.width, height: bitmap.height, vector }
     } catch {
       // Below: the page loads it whole, as it always did
     }
   }
   const img = await loadElement(url)
-  return { source: img, width: img.naturalWidth, height: img.naturalHeight }
+  return { source: img, width: img.naturalWidth, height: img.naturalHeight, vector }
 }

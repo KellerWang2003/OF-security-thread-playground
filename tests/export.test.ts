@@ -121,16 +121,12 @@ describe('images in an export', () => {
     expect(framePx(note, { ...frame, aspect: undefined }, 10)).toBeUndefined()
   })
 
-  it('loads each image only as big as the video draws it, and the originals without a scale', async () => {
+  it('draws the design and every frame from the originals, at the full resolution they were uploaded at', async () => {
     const plain = makeNote(150, 75)
     const frame = { ...plain.frames[0], kind: 'image' as const, imageId: 'art', aspect: 2 }
     const note = { ...plain, background: 'image' as const, faceImageId: 'design', frames: [frame, ...plain.frames.slice(1)] }
     loadImageUrl.mockClear()
     await loadNoteAssets(note, 10)
-    expect(loadImageUrl).toHaveBeenCalledWith('design', 1500)
-    expect(loadImageUrl).toHaveBeenCalledWith('art', framePx(note, frame, 10))
-    loadImageUrl.mockClear()
-    await loadNoteAssets(note)
     expect(loadImageUrl).toHaveBeenCalledWith('design', undefined)
     expect(loadImageUrl).toHaveBeenCalledWith('art', undefined)
   })

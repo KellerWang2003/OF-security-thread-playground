@@ -146,10 +146,16 @@ export function lightPixels(thin: Uint8ClampedArray, levels: WatermarkLevels) {
   return out
 }
 
-/** Longest side the image is read at, in px */
-const RELIEF_MAX_PX = 1024
-/** Both readings kept per image, so Invert, undo and redo never wait */
-const READINGS_KEPT = 2
+/** Longest side an image is read at, px: for the panel, the checks, and the canvas at most zooms */
+const RELIEF_PX = 1024
+/** On the canvas zoomed in past that, it is read at this */
+const RELIEF_CLOSE_PX = 2048
+/** An export reads it whole, as uploaded, up to this */
+const RELIEF_FULL_PX = 8192
+/** Readings kept per image, both ways round at both canvas details, so Invert, undo, redo and zooming never wait */
+const READINGS_KEPT = 4
+/** Images' pixels kept, latest first */
+const SOURCES_KEPT = 6
 /** Light layers kept per reading: a drag draws one at every step, and undo usually goes back only a little */
 const DRAWN_KEPT = 3
 
@@ -170,7 +176,23 @@ export interface Relief {
 /** What decides how a watermark's image is drawn */
 export type ReliefLook = Pick<Watermark, 'invert' | 'levels'> & { imageId: string }
 
-const readingKey = (imageId: string, invert: boolean | undefined) => `${imageId}|${invert ? 'invert' : ''}`
+/**
+ * How much detail an image is read at, px on its longest side: an SVG, sharp at any size, at `vector`; anything else
+ * at its own size up to `raster`, as reading more pixels than it has adds nothing
+ */
+export interface Detail {
+  vector: number
+  raster: number
+}
+const USUAL: Detail = { vector: RELIEF_PX, raster: RELIEF_PX }
+const CLOSE: Detail = { vector: RELIEF_CLOSE_PX, raster: RELIEF_CLOSE_PX }
+/** On the canvas, for an image shown `px` device pixels across (none: the usual): closer once zoomed in past the usual */
+export const canvasDetail = (px?: number): Detail => (px !== undefined && px > RELIEF_PX ? CLOSE : USUAL)
+/** In an export, for an image drawn `px` across: whole, as uploaded, and an SVG at least as big as it is drawn */
+export const exportDetail = (px: number): Detail => ({ vector: Math.min(RELIEF_FULL_PX, Math.max(RELIEF_PX, Math.ceil(px))), raster: RELIEF_FULL_PX })
+const detailKey = ({ vector, raster }: Detail) => `${vector}/${raster}`
+
+const readingKey = (imageId: string, invert: boolean | undefined, detail: Detail) => `${imageId}@${detailKey(detail)}|${invert ? 'invert' : ''}`
 
 interface Source {
   data: Uint8ClampedArray
@@ -178,7 +200,7 @@ interface Source {
   height: number
 }
 
-/** Each image's pixels, at most RELIEF_MAX_PX on its longest side */
+/** Images' pixels, by image and detail, the latest first */
 const sources = new Map<string, Promise<Source | undefined>>()
 const readings = new Map<string, Promise<Reading | undefined>>()
 const ready = new Map<string, Reading>()
@@ -187,15 +209,18 @@ const recent = new Map<string, string[]>()
 /** Each reading's light layers, latest first, by levels */
 const drawn = new Map<string, { levels: string; relief: Relief }[]>()
 
-async function readSource(imageId: string): Promise<Source | undefined> {
+/** An image's pixels at `detail`, read afresh */
+export async function readSource(imageId: string, detail: Detail): Promise<Source | undefined> {
   const url = await loadImageUrl(imageId)
   if (!url) return undefined
   // Shrunk off the main thread where it can be, so a large upload doesn't freeze the page while it is read
-  const picture = await pictureOf(url, RELIEF_MAX_PX)
+  const picture = await pictureOf(url, detail.raster)
   // SVGs without a size of their own draw at 512 px
   const naturalWidth = picture.width || 512
   const naturalHeight = picture.height || 512
-  const k = Math.min(1, RELIEF_MAX_PX / Math.max(naturalWidth, naturalHeight))
+  const long = Math.max(naturalWidth, naturalHeight)
+  // An SVG is drawn as big as the detail asks, so it stays sharp however small its own size; anything else never past its own pixels
+  const k = picture.vector ? detail.vector / long : Math.min(1, detail.raster / long)
   const width = Math.max(1, Math.round(naturalWidth * k))
   const height = Math.max(1, Math.round(naturalHeight * k))
   const canvas = document.createElement('canvas')
@@ -207,22 +232,26 @@ async function readSource(imageId: string): Promise<Source | undefined> {
   return { data: ctx.getImageData(0, 0, width, height).data, width, height }
 }
 
-/** An image's pixels, read once, at most RELIEF_MAX_PX on its longest side; magnetic ink reads its shape from them too */
-export function sourceOf(imageId: string) {
-  let source = sources.get(imageId)
-  if (!source) {
-    source = readSource(imageId).catch(() => undefined)
-    sources.set(imageId, source)
-  }
+/** An image's pixels at `detail` (the usual without), read once and kept a while; magnetic ink reads its shape from them too */
+export function sourceOf(imageId: string, detail: Detail = USUAL) {
+  const key = `${imageId}@${detailKey(detail)}`
+  let source = sources.get(key)
+  if (!source) source = readSource(imageId, detail).catch(() => undefined)
+  sources.delete(key)
+  sources.set(key, source)
+  for (const old of [...sources.keys()].slice(0, Math.max(0, sources.size - SOURCES_KEPT))) sources.delete(old)
   return source
 }
 
-async function read(imageId: string, invert: boolean, key: string): Promise<Reading | undefined> {
-  const source = await sourceOf(imageId)
-  if (!source) return undefined
-  const { data, width, height } = source
+/** An image read the way Invert says, from its pixels */
+function readingOf({ data, width, height }: Source, invert: boolean, key: string): Reading {
   const thin = thinness(data, width, height, invert)
   return { key, thin, width, height, auto: autoLevels(data, width, height, thin, invert) }
+}
+
+async function read(imageId: string, invert: boolean, key: string, detail: Detail): Promise<Reading | undefined> {
+  const source = await sourceOf(imageId, detail)
+  return source && readingOf(source, invert, key)
 }
 
 /** Keeps an image's latest readings and lets the older ones go, with their light layers */
@@ -236,12 +265,12 @@ function remember(imageId: string, key: string) {
   recent.set(imageId, keys)
 }
 
-/** The watermark's image read the way its Invert says */
-export function loadReading(imageId: string, invert: boolean | undefined): Promise<Reading | undefined> {
-  const key = readingKey(imageId, invert)
+/** The watermark's image read the way its Invert says, at `detail` (the usual without) */
+export function loadReading(imageId: string, invert: boolean | undefined, detail: Detail = USUAL): Promise<Reading | undefined> {
+  const key = readingKey(imageId, invert, detail)
   let reading = readings.get(key)
   if (!reading) {
-    const building = read(imageId, invert === true, key).catch(() => undefined)
+    const building = read(imageId, invert === true, key, detail).catch(() => undefined)
     void building.then((done) => {
       if (done && readings.get(key) === building) ready.set(key, done)
     })
@@ -250,6 +279,19 @@ export function loadReading(imageId: string, invert: boolean | undefined): Promi
   }
   remember(imageId, key)
   return reading
+}
+
+/** A reading's light layer through these levels */
+function lightLayer(reading: Reading, levels: WatermarkLevels): Relief | undefined {
+  const canvas = document.createElement('canvas')
+  canvas.width = reading.width
+  canvas.height = reading.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return undefined
+  const image = ctx.createImageData(reading.width, reading.height)
+  image.data.set(lightPixels(reading.thin, levels))
+  ctx.putImageData(image, 0, 0)
+  return { canvas }
 }
 
 /** The light layer for a reading through these levels; drawn once and kept while it is among the latest */
@@ -261,33 +303,33 @@ export function reliefOf(reading: Reading, levels: WatermarkLevels): Relief | un
     drawn.set(reading.key, [found, ...kept.filter((d) => d !== found)])
     return found.relief
   }
-  const canvas = document.createElement('canvas')
-  canvas.width = reading.width
-  canvas.height = reading.height
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return undefined
-  const image = ctx.createImageData(reading.width, reading.height)
-  image.data.set(lightPixels(reading.thin, levels))
-  ctx.putImageData(image, 0, 0)
-  const relief = { canvas }
-  drawn.set(reading.key, [{ levels: key, relief }, ...kept].slice(0, DRAWN_KEPT))
+  const relief = lightLayer(reading, levels)
+  if (relief) drawn.set(reading.key, [{ levels: key, relief }, ...kept].slice(0, DRAWN_KEPT))
   return relief
 }
 
-/** The watermark's light layer for an export: read the way its Invert says, through its levels (Auto's without) */
-export async function loadRelief({ imageId, invert, levels }: ReliefLook): Promise<Relief | undefined> {
-  const reading = await loadReading(imageId, invert)
-  return reading && reliefOf(reading, levels ?? reading.auto)
+/**
+ * The watermark's light layer for an export, drawn `px` across in it: read from the whole image, as uploaded (an SVG at
+ * least as big as it is drawn), the way its Invert says, through its levels (Auto's without). Read afresh and not kept,
+ * as it can be far bigger than the canvas needs
+ */
+export async function exportRelief({ imageId, invert, levels }: ReliefLook, px: number): Promise<Relief | undefined> {
+  const source = await readSource(imageId, exportDetail(px)).catch(() => undefined)
+  if (!source) return undefined
+  const reading = readingOf(source, invert === true, '')
+  return lightLayer(reading, levels ?? reading.auto)
 }
 
 /**
  * The watermark's image as read, once worked out. Switching Invert keeps the last reading showing until the new one is
  * ready, so the watermark never blinks out.
  */
-export function useReading(watermark: Pick<Watermark, 'imageId' | 'invert'> | undefined): Reading | undefined {
+export function useReading(watermark: Pick<Watermark, 'imageId' | 'invert'> | undefined, shownPx?: number): Reading | undefined {
   const imageId = watermark?.imageId
   const invert = watermark?.invert === true
-  const key = imageId ? readingKey(imageId, invert) : undefined
+  // Read in more detail once it shows bigger than the usual reading, so zooming in never shows it blocky
+  const detail = canvasDetail(shownPx)
+  const key = imageId ? readingKey(imageId, invert, detail) : undefined
   const [loaded, setLoaded] = useState<{ key: string; imageId: string; reading?: Reading }>()
   const exact = key ? ready.get(key) ?? (loaded?.key === key ? loaded.reading : undefined) : undefined
   const previous = imageId && loaded?.imageId === imageId ? loaded.reading : undefined
@@ -295,19 +337,22 @@ export function useReading(watermark: Pick<Watermark, 'imageId' | 'invert'> | un
   useEffect(() => {
     if (!imageId || !key || exact) return
     let live = true
-    void loadReading(imageId, invert).then((reading) => {
+    void loadReading(imageId, invert, detail).then((reading) => {
       if (live) setLoaded({ key, imageId, reading })
     })
     return () => {
       live = false
     }
-  }, [imageId, invert, key, exact])
+  }, [imageId, invert, key, exact, detail])
   return exact ?? previous
 }
 
-/** The watermark's light layer for the canvas, through its levels (Auto's without), once its image is read */
-export function useRelief(watermark: Pick<Watermark, 'imageId' | 'invert' | 'levels'> | undefined): Relief | undefined {
-  const reading = useReading(watermark)
+/**
+ * The watermark's light layer for the canvas, through its levels (Auto's without), once its image is read: in more
+ * detail once it shows `shownPx` device pixels across, past what the usual reading has
+ */
+export function useRelief(watermark: Pick<Watermark, 'imageId' | 'invert' | 'levels'> | undefined, shownPx?: number): Relief | undefined {
+  const reading = useReading(watermark, shownPx)
   return reading && reliefOf(reading, watermark?.levels ?? reading.auto)
 }
 

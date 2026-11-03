@@ -275,10 +275,11 @@ export function NoteView({
   // Live notes re-render only when this changes, not on every animation frame
   const liveShown = useTilt((s) => (live ? shownKey(note, framesTiltOf(s, note.id).y, framesTiltOf(s, note.id).x) : ''))
   const shown = parseShown(live ? liveShown : shownKey(note, angle, angleX))
-  const relief = useRelief(watermark)
+  // Read in more detail once zoomed in far enough to need it, so an SVG's stays sharp
+  const relief = useRelief(watermark, watermark && devicePx(Math.max(watermark.widthMm, watermark.heightMm) * scale))
   const light = useRef<HTMLCanvasElement>(null)
   // As many pixels as the watermark shows at on this screen, up to the light layer's own
-  const lightSize = relief && watermark ? reliefPixels(relief, watermark.widthMm * scale * (globalThis.devicePixelRatio || 1)) : undefined
+  const lightSize = relief && watermark ? reliefPixels(relief, devicePx(watermark.widthMm * scale)) : undefined
   const lightWidth = lightSize?.width ?? 1
   const lightHeight = lightSize?.height ?? 1
   useLayoutEffect(() => {
@@ -286,7 +287,7 @@ export function NoteView({
     if (light.current && relief && lightWidth * lightHeight > 0) paintRelief(light.current, relief)
   }, [relief, lightWidth, lightHeight])
   const depth = watermark?.depth ?? 0
-  const inkMask = useInkMask(magneticInk)
+  const inkMask = useInkMask(magneticInk, magneticInk && devicePx(Math.max(magneticInk.widthMm, magneticInk.heightMm) * scale))
   // Only its bar's look changes how it tilts
   const inkBar: InkBar | undefined = magneticInk && { barAxis: magneticInk.barAxis, barWidth: magneticInk.barWidth }
   const revealOf = (state: LiveState) => reveal ?? watermarkReveal(state.light, { x: state.angleX, y: state.angle })
