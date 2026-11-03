@@ -58,6 +58,8 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 const note = (): Note => useProjects.getState().demoPreview!.notes[0]
+/** One of Thread Studio's right panel tabs: Thread or Frames */
+const tab = (editor: HTMLElement, name: 'Thread' | 'Frames') => within(editor).getByRole('tab', { name })
 const sections = () => note().pattern!.sections
 
 async function openDemo(workspace: string) {
@@ -151,9 +153,12 @@ describe('thread editor', () => {
     expect(sections()[1]).toMatchObject({ startMm: 0, endMm: 4, acrossStart: 0.75 })
     act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
 
-    // A click on the thread picks the section under it; a click around it lets go; Escape lets go, then leaves
+    // A click on the thread picks the section under it, turning the panel to Frames; a click around it lets go;
+    // Escape lets go, then leaves
     fireEvent.pointerDown(strip().element, { button: 0, buttons: 1, ...at(0.5, 0.25) })
     fireEvent.pointerUp(strip().element, { button: 0, ...at(0.5, 0.25) })
+    expect(tab(editor, 'Frames').getAttribute('aria-selected')).toBe('true')
+    await user.click(tab(editor, 'Thread'))
     expect(within(editor).getByRole('heading', { name: 'Lane ↔' })).toBeDefined()
     const view = strip().element.parentElement!.parentElement!.parentElement!
     fireEvent.pointerDown(view, { button: 0, buttons: 1, clientX: 5, clientY: 5, pointerId: 1 })
@@ -455,6 +460,7 @@ describe('thread editor', () => {
     fireEvent.pointerDown(lane, { button: 0, buttons: 1, ...at(1, 0.75) })
     fireEvent.pointerUp(lane, { button: 0, ...at(1, 0.75) })
     expect(document.activeElement).not.toBe(repeat)
+    await user.click(tab(editor, 'Thread'))
     expect(within(editor).getByRole('heading', { name: 'Lane ↕' })).toBeDefined()
     await user.keyboard('{Delete}')
     expect(sections().map((s) => s.name)).toEqual(['Lane ↔'])
@@ -573,13 +579,25 @@ describe('thread editor', () => {
     // The tilt arriving where the frame picker sent it (the spring that gets it there doesn't run here)
     const arrive = () => act(() => { const s = useTilt.getState(); setTilt({ angle: s.target, angleX: s.targetX }) })
 
-    // The panel's frame numbers go to a frame, as its clip in the timeline does, and the panel follows
-    await user.click(within(editor).getByRole('button', { name: 'Frame 2', exact: true }))
+    // Thread is the panel's tab at first, and a frame changing from elsewhere leaves it there; a click on the thread
+    // turns to Frames
+    expect(tab(editor, 'Thread').getAttribute('aria-selected')).toBe('true')
+    expect(within(editor).queryByRole('button', { name: 'Frame 2', exact: true })).toBeNull()
+    act(() => setTilt({ source: 'slider', angle: 20, target: 20, angleX: 0, targetX: 0 }))
+    expect(tab(editor, 'Thread').getAttribute('aria-selected')).toBe('true')
+    act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
+    fireEvent.pointerDown(strip().element, { button: 0, buttons: 1, ...at(1, 0.5) })
+    fireEvent.pointerUp(strip().element, { button: 0, ...at(1, 0.5) })
+    expect(tab(editor, 'Frames').getAttribute('aria-selected')).toBe('true')
+
+    // Its frame numbers go to a frame, as its clip in the timeline does, and the panel follows
+    const frameButton = (n: number) => within(editor).getByRole('button', { name: `Frame ${n}`, exact: true })
+    await user.click(frameButton(2))
     arrive()
-    expect(within(editor).getByRole('heading', { name: 'Frame 2' })).toBeDefined()
-    await user.click(within(editor).getByRole('button', { name: 'Frame 1', exact: true }))
+    expect(frameButton(2).getAttribute('aria-pressed')).toBe('true')
+    await user.click(frameButton(1))
     arrive()
-    expect(within(editor).getByRole('heading', { name: 'Frame 1' })).toBeDefined()
+    expect(frameButton(1).getAttribute('aria-pressed')).toBe('true')
 
     // Its fill: the background every frame shares, set right there, or a colour of its own
     await user.click(within(editor).getByRole('button', { name: 'Background', exact: true }))

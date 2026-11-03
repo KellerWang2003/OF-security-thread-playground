@@ -1,10 +1,9 @@
 import { reportError } from '../cloud/notices'
 import { Banknote, Columns2, Droplet, ImageUp, RectangleHorizontal, RectangleVertical, Rows2, Share, Shuffle, Trash2, TriangleAlert, X } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ColorField, Drawer, Group, IconButton, Labeled, LengthField, Panel, Section, Segmented } from '../components/controls'
+import { Tabs, TabsContent } from '@/components/ui/tabs'
+import { ColorField, Drawer, Group, IconButton, Labeled, LengthField, Panel, PartTab, Section, Segmented, TabStrip } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
@@ -23,12 +22,6 @@ import { setFaceImage, type NoteRef } from './frameActions'
 import type { Layer } from './watermarkActions'
 
 type Change = (note: Note) => Note
-
-/**
- * A part's tab, as Figma's Design and Prototype: the open one a filled pill in dark semibold text, the others plain grey
- * text that darkens under the pointer
- */
-const TAB = "h-7 flex-none rounded-md px-2.5 text-[13px] font-medium text-muted-foreground hover:text-foreground data-active:bg-muted data-active:font-semibold data-active:text-foreground group-data-[variant=default]/tabs-list:data-active:shadow-none [&_svg:not([class*='size-'])]:size-3.5"
 
 /**
  * Right: the selected banknote, one tab per part, as the Banknotes list has its layers: the banknote itself (size,
@@ -103,11 +96,9 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
         </div>
         <div className="flex items-center gap-1">
           <TabStrip active={layer}>
-            <TabsList className="h-auto w-max gap-1 bg-transparent p-0">
-              <TabsTrigger value="note" className={TAB}><Banknote />Banknote</TabsTrigger>
-              <TabsTrigger value="thread" className={TAB}>{thread.direction === 'vertical' ? <Columns2 /> : <Rows2 />}Thread</TabsTrigger>
-              {note.watermark && <TabsTrigger value="watermark" className={TAB}><Droplet />Watermark</TabsTrigger>}
-            </TabsList>
+            <PartTab value="note"><Banknote />Banknote</PartTab>
+            <PartTab value="thread">{thread.direction === 'vertical' ? <Columns2 /> : <Rows2 />}Thread</PartTab>
+            {note.watermark && <PartTab value="watermark"><Droplet />Watermark</PartTab>}
           </TabStrip>
           {layer === 'watermark' && note.watermark && (
             <IconButton label="Remove watermark" size="icon-xs" className="-mr-1 shrink-0 text-muted-foreground" onClick={onRemoveWatermark}><Trash2 /></IconButton>
@@ -242,48 +233,6 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
       </Tabs>
     </Panel>
     </>
-  )
-}
-
-/** How far the part tabs fade out at an edge with more tabs beyond it, px */
-const STRIP_FADE = 16
-
-/**
- * The part tabs' strip: it scrolls sideways once there are more tabs than fit, fades at an edge while more lie beyond,
- * and keeps the open tab in sight (picking the watermark on the canvas brings its tab round). The first pill's icon
- * lines up with the banknote's name, its fill reaching out past it.
- */
-function TabStrip({ active, children }: { active: string; children: ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [more, setMore] = useState({ left: false, right: false })
-  useEffect(() => {
-    const strip = ref.current
-    if (!strip) return
-    const measure = () => {
-      const left = strip.scrollLeft > 0
-      const right = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1
-      setMore((m) => (m.left === left && m.right === right ? m : { left, right }))
-    }
-    measure()
-    strip.addEventListener('scroll', measure, { passive: true })
-    const resize = new ResizeObserver(measure)
-    resize.observe(strip)
-    if (strip.firstElementChild) resize.observe(strip.firstElementChild)
-    return () => {
-      strip.removeEventListener('scroll', measure)
-      resize.disconnect()
-    }
-  }, [])
-  useEffect(() => {
-    ref.current?.querySelector<HTMLElement>('[data-active]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
-  }, [active])
-  const mask = more.left || more.right
-    ? `linear-gradient(to right, ${more.left ? 'transparent' : 'black'}, black ${STRIP_FADE}px, black calc(100% - ${STRIP_FADE}px), ${more.right ? 'transparent' : 'black'})`
-    : undefined
-  return (
-    <div ref={ref} className="-ml-2.5 min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ maskImage: mask, WebkitMaskImage: mask }}>
-      {children}
-    </div>
   )
 }
 

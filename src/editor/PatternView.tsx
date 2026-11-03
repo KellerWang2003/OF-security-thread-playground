@@ -76,11 +76,13 @@ function fitView(box: { width: number; height: number }, repeatMm: number, width
  * (Tailwind insets clear of the panels), and panned it runs on under them instead of being cut off at that box. A
  * longer repeat or a thicker thread keeps the zoom, so the thread itself grows.
  */
-export function PatternView({ note, projectId, selectedId, onSelect, ridges, ridgeOpacity = 1, frame, limit = 90, room: roomClassName }: {
+export function PatternView({ note, projectId, selectedId, onSelect, onThreadClick, ridges, ridgeOpacity = 1, frame, limit = 90, room: roomClassName }: {
   note: Note
   projectId: string
   selectedId?: string
   onSelect: (id: string | undefined) => void
+  /** A click on the thread, or a press on the frame's image there: the right panel turns to the frames (Keller) */
+  onThreadClick?: () => void
   /** Hatch each section at its ridge angle */
   ridges: boolean
   /** How strongly the ridges show, 0 to 1 */
@@ -252,7 +254,10 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, rid
       setDragTilting(false)
       // A click without tilting picks the section under it, or clears the selection, as on the canvas
       if (g.moved && useTilt.getState().springBack) springToFlat()
-      else if (!g.moved) onSelect(g.on && sectionAt(pattern, g.on)?.id)
+      else if (!g.moved) {
+        onSelect(g.on && sectionAt(pattern, g.on)?.id)
+        onThreadClick?.()
+      }
       return
     }
     // A click where a drag would pan clears the selection
@@ -379,7 +384,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, rid
 
         {placing && placed && (
           <ImagePlacer box={placed} aspect={placing.aspect} scale={scale} picked={pickedImage === placing.frame.id}
-            onPick={() => setPickedImage(placing.frame.id)} pointAt={pointAt} onChange={placeImage} onDone={wrapImage}
+            onPick={() => { setPickedImage(placing.frame.id); onThreadClick?.() }} pointAt={pointAt} onChange={placeImage} onDone={wrapImage}
             others={[-1, 1].map((k) => (vertical ? { x: 0, y: k * repeat } : { x: k * repeat, y: 0 }))} />
         )}
 

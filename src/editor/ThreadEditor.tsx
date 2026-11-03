@@ -1,4 +1,4 @@
-import { ChevronLeft, CircleCheck, Copy, Eye, EyeOff, Info, Plus, Redo2, RotateCcw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
+import { ChevronLeft, CircleCheck, Columns2, Copy, Eye, EyeOff, GalleryHorizontal, Info, Plus, Redo2, RotateCcw, Rows2, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,9 +11,10 @@ import {
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Slider } from '@/components/ui/slider'
+import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
-import { Drawer, Group, IconButton, Labeled, Panel, Section, SwitchField } from '../components/controls'
+import { Drawer, Group, IconButton, Labeled, Panel, PartTab, Section, SwitchField, TabStrip } from '../components/controls'
 import { canStepNote, useHistory } from '../lib/history'
 import { tiltForPosition } from '../lib/lens'
 import {
@@ -49,21 +50,24 @@ import { TiltRail } from './TiltRail'
 import { TimelineBar } from './TimelineBar'
 
 /**
- * One banknote's thread pattern, full screen. Top: back, the banknote, the repeat, the view toggles and undo. Left:
- * Mixed angles, the presets it allows and the sections. Middle: the thread magnified, where sections are drawn, moved
- * and resized, and the view panned, zoomed and tilted. Right, scrolling: the selected section's frames, the lens (the
- * section's own with mixed angles, otherwise the shared one) and the background under every frame, which are set
- * only here; where the thread sits on the banknote is set on the canvas. Under them, fixed at the bottom, Preview and
- * Checks, for information only, open upwards. Bottom: the tilt pad and the playback bar, as on the canvas.
+ * One banknote's thread pattern, full screen. Top: back, the banknote, the ridges and undo. Left: Mixed angles, the
+ * presets it allows and the sections. Middle: the thread magnified, where the frame's image is placed and sections
+ * resized, and the view panned, zoomed and tilted. Right, in two tabs as on the canvas (Keller): Thread, the selected
+ * section's frames and the lens (the section's own with mixed angles, otherwise the shared one), and Frames, the
+ * frame the timeline is on: where its image sits and what it shows. Thread is open first; a click on the thread turns
+ * to Frames, and nothing else turns them. Where the thread sits on the banknote is set on the canvas. Under them,
+ * fixed at the bottom, Preview and Checks, for information only, open upwards. Bottom: the tilt pad and the playback
+ * bar, as on the canvas.
  */
 export function ThreadEditor({ project, note, onClose }: { project: Project; note: Note; onClose: () => void }) {
   const pattern = patternOf(note)
   const [selectedId, setSelectedId] = useState(() => pattern.sections.at(0)?.id)
   const selectSection = setSelectedId
   const [ridges, setRidges] = useState(false)
-  // Whether the thread turns with the tilt as frames change from the timeline, the pad or the frame numbers; a drag on
-  // the thread always turns it (Keller)
+  // How strongly the ridges show, while they show
   const [ridgeOpacity, setRidgeOpacity] = useState(1)
+  // The right panel's tab: the whole thread, or the frames; a click on the thread turns to Frames (Keller)
+  const [tab, setTab] = useState<'thread' | 'frames'>('thread')
   // Preview and Checks open one at a time, as an accordion, so the controls above always keep room
   const [info, setInfo] = useState<'preview' | 'checks'>()
   const openInfo = (part: 'preview' | 'checks') => (open: boolean) => setInfo(open ? part : undefined)
@@ -162,7 +166,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
 
       {/* The whole editor, behind the panels, as on the canvas; the thread fits between them, and fits again once turned */}
       <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={selectSection} ridges={ridges} ridgeOpacity={ridgeOpacity}
-        frame={note.frames.indexOf(current)}
+        frame={note.frames.indexOf(current)} onThreadClick={() => setTab('frames')}
         limit={lens.viewDeg} room="top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[248px]" />
 
       <Panel className="absolute top-3 right-3 left-3 flex h-11 items-center gap-2 rounded-[calc(var(--radius)+0.375rem+1px)] pr-1.5 pl-1.5">
@@ -230,12 +234,17 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
 
       <PanelResizer className="top-16" />
       <Panel className="absolute top-16 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-hidden">
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          {/* The frame the timeline is on, always: where its image sits, and what it shows */}
-          <Group title={`Frame ${note.frames.indexOf(current) + 1}`}>
-            <FramePanel note={note} noteRef={noteRef} frame={current} index={note.frames.indexOf(current)} onShow={showFrame} />
-          </Group>
-          {/* The selected section's frames; its length and width are edited beside the thread, its place by dragging it */}
+        <Tabs value={tab} onValueChange={(next) => setTab(next as typeof tab)} className="min-h-0 flex-1 gap-0">
+        {/* Its parts as pill tabs, as on the canvas's panel: the whole thread, then its frames */}
+        <div className="flex border-b border-border px-4 pt-3 pb-2.5">
+          <TabStrip active={tab}>
+            <PartTab value="thread">{vertical ? <Columns2 /> : <Rows2 />}Thread</PartTab>
+            <PartTab value="frames"><GalleryHorizontal />Frames</PartTab>
+          </TabStrip>
+        </div>
+
+        <TabsContent value="thread" className="min-h-0 overflow-y-auto">
+          {/* The selected section's frames; its size comes from its edges on the thread */}
           {selected && (
             <Group title={selected.name}>
               <Section nested title="Frames" action={
@@ -261,7 +270,15 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
               <EffectSection key={pattern.mixed ? selectedSectionId : 'shared'} note={lensNote} set={setLens} printNote={note} preview={false} />
             </Group>
           )}
-        </div>
+        </TabsContent>
+
+        {/* The frame the timeline is on: where its image sits, and what it shows */}
+        <TabsContent value="frames" className="min-h-0 overflow-y-auto">
+          <Group>
+            <FramePanel note={note} noteRef={noteRef} frame={current} index={note.frames.indexOf(current)} onShow={showFrame} />
+          </Group>
+        </TabsContent>
+        </Tabs>
 
         {/* For information only, so fixed at the bottom under the controls, opening upwards one at a time */}
         <div className="flex shrink-0 flex-col">

@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { useState, type ChangeEvent, type ComponentProps, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type ComponentProps, type KeyboardEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
+import { TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -277,6 +278,60 @@ export function Drawer({ title, action, open, onOpenChange, children }: {
         <div className="flex flex-col gap-3">{children}</div>
       </CollapsibleContent>
     </Collapsible>
+  )
+}
+
+/**
+ * A part's tab, as Figma's Design and Prototype: the open one a filled pill in dark semibold text, the others plain grey
+ * text that darkens under the pointer
+ */
+const PART_TAB = "h-7 flex-none rounded-md px-2.5 text-[13px] font-medium text-muted-foreground hover:text-foreground data-active:bg-muted data-active:font-semibold data-active:text-foreground group-data-[variant=default]/tabs-list:data-active:shadow-none [&_svg:not([class*='size-'])]:size-3.5"
+
+/** One of a side panel's part tabs, in a `TabStrip`; its icon goes before its name */
+export function PartTab({ className, ...props }: ComponentProps<typeof TabsTrigger>) {
+  return <TabsTrigger className={cn(PART_TAB, className)} {...props} />
+}
+
+/** How far the part tabs fade out at an edge with more tabs beyond it, px */
+const STRIP_FADE = 16
+
+/**
+ * A side panel's part tabs (`PartTab`s), inside its `Tabs`: the strip scrolls sideways once there are more tabs than
+ * fit, fades at an edge while more lie beyond, and keeps the open tab in sight (picking the watermark on the canvas
+ * brings its tab round). The first pill's icon lines up with the panel's content and the banknote's name over it, its
+ * fill reaching out past it.
+ */
+export function TabStrip({ active, children }: { active: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [more, setMore] = useState({ left: false, right: false })
+  useEffect(() => {
+    const strip = ref.current
+    if (!strip) return
+    const measure = () => {
+      const left = strip.scrollLeft > 0
+      const right = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1
+      setMore((m) => (m.left === left && m.right === right ? m : { left, right }))
+    }
+    measure()
+    strip.addEventListener('scroll', measure, { passive: true })
+    const resize = new ResizeObserver(measure)
+    resize.observe(strip)
+    if (strip.firstElementChild) resize.observe(strip.firstElementChild)
+    return () => {
+      strip.removeEventListener('scroll', measure)
+      resize.disconnect()
+    }
+  }, [])
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>('[data-active]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  }, [active])
+  const mask = more.left || more.right
+    ? `linear-gradient(to right, ${more.left ? 'transparent' : 'black'}, black ${STRIP_FADE}px, black calc(100% - ${STRIP_FADE}px), ${more.right ? 'transparent' : 'black'})`
+    : undefined
+  return (
+    <div ref={ref} className="-ml-2.5 min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ maskImage: mask, WebkitMaskImage: mask }}>
+      <TabsList className="h-auto w-max gap-1 bg-transparent p-0">{children}</TabsList>
+    </div>
   )
 }
 
