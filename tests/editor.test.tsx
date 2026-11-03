@@ -310,7 +310,7 @@ describe('username workspace editor', () => {
     act(() => updateNote(useProjects.getState().demoPreview!.id, note().id, (n) => ({
       ...n, frames: n.frames.map((f) => ({ ...f, kind: 'image' as const, imageId: 'art', aspect: 1 })),
     })))
-    expect(screen.getByText('Pattern', { exact: true })).toBeDefined()
+    expect(screen.getByText('Tile pattern', { exact: true })).toBeDefined()
     expect(screen.queryByText('Place', { exact: true })).toBeNull()
   })
   it('shows one tab per part, labels every control, and the thread’s lens with its preview in a drawer at the foot', async () => {
@@ -333,16 +333,16 @@ describe('username workspace editor', () => {
     for (const label of ['Direction', 'Width', 'Tile length', 'Position', 'Effect', 'Seen flat']) expect(screen.getByText(label, { exact: true })).toBeDefined()
     // The frame the timeline is on, filled right here as in Thread Studio's Frames tab, since they are normal controls
     // (Keller), its fill chosen in a panel of its own as Figma's; the timeline picks the frame, so no frame numbers
-    expect(screen.getByText('Pattern', { exact: true })).toBeDefined()
+    expect(screen.getByText('Tile pattern', { exact: true })).toBeDefined()
     expect(screen.queryByRole('button', { name: 'Frame 1', exact: true })).toBeNull()
     // + and − add and remove it, as in Figma; there is no background under the frames any more (Keller), so an empty
     // frame shows the banknote through, and the panel offers only a colour or an image
-    const fill = () => screen.queryByRole('button', { name: /^Pattern: / })
-    await user.click(screen.getByRole('button', { name: 'Remove pattern' }))
+    const fill = () => screen.queryByRole('button', { name: /^Tile pattern: / })
+    await user.click(screen.getByRole('button', { name: 'Remove tile pattern' }))
     expect(fill()).toBeNull()
     const emptied = note().frames.findIndex((f) => f.kind === 'none')
     expect(emptied).toBeGreaterThanOrEqual(0)
-    await user.click(screen.getByRole('button', { name: 'Add pattern' }))
+    await user.click(screen.getByRole('button', { name: 'Add tile pattern' }))
     expect(note().frames[emptied].kind).toBe('color')
     await user.click(fill()!)
     expect(screen.getAllByRole('button', { name: /^(Colour|Image)$/ }).map((b) => b.textContent)).toEqual(['Colour', 'Image'])

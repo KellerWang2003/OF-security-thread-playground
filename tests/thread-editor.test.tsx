@@ -636,15 +636,15 @@ describe('thread editor', () => {
 
     // Its fill, in a panel of its own as Figma's (Keller), + and − adding and removing it; with no background under the
     // frames any more, an empty frame shows the banknote through
-    await user.click(within(editor).getByRole('button', { name: 'Remove pattern' }))
+    await user.click(within(editor).getByRole('button', { name: 'Remove tile pattern' }))
     expect(note().frames[0].kind).toBe('none')
-    expect(within(editor).queryByRole('button', { name: /^Pattern: / })).toBeNull()
-    await user.click(within(editor).getByRole('button', { name: 'Add pattern' }))
+    expect(within(editor).queryByRole('button', { name: /^Tile pattern: / })).toBeNull()
+    await user.click(within(editor).getByRole('button', { name: 'Add tile pattern' }))
     expect(note().frames[0].kind).toBe('color')
-    await user.click(within(editor).getByRole('button', { name: /^Pattern: #/ }))
+    await user.click(within(editor).getByRole('button', { name: /^Tile pattern: #/ }))
     expect(screen.queryByRole('button', { name: 'Background', exact: true })).toBeNull()
     expect(screen.queryByRole('switch', { name: 'Background colour' })).toBeNull()
-    await user.click(within(editor).getByRole('button', { name: /^Pattern: #/ }))
+    await user.click(within(editor).getByRole('button', { name: /^Tile pattern: #/ }))
 
     // An image sits in the repeat; its Place comes before its Fill, fitted at first, then where its fields put it. The
     // tile is set by hand here, so it stays 4 mm (on Fit it would take the image's length)
@@ -653,7 +653,7 @@ describe('thread editor', () => {
       frames: n.frames.map((f, i) => (i === 0 ? { ...f, kind: 'image' as const, imageId: 'fixture-bird', aspect: 0.5 } : f)),
     })))
     const titles = within(editor).getAllByRole('heading').map((h) => h.textContent)
-    expect(titles.indexOf('Place')).toBeLessThan(titles.indexOf('Pattern'))
+    expect(titles.indexOf('Place')).toBeLessThan(titles.indexOf('Tile pattern'))
     const field = (title: string) => within(editor).getByTitle(title).querySelector('input')!
     // As wide as the 4 mm thread and half as tall: 2 mm of the 4 mm repeat, centred
     expect(field('Image position from the start of the tile').value).toBe('1')
