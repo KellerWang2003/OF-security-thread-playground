@@ -8,7 +8,8 @@ import { useTilt } from '../tilt/tilt'
  * The continuous check on the canvas, while the banknote itself is picked: its neighbours on the print sheet around it,
  * where its edges break and the cut tolerance's line. All of it lies flat, so it steps back while the banknote is
  * turned, played or dragged, and none of it takes a click or is exported. A drifted cut moves everything that belongs
- * to the design (its copies, the breaks and the line) the other way, while the banknote stays where it is.
+ * to the design (its copies and the breaks) the other way, while the banknote stays where it is, and so does the
+ * tolerance's line, as it marks where the cut can land (Keller).
  */
 
 /** How far out from the banknote its neighbours show, mm, and at most on screen, px, so they never cover the canvas */
@@ -80,7 +81,7 @@ export function EdgeMarks({ note, scale, drift, quiet }: { note: Note; scale: nu
         // A light edge under the dashes, so the line shows on any design
         <svg className="absolute inset-0 overflow-visible" width={width} height={height}>
           {[{ className: 'stroke-background/70', strokeWidth: 3 }, { className: 'stroke-foreground/80', strokeWidth: 1, strokeDasharray: '4 3' }].map((line) => (
-            <rect key={line.className} data-cut-line="" x={cut - dx} y={cut - dy} width={Math.max(0, width - 2 * cut)} height={Math.max(0, height - 2 * cut)} fill="none" {...line} />
+            <rect key={line.className} data-cut-line="" x={cut} y={cut} width={Math.max(0, width - 2 * cut)} height={Math.max(0, height - 2 * cut)} fill="none" {...line} />
           ))}
         </svg>
       )}
