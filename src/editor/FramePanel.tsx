@@ -1,97 +1,54 @@
-import { ImageUp, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { reportError } from '../cloud/notices'
-import { ColorField, IconButton, Labeled, LengthField, Section, Segmented, SwitchField } from '../components/controls'
+import { IconButton, Labeled, LengthField, Section } from '../components/controls'
 import { IMAGE_STEP, imageBox, placeOf, uprightBox } from '../lib/artwork'
-import { pickFiles, useImageUrl } from '../lib/images'
 import { patternOf } from '../lib/pattern'
-import { updateNote } from '../lib/store'
 import type { Frame, Note } from '../lib/types'
-import { replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
+import { FillRow } from './FillPicker'
+import { updateFrame, type NoteRef } from './frameActions'
 import { swatch } from './LensVisuals'
 
 /**
- * The frame the timeline is on, always in Thread Studio's right panel (Keller): a picker to go to another frame without
- * the timeline, then, for an image, where it sits in the repeat (X and Y of its top-left corner as drawn, and its width,
- * its height following), then its fill: Background (nothing of its own, so the background shared by every frame
- * shows), a colour, or one image. The shared background is set here too, wherever it shows: on Background frames and
- * behind images.
+ * The frame the timeline is on, in Thread Studio's Frames tab and the canvas's Thread tab (Keller): in Thread Studio a
+ * row of frame numbers to go to another frame without the timeline (`picker`; the canvas has the timeline for that),
+ * then, for an image, where it sits in the tile (X and Y of its top-left corner as drawn, and its width, its height
+ * following), then its fill, one row that opens the fill's own panel (`FillRow`).
  */
-export function FramePanel({ note, noteRef, frame, index, onShow }: {
+export function FramePanel({ note, noteRef, frame, index, onShow, picker = true }: {
   note: Note
   noteRef: NoteRef
   frame: Frame
   index: number
   /** Goes to a frame, as a click on its clip in the timeline does */
   onShow: (index: number) => void
+  /** The row of frame numbers */
+  picker?: boolean
 }) {
   const set = (patch: Partial<Frame>) => updateFrame(noteRef, frame.id, patch)
-  const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
-  const upload = async () => {
-    try {
-      const [file] = await pickFiles()
-      if (file) await replaceFrameImage(noteRef, frame.id, file)
-    } catch (error) { reportError(error) }
-  }
-  const setBackground = (backgroundColor: string | undefined) =>
-    updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, thread: { ...n.thread, backgroundColor } }))
 
   return (
     <>
-      <Section nested>
-        <Labeled label="Frame">
-          <div className="flex gap-1">
-            {note.frames.map((f, i) => (
-              <Button key={f.id} variant="outline" size="sm" aria-label={`Frame ${i + 1}`} aria-pressed={i === index}
-                className={cn('min-w-0 flex-1 px-0 tabular-nums hover:border-foreground/30', i === index && 'border-foreground/60 font-semibold')}
-                // Tinted like the frame strips of the lens
-                style={{ backgroundColor: `color-mix(in oklch, ${swatch(note, i)} 35%, transparent)` }}
-                onClick={() => onShow(i)}>
-                {i + 1}
-              </Button>
-            ))}
-          </div>
-        </Labeled>
-      </Section>
+      {picker && (
+        <Section nested>
+          <Labeled label="Frame">
+            <div className="flex gap-1">
+              {note.frames.map((f, i) => (
+                <Button key={f.id} variant="outline" size="sm" aria-label={`Frame ${i + 1}`} aria-pressed={i === index}
+                  className={cn('min-w-0 flex-1 px-0 tabular-nums hover:border-foreground/30', i === index && 'border-foreground/60 font-semibold')}
+                  // Tinted like the frame strips of the lens
+                  style={{ backgroundColor: `color-mix(in oklch, ${swatch(note, i)} 35%, transparent)` }}
+                  onClick={() => onShow(i)}>
+                  {i + 1}
+                </Button>
+              ))}
+            </div>
+          </Labeled>
+        </Section>
+      )}
       {frame.kind === 'image' && frame.aspect && <ImagePlaceFields note={note} frame={frame} aspect={frame.aspect} set={set} />}
       <Section nested title="Fill">
-        <Segmented
-          value={frame.kind}
-          options={[
-            { value: 'none', label: 'Background' },
-            { value: 'color', label: 'Colour' },
-            { value: 'image', label: 'Image' },
-          ]}
-          // An image needs one first; a frame that had one gets it back
-          onChange={(kind) => (kind === 'image' && !frame.imageId ? void upload() : set({ kind }))}
-        />
-        {frame.kind === 'color' && <ColorField value={frame.color} onChange={(color) => set({ color })} />}
-        {frame.kind === 'image' && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-[58px] justify-start gap-2 overflow-hidden rounded-[calc(var(--radius-sm)+7px)] p-1.5"
-            onClick={() => void upload()}
-          >
-            {url ? (
-              <img src={url} alt="" className="h-11 w-11 shrink-0 rounded object-contain" />
-            ) : (
-              <span className="flex size-11 shrink-0 items-center justify-center rounded bg-muted">
-                <ImageUp />
-              </span>
-            )}
-            {url ? 'Replace' : 'Upload image'}
-          </Button>
-        )}
-        {/* The background shared by every frame, wherever this one lets it show */}
-        {frame.kind !== 'color' && (
-          <>
-            <SwitchField label="Background colour" title="One colour under every frame; off, the banknote shows through" checked={!!note.thread.backgroundColor}
-              onChange={(enabled) => setBackground(enabled ? '#ffffff' : undefined)} />
-            {note.thread.backgroundColor && <ColorField value={note.thread.backgroundColor} onChange={setBackground} />}
-          </>
-        )}
+        <FillRow note={note} noteRef={noteRef} frame={frame} />
       </Section>
     </>
   )

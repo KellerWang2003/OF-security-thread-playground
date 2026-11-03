@@ -276,7 +276,9 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
             }}
             onRemoveLayer={dropLayer} />
           {!isEmpty && (
-            <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined} />
+            <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined}
+              // Scrubbing the frames is working on the thread, so the panel turns to it (Keller)
+              onScrub={() => note && shownLayer !== 'thread' && selectLayer(note.id, 'thread')} />
           )}
           {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} layer={shownLayer} onLayer={(next) => selectLayer(note.id, next)}
             selectedWindowId={editingWindows ? selectedWindowId : undefined}

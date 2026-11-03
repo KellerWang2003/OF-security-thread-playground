@@ -22,6 +22,7 @@ import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/note
 import { framesMissed, playbackLens, playbackTilt, sectionMix, timelineSection } from '../lib/pattern'
 import type { Frame, Note } from '../lib/types'
 import { setRecording, setTilt, togglePlayback, useTilt } from '../tilt/tilt'
+import { FillPopover, FillSwatch } from './FillPicker'
 import { PlaybackPanel } from './PlaybackPanel'
 import { TILT_PANEL_PX } from './TiltRail'
 import { addEmptyFrame, addImageFrames, deleteFrame, moveFrame, updateFrame, type NoteRef } from './frameActions'
@@ -43,6 +44,7 @@ export function TimelineBar({
   noteRef,
   besidePanel,
   sectionId,
+  onScrub,
 }: {
   projectId: string
   notes: Note[]
@@ -51,6 +53,8 @@ export function TimelineBar({
   besidePanel: boolean
   /** The thread section whose lens the track follows, in the thread editor */
   sectionId?: string
+  /** Scrubbing the frames or opening a frame's fill, a sign of working on the thread: the canvas turns to its tab (Keller) */
+  onScrub?: () => void
 }) {
   const source = useTilt((state) => state.source)
   const playing = source === 'wobble'
@@ -74,7 +78,7 @@ export function TimelineBar({
         </IconButton>
         <FrameSettings projectId={projectId} note={note ?? notes.at(0)} />
       </div>
-      {note && noteRef && <FrameTrack note={note} noteRef={noteRef} sectionId={sectionId} />}
+      {note && noteRef && <FrameTrack note={note} noteRef={noteRef} sectionId={sectionId} onScrub={onScrub} />}
     </Panel>
   )
 }
@@ -139,7 +143,7 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
  * cycle the current tilt is, wrapping around as the frames loop. Drag to scrub, scroll to move along,
  * ⌘-scroll to zoom.
  */
-function FrameTrack({ note, noteRef, sectionId }: { note: Note; noteRef: NoteRef; sectionId?: string }) {
+function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef: NoteRef; sectionId?: string; onScrub?: () => void }) {
   const scroller = useRef<HTMLDivElement>(null)
   const track = useRef<HTMLDivElement>(null)
   const gesture = useRef<{ mode: 'scrub' } | { mode: 'resize'; frameId: string; startX: number; startLength: number } | null>(null)
@@ -206,6 +210,7 @@ function FrameTrack({ note, noteRef, sectionId }: { note: Note; noteRef: NoteRef
             } else {
               gesture.current = { mode: 'scrub' }
               scrubTo(e.clientX)
+              onScrub?.()
             }
           }}
           onPointerMove={(e) => {
@@ -262,6 +267,19 @@ function FrameTrack({ note, noteRef, sectionId }: { note: Note; noteRef: NoteRef
                 {(
                   <>
                     <FrameMenu frame={frame} index={i} count={frames.length} noteRef={noteRef} />
+                    {/* Its fill, in the same panel as the right panel's, opened from its swatch; it goes to the frame, as a click on it does */}
+                    <FillPopover note={note} noteRef={noteRef} frame={frame} side="top" align="center"
+                      onOpenChange={(open) => {
+                        if (!open) return
+                        scrubTo((track.current?.getBoundingClientRect().left ?? 0) + left + width / 2)
+                        onScrub?.()
+                      }}
+                      trigger={
+                        <Button variant="secondary" size="icon-xs" aria-label={`Frame ${i + 1} fill`}
+                          className="absolute right-2 bottom-0.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[popup-open]:opacity-100">
+                          <FillSwatch frame={frame} backgroundColor={note.thread.backgroundColor} className="size-3.5" />
+                        </Button>
+                      } />
                     <div
                       data-resize={frame.id}
                       aria-label={`Change frame ${i + 1} length`}

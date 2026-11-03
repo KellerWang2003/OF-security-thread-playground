@@ -634,14 +634,17 @@ describe('thread editor', () => {
     arrive()
     expect(frameButton(1).getAttribute('aria-pressed')).toBe('true')
 
-    // Its fill: the background every frame shares, set right there, or a colour of its own
-    await user.click(within(editor).getByRole('button', { name: 'Background', exact: true }))
+    // Its fill, in a panel of its own as Figma's (Keller): the background every frame shares, set right there, or a
+    // colour of its own
+    await user.click(within(editor).getByRole('button', { name: /^Fill: / }))
+    await user.click(await screen.findByRole('button', { name: 'Background', exact: true }))
     expect(note().frames[0].kind).toBe('none')
-    await user.click(within(editor).getByRole('switch', { name: 'Background colour' }))
+    await user.click(screen.getByRole('switch', { name: 'Background colour' }))
     expect(note().thread.backgroundColor).toBe('#ffffff')
-    await user.click(within(editor).getByRole('button', { name: 'Colour', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Colour', exact: true }))
     expect(note().frames[0].kind).toBe('color')
-    expect(within(editor).queryByRole('switch', { name: 'Background colour' })).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Background colour' })).toBeNull()
+    await user.click(within(editor).getByRole('button', { name: /^Fill: #/ }))
 
     // An image sits in the repeat; its Place comes before its Fill, fitted at first, then where its fields put it. The
     // tile is set by hand here, so it stays 4 mm (on Fit it would take the image's length)

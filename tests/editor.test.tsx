@@ -215,6 +215,31 @@ describe('username workspace editor', () => {
     expect(body(0).classList.contains('outline-2')).toBe(true)
     expect(saves).not.toHaveBeenCalled()
   })
+  it('turns to the thread when its frames are scrubbed, and fills a frame from its clip', async () => {
+    for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
+    }
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'timeline-fill-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const note = () => useProjects.getState().demoPreview!.notes[0]
+    const open = () => screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent
+    expect(open()).toBe('Banknote')
+    // Scrubbing the frames is working on the thread (Keller): the panel turns to it
+    const clip = document.querySelector<HTMLElement>(`[data-frame-clip="${note().frames[1].id}"]`)!
+    fireEvent.pointerDown(clip, { button: 0, buttons: 1, clientX: 50, pointerId: 1 })
+    fireEvent.pointerUp(clip, { button: 0, clientX: 50, pointerId: 1 })
+    expect(open()).toBe('Thread')
+    // Each clip opens its frame's fill, in the same panel as the right panel's, and turns to the thread too
+    await user.click(screen.getByRole('tab', { name: 'Banknote' }))
+    await user.click(screen.getByRole('button', { name: 'Frame 2 fill' }))
+    expect(open()).toBe('Thread')
+    await user.click(await screen.findByRole('button', { name: 'Background', exact: true }))
+    expect(note().frames[1].kind).toBe('none')
+    expect(note().frames[0].kind).toBe('color')
+  })
   it('shows one tab per part, labels every control, and the thread’s lens with its preview in a drawer at the foot', async () => {
     const user = userEvent.setup()
     localStorage.setItem('of-thread-workspace', 'panel-lens-ui-test')
@@ -233,16 +258,21 @@ describe('username workspace editor', () => {
 
     // Small labels say what each control is
     for (const label of ['Direction', 'Width', 'Tile length', 'Position', 'Effect', 'Seen flat']) expect(screen.getByText(label, { exact: true })).toBeDefined()
-    // The frame the timeline is on, picked and filled right here as in Thread Studio's Frames tab, since they are
-    // normal controls (Keller); there is no Image gap any more
-    for (const label of ['Frame', 'Fill']) expect(screen.getByText(label, { exact: true })).toBeDefined()
-    const current = screen.getAllByRole('button', { name: /^Frame \d$/ }).findIndex((b) => b.getAttribute('aria-pressed') === 'true')
-    expect(current).toBeGreaterThanOrEqual(0)
-    await user.click(screen.getByRole('button', { name: 'Background', exact: true }))
-    expect(note().frames[current].kind).toBe('none')
+    // The frame the timeline is on, filled right here as in Thread Studio's Frames tab, since they are normal controls
+    // (Keller), its fill chosen in a panel of its own as Figma's; the timeline picks the frame, so no frame numbers
+    expect(screen.getByText('Fill', { exact: true })).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Frame 1', exact: true })).toBeNull()
+    const fill = () => screen.getByRole('button', { name: /^Fill: / })
+    await user.click(fill())
+    await user.click(await screen.findByRole('button', { name: 'Background', exact: true }))
+    const emptied = note().frames.findIndex((f) => f.kind === 'none')
+    expect(emptied).toBeGreaterThanOrEqual(0)
+    expect(fill().getAttribute('aria-label')).toBe('Fill: Background')
     expect(screen.getByRole('switch', { name: 'Background colour' })).toBeDefined()
     await user.click(screen.getByRole('button', { name: 'Colour', exact: true }))
-    expect(note().frames[current].kind).toBe('color')
+    expect(note().frames[emptied].kind).toBe('color')
+    await user.click(fill())
+    // There is no Image gap any more
     expect(screen.queryByTitle('Space between complete image copies along the thread')).toBeNull()
 
     // The lens's controls, edited for this banknote right here; Thread Studio opens from the canvas, not the panel

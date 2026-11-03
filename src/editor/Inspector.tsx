@@ -244,11 +244,12 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
 
 /**
  * The frame the timeline is on, its place and its fill, as in Thread Studio's Frames tab: Keller wants them here too,
- * since they are normal controls. Its own component, so only it follows the tilt
+ * since they are normal controls, but not its frame numbers, as the timeline picks the frame here. Its own component,
+ * so only it follows the tilt
  */
 function TimelineFrame({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const { frame, index, show } = useTimelineFrame(note)
-  return <FramePanel note={note} noteRef={noteRef} frame={frame} index={index} onShow={show} />
+  return <FramePanel note={note} noteRef={noteRef} frame={frame} index={index} onShow={show} picker={false} />
 }
 
 /**
