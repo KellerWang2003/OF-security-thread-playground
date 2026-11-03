@@ -487,7 +487,7 @@ describe('thread editor', () => {
     expect(within(editor).getByText('Lens angle').nextElementSibling!.textContent).toBe('45° /')
   })
 
-  it('pans when dragged around, tilts when dragged on, in perspective, and edits the measurements beside the middle repeat', async () => {
+  it('pans when dragged around, tilts in perspective only when dragged on, and edits the measurements beside the middle repeat', async () => {
     const user = await openDemo('thread-view-ui-test')
     await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
@@ -513,17 +513,17 @@ describe('thread editor', () => {
     }
     expect(sections()).toHaveLength(1)
 
-    // Tilted from elsewhere, the thread turns with it; with Perspective off it stays flat, until a drag on it
+    // Tilted from elsewhere (the timeline, the pad, playback) the thread stays flat; only a drag on it turns it, and
+    // there's no option for it
     act(() => setTilt({ source: 'slider', angle: 20, target: 20, angleX: 0, targetX: 0 }))
-    expect(strip().element.style.transform).toBe('rotateX(20deg) rotateY(0deg)')
-    await user.click(within(editor).getByRole('button', { name: 'Perspective', exact: true }))
     expect(strip().element.style.transform).toBe('')
     const on = at(1, 0.5)
     fireEvent.pointerDown(strip().element, { button: 0, buttons: 1, ...on })
     fireEvent.pointerMove(strip().element, { buttons: 1, ...on, clientY: on.clientY - 16 })
     expect(strip().element.style.transform).toContain('rotateX(')
     fireEvent.pointerUp(strip().element, { button: 0, ...on })
-    await user.click(within(editor).getByRole('button', { name: 'Perspective', exact: true }))
+    expect(strip().element.style.transform).toBe('')
+    expect(within(editor).queryByRole('button', { name: 'Perspective', exact: true })).toBeNull()
     act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
 
     // Ridges shown, a slider beside them sets how strongly

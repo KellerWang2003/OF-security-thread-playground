@@ -67,9 +67,8 @@ function fitView(box: { width: number; height: number }, repeatMm: number, width
  * The centre of the thread editor: the thread magnified over three repeats, in its own direction, showing
  * the real artwork at the current tilt, with the repeat's ends, each section's outline and, optionally, its ridges.
  * The middle repeat is the one edited; the two either side copy it (Keller). A drag around the thread pans; a drag on
- * it, on any of its repeats, tilts it, and while it does the thread turns in perspective (editing still lands where
- * the pointer is); otherwise it turns with the tilt only with `perspective` on. A click on it picks the section under
- * it. On the middle repeat the current frame's image (`frame`, the timeline's) drags straight away, and once picked
+ * it, on any of its repeats, tilts it, and only then does the thread turn in perspective: the timeline, the pad and
+ * playback change frames with it lying flat (Keller). A click on it picks the section under it. On the middle repeat the current frame's image (`frame`, the timeline's) drags straight away, and once picked
  * its corners resize it (`ImagePlacer`); the selected section's edges resize it (snapping to 0.5 mm along and twelfths
  * across), and a double-click on empty thread fills that gap. Beside the middle repeat, the repeat and the thread's
  * thickness to read and edit. Scrolling or a middle-button drag also pans, and pinching or ⌘/Ctrl-scrolling zooms. The
@@ -77,7 +76,7 @@ function fitView(box: { width: number; height: number }, repeatMm: number, width
  * (Tailwind insets clear of the panels), and panned it runs on under them instead of being cut off at that box. A
  * longer repeat or a thicker thread keeps the zoom, so the thread itself grows.
  */
-export function PatternView({ note, projectId, selectedId, onSelect, ridges, ridgeOpacity = 1, perspective = true, frame, limit = 90, room: roomClassName }: {
+export function PatternView({ note, projectId, selectedId, onSelect, ridges, ridgeOpacity = 1, frame, limit = 90, room: roomClassName }: {
   note: Note
   projectId: string
   selectedId?: string
@@ -86,9 +85,6 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, rid
   ridges: boolean
   /** How strongly the ridges show, 0 to 1 */
   ridgeOpacity?: number
-  /** The thread turns with the tilt as frames change from the timeline, the pad or the frame numbers; off, it lies flat
-   * then. While a drag on it tilts it, it always turns */
-  perspective?: boolean
   /** The frame the timeline is on (by index): its image can be moved and resized on the thread */
   frame?: number
   /** How far a drag may tilt, either way */
@@ -101,7 +97,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, rid
   const room = useRef<HTMLDivElement>(null)
   const size = useElementSize(room)
   const gesture = useRef<Gesture | null>(null)
-  // A drag on the thread is tilting it: the thread turns with it then, whatever `perspective` says
+  // A drag on the thread is tilting it: only then does the thread turn with the tilt
   const [dragTilting, setDragTilting] = useState(false)
   const [hover, setHover] = useState<string>()
   const uid = useId().replace(/:/g, '')
@@ -175,15 +171,13 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, rid
     const c0 = r.acrossStart * thickness, c1 = r.acrossEnd * thickness
     return vertical ? { x: c0, y: a0, width: c1 - c0, height: a1 - a0 } : { x: a0, y: c0, width: a1 - a0, height: c1 - c0 }
   }
-  // Turned in perspective, the thread is a plane seen at an angle: a point on screen is traced back onto it, so
-  // drawing and moving land under the pointer at any tilt
-  const turned = (perspective || dragTilting) && (angle !== 0 || angleX !== 0)
+  // The thread turns in perspective only while a drag on it tilts it (Keller), so nothing is ever placed on it turned
+  const turned = dragTilting && (angle !== 0 || angleX !== 0)
   const depth = 2.2 * Math.max(width, height)
   const locate = (e: { clientX: number; clientY: number }) => {
     // The untilted box: the strip's parent, the same size and never turned
     const r = (strip.current!.parentElement ?? strip.current!).getBoundingClientRect()
-    let px = e.clientX - r.left, py = e.clientY - r.top
-    if (turned) [px, py] = unproject(px - width / 2, py - height / 2, angle, angleX, depth).map((v, i) => v + (i ? height : width) / 2)
+    const px = e.clientX - r.left, py = e.clientY - r.top
     return { along: (vertical ? py : px) / scale, across: (vertical ? px : py) / thickness }
   }
   const write = (next: ThreadPattern) => updateNote(projectId, note.id, (n) => ({ ...n, pattern: next }))
@@ -419,29 +413,6 @@ function zoomAround(v: View, factor: number, cx: number, cy: number, fit: number
   const scale = clamp(v.scale * factor, fit * ZOOM_LIMITS.min, fit * ZOOM_LIMITS.max)
   const k = scale / v.scale
   return { scale, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k }
-}
-
-/**
- * Where a point on screen (px from the middle of the untilted strip) lies on the strip turned by
- * `rotateX(angle) rotateY(angleX)` under `perspective: depth`, px from its middle: the CSS projection run backwards.
- * On the plane z = 0 that projection is a 3 × 3 homography, so it inverts exactly.
- */
-function unproject(sx: number, sy: number, angle: number, angleX: number, depth: number): [number, number] {
-  const a = (angle * Math.PI) / 180, b = (angleX * Math.PI) / 180
-  const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b)
-  // rotateX · rotateY on (x, y, 0): x' = cb x, y' = sa sb x + ca y, z' = -ca sb x + sa y; then w = 1 - z' / depth
-  const h = [cb, 0, 0, sa * sb, ca, 0, (ca * sb) / depth, -sa / depth, 1]
-  const [x, y, w] = solve3(h, [sx, sy, 1])
-  return [x / w, y / w]
-}
-
-/** `m` (3 × 3, rows) inverted, times `v` */
-function solve3(m: number[], v: number[]): number[] {
-  const [a, b, c, d, e, f, g, h, i] = m
-  const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g
-  const det = a * A + b * B + c * C
-  const inv = [A, -(b * i - c * h), b * f - c * e, B, a * i - c * g, -(a * f - c * d), C, -(a * h - b * g), a * e - b * d].map((x) => x / det)
-  return [0, 1, 2].map((r) => inv[r * 3] * v[0] + inv[r * 3 + 1] * v[1] + inv[r * 3 + 2] * v[2])
 }
 
 /**

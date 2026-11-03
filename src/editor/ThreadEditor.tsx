@@ -1,4 +1,4 @@
-import { ChevronLeft, CircleCheck, Copy, Eye, EyeOff, Info, Plus, Redo2, Rotate3d, RotateCcw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
+import { ChevronLeft, CircleCheck, Copy, Eye, EyeOff, Info, Plus, Redo2, RotateCcw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -63,7 +63,6 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
   const [ridges, setRidges] = useState(false)
   // Whether the thread turns with the tilt as frames change from the timeline, the pad or the frame numbers; a drag on
   // the thread always turns it (Keller)
-  const [perspective, setPerspective] = useState(true)
   const [ridgeOpacity, setRidgeOpacity] = useState(1)
   // Preview and Checks open one at a time, as an accordion, so the controls above always keep room
   const [info, setInfo] = useState<'preview' | 'checks'>()
@@ -162,7 +161,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       <div className="absolute inset-0 bg-muted/40" />
 
       {/* The whole editor, behind the panels, as on the canvas; the thread fits between them, and fits again once turned */}
-      <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={selectSection} ridges={ridges} ridgeOpacity={ridgeOpacity} perspective={perspective}
+      <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={selectSection} ridges={ridges} ridgeOpacity={ridgeOpacity}
         frame={note.frames.indexOf(current)}
         limit={lens.viewDeg} room="top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[248px]" />
 
@@ -178,11 +177,6 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
               {warnings}
             </Button>
           )}
-          <Toggle size="sm" aria-label="Perspective" title={perspective ? 'The thread turns with the tilt as frames change; off, it stays flat until you drag it' : 'The thread stays flat as frames change; a drag on it still turns it'}
-            pressed={perspective} onPressedChange={setPerspective}>
-            <Rotate3d />
-            Perspective
-          </Toggle>
           <Toggle size="sm" aria-label="Ridges" title={ridges ? "Hide each section's ridges" : "Show each section's ridges"} pressed={ridges} onPressedChange={setRidges}>
             {ridges ? <Eye /> : <EyeOff />}
             Ridges
