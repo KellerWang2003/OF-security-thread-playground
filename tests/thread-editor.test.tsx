@@ -194,8 +194,12 @@ describe('thread editor', () => {
     expect(sections().map((s) => s.name)).toEqual(['Lane ↔', 'Section 3', 'Lane ↕'])
     expect(within(editor).getByRole('heading', { name: 'Section 3' })).toBeDefined()
 
-    // Delete selects the next section in the list
+    // Delete selects the next section in the list; the thread under the pointer is empty now, ready to draw on
+    const third = sections()[1].id
+    fireEvent.pointerEnter(strip().element.querySelector(`[data-section-id="${third}"][data-copy="0"]`)!)
+    expect(strip().element.className).toContain('cursor-move')
     await user.keyboard('{Delete}')
+    expect(strip().element.className).toContain('cursor-crosshair')
     expect(sections().map((s) => s.name)).toEqual(['Lane ↔', 'Lane ↕'])
     expect(within(editor).getByRole('heading', { name: 'Lane ↕' })).toBeDefined()
     // The last one has no next: the one before it is selected

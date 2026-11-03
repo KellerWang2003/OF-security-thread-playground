@@ -169,6 +169,9 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
     }
   }
 
+  // A section deleted or undone away under the pointer never sees it leave
+  const hovered = pattern.sections.some((s) => s.id === hover)
+
   // A double-click on empty thread fills that whole gap with sections like the ones around it
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('[data-section-id]')) return
@@ -187,7 +190,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
         role="group"
         aria-label="Thread pattern"
         data-pattern-view=""
-        className={cn('relative touch-none shadow-sm select-none', preview || !hover ? 'cursor-crosshair' : 'cursor-move')}
+        className={cn('relative touch-none shadow-sm select-none', preview || !hovered ? 'cursor-crosshair' : 'cursor-move')}
         style={{ width, height }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
