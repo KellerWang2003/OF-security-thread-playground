@@ -466,7 +466,7 @@ describe('thread editor', () => {
     expect(within(editor).getByText('Lens angle').nextElementSibling!.textContent).toBe('45° /')
   })
 
-  it('tilts the thread by dragging with Tilt on, turns it in perspective unless switched off, and turns the thread from the Thread tab', async () => {
+  it('tilts the thread by dragging with Tilt on, turns it in perspective unless switched off, and turns the thread from the panel', async () => {
     const user = await openDemo('thread-view-ui-test')
     await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
@@ -486,8 +486,7 @@ describe('thread editor', () => {
     await user.click(within(editor).getByRole('button', { name: 'Perspective', exact: true }))
     expect(strip().element.style.transform).toBe('')
 
-    // The Thread tab turns the thread
-    await user.click(within(editor).getByRole('tab', { name: 'Thread' }))
+    // The thread can be turned from the editor
     await user.click(within(editor).getByRole('button', { name: 'Horizontal', exact: true }))
     expect(note().thread.direction).toBe('horizontal')
   })

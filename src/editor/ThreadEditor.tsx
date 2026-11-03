@@ -11,7 +11,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
 import { Group, IconButton, Panel, ScrubField, Section, SwitchField } from '../components/controls'
@@ -53,10 +52,9 @@ import { TimelineBar } from './TimelineBar'
 /**
  * One banknote's thread pattern, full screen. Top: back, the banknote, the repeat, the view toggles and undo. Left:
  * Mixed angles, the presets it allows and the sections. Middle: the thread magnified, where sections are drawn, moved
- * and resized, and the view panned, zoomed and tilted. Right: two tabs, as Figma's Design and Prototype: Section (the
- * selected section's area and frames, and the lens: the section's own with mixed angles, otherwise the shared one)
- * and Thread (direction, thickness, artwork); under both, fixed at the bottom, Preview and Checks, for information
- * only, open upwards. Bottom: the tilt pad and the playback bar, as on the canvas.
+ * and resized, and the view panned, zoomed and tilted. Right, scrolling: the selected section's area and frames, the
+ * lens (the section's own with mixed angles, otherwise the shared one) and the thread (direction, thickness,
+ * artwork); under them, fixed at the bottom, Preview and Checks, for information only, open upwards. Bottom: the tilt pad and the playback bar, as on the canvas.
  */
 export function ThreadEditor({ project, note, onClose }: { project: Project; note: Note; onClose: () => void }) {
   const pattern = patternOf(note)
@@ -64,7 +62,6 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
   const [ridges, setRidges] = useState(false)
   const [tiltDrag, setTiltDrag] = useState(false)
   const [perspective, setPerspective] = useState(true)
-  const [tab, setTab] = useState<'section' | 'thread'>('section')
   // Preview and Checks open one at a time, as an accordion, so the controls above always keep room
   const [info, setInfo] = useState<'preview' | 'checks'>()
   const openInfo = (part: 'preview' | 'checks') => (open: boolean) => setInfo(open ? part : undefined)
@@ -212,52 +209,40 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
 
       <PanelResizer className="top-16" />
       <Panel className="absolute top-16 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-hidden">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as 'section' | 'thread')} className="min-h-0 flex-1 gap-0">
-          <div className="border-b border-border/60 px-2.5 py-1.5">
-            <TabsList variant="line" className="h-7">
-              <TabsTrigger value="section" className="px-1.5 text-[13px]">Section</TabsTrigger>
-              <TabsTrigger value="thread" className="px-1.5 text-[13px]">Thread</TabsTrigger>
-            </TabsList>
-          </div>
-          <TabsContent value="section" className="min-h-0 overflow-y-auto">
-            {selected && (
-              <Group title={selected.name}>
-                <Section nested title="Area" action={<span className="text-[11px] text-muted-foreground">mm</span>}>
-                  <AreaFields section={selected} repeatMm={pattern.repeatMm} widthMm={note.thread.widthMm} vertical={vertical}
-                    onChange={(edge, value) => edit((n) => resizeEdge(patternOf(n), selected.id, edge, value, false))} />
-                </Section>
-                <Section nested title="Frames" action={
-                  <IconButton label="Every frame in order" size="icon-xs" disabled={isIdentity(sectionSlots(note.frames, selected))}
-                    onClick={() => edit((n) => setSectionTrack(n, selected.id, n.frames.map((_, i) => i)))}>
-                    <RotateCcw />
-                  </IconButton>
-                }>
-                  <TrackEditor note={note} section={selected} onChange={(slots) => edit((n) => setSectionTrack(n, selected.id, slots))} />
-                </Section>
-              </Group>
-            )}
-            {lensNote ? (
-              <Group title="Lens" action={
-                <div className="flex items-center gap-1">
-                  {!pattern.mixed && <span className="text-[11px] text-muted-foreground" title="Mixed angles is off: every section plays this lens">Shared</span>}
-                  <LensMenu note={lensNote} set={setLens} />
-                </div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {selected && (
+            <Group title={selected.name}>
+              <Section nested title="Area" action={<span className="text-[11px] text-muted-foreground">mm</span>}>
+                <AreaFields section={selected} repeatMm={pattern.repeatMm} widthMm={note.thread.widthMm} vertical={vertical}
+                  onChange={(edge, value) => edit((n) => resizeEdge(patternOf(n), selected.id, edge, value, false))} />
+              </Section>
+              <Section nested title="Frames" action={
+                <IconButton label="Every frame in order" size="icon-xs" disabled={isIdentity(sectionSlots(note.frames, selected))}
+                  onClick={() => edit((n) => setSectionTrack(n, selected.id, n.frames.map((_, i) => i)))}>
+                  <RotateCcw />
+                </IconButton>
               }>
-                <EffectSection key={pattern.mixed ? selectedSectionId : 'shared'} note={lensNote} set={setLens} printNote={note} preview={false} />
-              </Group>
-            ) : (
-              // Mixed angles with nothing selected: no one lens to edit (Preview shows the print of them all)
-              <p className="px-4 py-3 text-xs text-muted-foreground">No section selected</p>
-            )}
-          </TabsContent>
-          <TabsContent value="thread" className="min-h-0 overflow-y-auto">
-            <Group title="Thread">
-              <ThreadSettings note={note} projectId={project.id} />
+                <TrackEditor note={note} section={selected} onChange={(slots) => edit((n) => setSectionTrack(n, selected.id, slots))} />
+              </Section>
             </Group>
-          </TabsContent>
-        </Tabs>
+          )}
+          {/* Mixed angles with nothing selected: no one lens to edit (Preview shows the print of them all) */}
+          {lensNote && (
+            <Group title="Lens" action={
+              <div className="flex items-center gap-1">
+                {!pattern.mixed && <span className="text-[11px] text-muted-foreground" title="Mixed angles is off: every section plays this lens">Shared</span>}
+                <LensMenu note={lensNote} set={setLens} />
+              </div>
+            }>
+              <EffectSection key={pattern.mixed ? selectedSectionId : 'shared'} note={lensNote} set={setLens} printNote={note} preview={false} />
+            </Group>
+          )}
+          <Group title="Thread">
+            <ThreadSettings note={note} projectId={project.id} />
+          </Group>
+        </div>
 
-        {/* For information only, so fixed at the bottom under either tab, opening upwards one at a time */}
+        {/* For information only, so fixed at the bottom under the controls, opening upwards one at a time */}
         <div className="flex shrink-0 flex-col divide-y divide-border/60 border-t border-border/60">
           <InfoDrawer title="Preview" open={info === 'preview'} onOpenChange={openInfo('preview')} action={pattern.mixed && !lensNote
             ? <span className="text-[11px] text-muted-foreground" title="Mixed angles is on: each section plays its own lens">Mixed</span> : undefined}>
