@@ -140,12 +140,13 @@ describe('thread editor', () => {
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     const tilt = note().tilt
 
+    // The new half is named after the section it was cut from
     await user.click(within(editor).getByRole('button', { name: 'Add section', exact: true }))
-    expect(sections().map((s) => s.name)).toEqual(['Whole thread', 'Section 2'])
+    expect(sections().map((s) => s.name)).toEqual(['Whole thread', 'Whole thread 2'])
     const row = (name: string) => within(within(editor).getByRole('button', { name, exact: true }).closest('li')!)
-    await user.click(row('Section 2').getByRole('button', { name: 'Duplicate', exact: true }))
-    expect(sections().map((s) => s.name)).toEqual(['Whole thread', 'Section 2', 'Section 2 copy'])
-    await user.dblClick(within(editor).getByRole('button', { name: 'Section 2 copy', exact: true }))
+    await user.click(row('Whole thread 2').getByRole('button', { name: 'Duplicate', exact: true }))
+    expect(sections().map((s) => s.name)).toEqual(['Whole thread', 'Whole thread 2', 'Whole thread 2 copy'])
+    await user.dblClick(within(editor).getByRole('button', { name: 'Whole thread 2 copy', exact: true }))
     const name = within(editor).getByRole('textbox', { name: 'Section name' })
     await user.clear(name)
     await user.type(name, 'Corner{Enter}')
@@ -189,10 +190,10 @@ describe('thread editor', () => {
     await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
-    // Splitting the first lane puts the new half straight after it, selected
+    // Splitting the first lane puts the new half straight after it, named after it and selected
     await user.click(within(editor).getByRole('button', { name: 'Add section', exact: true }))
-    expect(sections().map((s) => s.name)).toEqual(['Lane ↔', 'Section 3', 'Lane ↕'])
-    expect(within(editor).getByRole('heading', { name: 'Section 3' })).toBeDefined()
+    expect(sections().map((s) => s.name)).toEqual(['Lane ↔', 'Lane ↔ 2', 'Lane ↕'])
+    expect(within(editor).getByRole('heading', { name: 'Lane ↔ 2' })).toBeDefined()
 
     // Delete selects the next section in the list; the thread under the pointer is empty now, ready to draw on
     const third = sections()[1].id

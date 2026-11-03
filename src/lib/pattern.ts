@@ -417,6 +417,21 @@ export function nextName(pattern: ThreadPattern) {
   return `Section ${n}`
 }
 
+/**
+ * A name for a section made from `source`: its name with the next number after any its namesakes carry, so a half
+ * cut from "Lane ↔" is "Lane ↔ 2", then "Lane ↔ 3". "Section N" when the source has no name.
+ */
+export function nameAfter(pattern: ThreadPattern, source: Pick<ThreadSection, 'name'>) {
+  const parse = (name: string) => {
+    const m = /^(.*?)\s+(\d+)$/.exec(name.trim())
+    return m ? { base: m[1], n: Number(m[2]) } : { base: name.trim(), n: 1 }
+  }
+  const { base } = parse(source.name)
+  if (!base) return nextName(pattern)
+  const last = Math.max(...pattern.sections.map((s) => parse(s.name)).filter((p) => p.base === base).map((p) => p.n), 1)
+  return `${base} ${last + 1}`
+}
+
 const newId = () => crypto.randomUUID()
 
 export function addSection(pattern: ThreadPattern, rect: Rect): { pattern: ThreadPattern; id: string } {
@@ -424,10 +439,11 @@ export function addSection(pattern: ThreadPattern, rect: Rect): { pattern: Threa
   return { pattern: { ...pattern, sections: [...pattern.sections, { id, name: nextName(pattern), ...rectOf(rect) }] }, id }
 }
 
-/** One section cut in two, along the thread or across it; the new half keeps its lens and track. Undefined when it's too small to cut */
-export function splitSection(pattern: ThreadPattern, id: string, direction: 'along' | 'across', name = nextName(pattern)): { pattern: ThreadPattern; id: string } | undefined {
+/** One section cut in two, along the thread or across it; the new half keeps its lens and track and is named after it. Undefined when it's too small to cut */
+export function splitSection(pattern: ThreadPattern, id: string, direction: 'along' | 'across', name?: string): { pattern: ThreadPattern; id: string } | undefined {
   const s = pattern.sections.find((x) => x.id === id)
   if (!s) return undefined
+  name ??= nameAfter(pattern, s)
   const [start, end, step, snap] = direction === 'along'
     ? [s.startMm, s.endMm, ALONG_STEP, snapAlong] as const
     : [s.acrossStart, s.acrossEnd, ACROSS_STEP, snapAcross] as const
@@ -485,14 +501,14 @@ export function freeRect(pattern: ThreadPattern): Rect | undefined {
 /**
  * A new section: a plain one (the banknote's lens, every frame) over the largest empty area, or else cut from
  * `fromId` (or the largest section) along its longer side, keeping that section's lens and track so the thread still
- * looks the same. Undefined when there's no room.
+ * looks the same, and named after it. Undefined when there's no room.
  */
 export function addBlankSection(pattern: ThreadPattern, widthMm: number, fromId?: string): { pattern: ThreadPattern; id: string } | undefined {
   const free = freeRect(pattern)
   if (free) return addSection(pattern, free)
   const largest = pattern.sections.reduce((a, b) => (area(b) > area(a) ? b : a))
   const from = pattern.sections.find((s) => s.id === fromId) ?? largest
-  return splitLonger(pattern, from.id, widthMm, nextName(pattern)) ?? (from === largest ? undefined : splitLonger(pattern, largest.id, widthMm, nextName(pattern)))
+  return splitLonger(pattern, from.id, widthMm, nameAfter(pattern, from)) ?? (from === largest ? undefined : splitLonger(pattern, largest.id, widthMm, nameAfter(pattern, largest)))
 }
 
 /**

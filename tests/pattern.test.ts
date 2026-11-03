@@ -14,6 +14,7 @@ import {
   gapRects,
   migratePattern,
   moveRect,
+  nameAfter,
   padTrack,
   patternMix,
   playbackLens,
@@ -408,7 +409,12 @@ describe('editing sections', () => {
     const pattern = withPreset('single').pattern!
     const split = splitSection(pattern, WHOLE_ID, 'across')!
     expect(split.pattern.sections.map((s) => [s.acrossStart, s.acrossEnd])).toEqual([[0, 0.5], [0.5, 1]])
-    expect(split.pattern.sections[1]).toMatchObject({ id: split.id, name: 'Section 2' })
+    expect(split.pattern.sections[1]).toMatchObject({ id: split.id, name: 'Whole thread 2' })
+    // Named after the section it was cut from, with the next number its namesakes leave
+    const again = splitSection(split.pattern, WHOLE_ID, 'along')!
+    expect(again.pattern.sections.map((s) => s.name)).toEqual(['Whole thread', 'Whole thread 3', 'Whole thread 2'])
+    expect(splitSection(again.pattern, again.id, 'across')!.pattern.sections.map((s) => s.name)).toEqual(['Whole thread', 'Whole thread 3', 'Whole thread 4', 'Whole thread 2'])
+    expect(nameAfter(split.pattern, { name: '' })).toBe('Section 3')
     const copy = duplicateSection(pattern, WHOLE_ID, 4)!
     // As long along as across (4 mm each way): the copy goes along
     expect(copy.pattern.sections.map((s) => [s.startMm, s.endMm, s.name])).toEqual([[0, 2, 'Whole thread'], [2, 4, 'Whole thread copy']])
@@ -440,9 +446,9 @@ describe('editing sections', () => {
     // No gap: the selected lane is cut along its longer side, and the new half keeps its lens and track, so the
     // thread looks the same until it's changed
     const cut = addBlankSection(covered, 4, side.id)!
-    expect(cut.pattern.sections.map((s) => s.name)).toEqual(['Lane ↔', 'Section 3', 'Lane ↕'])
+    expect(cut.pattern.sections.map((s) => s.name)).toEqual(['Lane ↔', 'Lane ↔ 2', 'Lane ↕'])
     expect(cut.pattern.sections[0]).toMatchObject({ lens: side.lens, track: side.track, startMm: 0, endMm: 2 })
-    expect(cut.pattern.sections[1]).toEqual({ ...side, id: cut.id, name: 'Section 3', startMm: 2, endMm: 4 })
+    expect(cut.pattern.sections[1]).toEqual({ ...side, id: cut.id, name: 'Lane ↔ 2', startMm: 2, endMm: 4 })
     const before = { ...banknote(), pattern: covered }
     const after = { ...before, pattern: cut.pattern }
     expect(shown(after, sweep('x'))).toEqual([...shown(before, sweep('x')).slice(0, 1), ...shown(before, sweep('x'))])
