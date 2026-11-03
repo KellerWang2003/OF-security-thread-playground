@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+import { Slider } from '@/components/ui/slider'
 import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
 import { Drawer, Group, IconButton, Labeled, Panel, Section, SwitchField } from '../components/controls'
@@ -60,8 +61,10 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
   const [selectedId, setSelectedId] = useState(() => pattern.sections.at(0)?.id)
   const selectSection = setSelectedId
   const [ridges, setRidges] = useState(false)
-  // Off by default (Keller): the thread lies flat and a drag on it edits; the pad at the bottom left tilts it
-  const [tiltOn, setTiltOn] = useState(false)
+  // Whether the thread turns with the tilt as frames change from the timeline, the pad or the frame numbers; a drag on
+  // the thread always turns it (Keller)
+  const [perspective, setPerspective] = useState(true)
+  const [ridgeOpacity, setRidgeOpacity] = useState(1)
   // Preview and Checks open one at a time, as an accordion, so the controls above always keep room
   const [info, setInfo] = useState<'preview' | 'checks'>()
   const openInfo = (part: 'preview' | 'checks') => (open: boolean) => setInfo(open ? part : undefined)
@@ -159,7 +162,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       <div className="absolute inset-0 bg-muted/40" />
 
       {/* The whole editor, behind the panels, as on the canvas; the thread fits between them, and fits again once turned */}
-      <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={selectSection} ridges={ridges} tilting={tiltOn}
+      <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={selectSection} ridges={ridges} ridgeOpacity={ridgeOpacity} perspective={perspective}
         frame={note.frames.indexOf(current)}
         limit={lens.viewDeg} room="top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[248px]" />
 
@@ -175,15 +178,22 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
               {warnings}
             </Button>
           )}
-          <Toggle size="sm" aria-label="Tilt" title={tiltOn ? 'A drag around the thread tilts it; off, the thread lies flat' : 'The thread lies flat and a drag pans; on, a drag tilts it'}
-            pressed={tiltOn} onPressedChange={setTiltOn}>
+          <Toggle size="sm" aria-label="Perspective" title={perspective ? 'The thread turns with the tilt as frames change; off, it stays flat until you drag it' : 'The thread stays flat as frames change; a drag on it still turns it'}
+            pressed={perspective} onPressedChange={setPerspective}>
             <Rotate3d />
-            Tilt
+            Perspective
           </Toggle>
           <Toggle size="sm" aria-label="Ridges" title={ridges ? "Hide each section's ridges" : "Show each section's ridges"} pressed={ridges} onPressedChange={setRidges}>
             {ridges ? <Eye /> : <EyeOff />}
             Ridges
           </Toggle>
+          {/* A slider fills its box, so the box holds its width and the toggles keep theirs */}
+          {ridges && (
+            <div className="flex w-24 shrink-0 items-center" title="How strongly the ridges show">
+              <Slider value={[Math.round(ridgeOpacity * 100)]} min={10} max={100} step={5} thumbLabel={() => 'Ridge opacity'}
+                onValueChange={(value) => { const [v] = Array.isArray(value) ? value : [value]; if (v !== undefined) setRidgeOpacity(v / 100) }} />
+            </div>
+          )}
           <div className="flex items-center gap-0.5">
             <IconButton className="rounded-lg" label="Undo" title="Undo (⌘/Ctrl+Z)" disabled={!canUndo} onClick={() => stepNote(project.id, note.id, 'undo')}><Undo2 /></IconButton>
             <IconButton className="rounded-lg" label="Redo" title="Redo (⌘/Ctrl+Shift+Z)" disabled={!canRedo} onClick={() => stepNote(project.id, note.id, 'redo')}><Redo2 /></IconButton>

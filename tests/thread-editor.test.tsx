@@ -78,8 +78,6 @@ function strip() {
   const thickness = parseFloat(element.style.width)
   return { element, thickness, scale: thickness / 4 }
 }
-/** The selected section's length beside the thread, shown only while a section is selected */
-const sectionLength = () => screen.queryByTitle('The selected section\'s length along the thread')
 /** A point on the repeat being edited, the middle one: `along` mm into it, `across` a share of the thread's width */
 const at = (along: number, across: number) => {
   const { thickness, scale } = strip()
@@ -118,42 +116,51 @@ describe('thread editor', () => {
     expect(note().pattern!.mixed).toBe(true)
     expect(within(editor).getByRole('switch', { name: 'Mixed angles' }).getAttribute('aria-checked')).toBe('true')
 
-    // Select a lane in the list and delete it; its size shows beside the thread, not in the panel
+    // Select a lane in the list and delete it
     await user.click(within(editor).getByRole('button', { name: 'Lane ↕', exact: true }))
-    expect(within(strip().element).getByTitle('The selected section\'s width across the thread').querySelector('input')!.value).toBe('2')
+    expect(within(editor).getByRole('heading', { name: 'Lane ↕' })).toBeDefined()
     expect(within(editor).queryByRole('heading', { name: 'Area' })).toBeNull()
+    // Only the repeat and the thickness sit beside the thread now
+    expect(within(strip().element).queryByTitle('The selected section\'s width across the thread')).toBeNull()
     await user.keyboard('{Delete}')
     expect(sections().map((s) => s.name)).toEqual(['Lane ↔'])
 
-    // Draw in the empty half, snapped to 0.5 mm along and twelfths across; the new section is selected
-    drag(strip().element, { along: 0.6, across: 0.76 }, { along: 2.9, across: 0.95 })
+    // A section added in the empty half is selected, and only its edges, on the middle repeat, take a drag
+    await user.click(within(editor).getByRole('button', { name: 'Add section', exact: true }))
     expect(sections()).toHaveLength(2)
-    const drawn = sections()[1]
-    expect(drawn).toMatchObject({ name: 'Section 2', startMm: 0.5, endMm: 3, acrossStart: 0.75 })
-    expect(drawn.acrossEnd).toBeCloseTo(11 / 12, 9)
-    expect(sectionLength()!.querySelector('input')!.value).toBe('2.5')
+    const added = sections()[1]
+    expect(added).toMatchObject({ startMm: 0, endMm: 4, acrossStart: 0.5, acrossEnd: 1 })
+    const body = () => strip().element.querySelector(`[data-section-id="${added.id}"][data-copy="1"]`)!
+    expect(strip().element.querySelector(`[data-section-id="${added.id}"][data-copy="0"] [data-edge]`)).toBeNull()
 
-    // Move it 1 mm along, until it meets the end of the repeat
-    const body = () => strip().element.querySelector(`[data-section-id="${drawn.id}"][data-copy="1"]`)!
-    drag(body(), { along: 1.5, across: 0.85 }, { along: 2.6, across: 0.85 })
-    expect(sections()[1]).toMatchObject({ startMm: 1.5, endMm: 4 })
-
-    // Resize its near edge towards the lane: it stops where the lane ends
-    drag(body().querySelector('[data-edge="acrossStart"]')!, { along: 2, across: 0.75 }, { along: 2, across: 0.3 })
-    expect(sections()[1].acrossStart).toBe(0.5)
-    await user.click(within(editor).getByRole('button', { name: 'Undo', exact: true }))
+    // Its near edge pulled out snaps to twelfths across; undo and redo step through it
+    drag(body().querySelector('[data-edge="acrossStart"]')!, { along: 2, across: 0.5 }, { along: 2, across: 0.76 })
     expect(sections()[1].acrossStart).toBe(0.75)
-    await user.click(within(editor).getByRole('button', { name: 'Redo', exact: true }))
+    await user.click(within(editor).getByRole('button', { name: 'Undo', exact: true }))
     expect(sections()[1].acrossStart).toBe(0.5)
+    await user.click(within(editor).getByRole('button', { name: 'Redo', exact: true }))
+    expect(sections()[1].acrossStart).toBe(0.75)
 
-    // A click on empty thread deselects; Escape deselects, then leaves
-    fireEvent.pointerDown(strip().element, { button: 0, buttons: 1, ...at(0.5, 0.75) })
-    fireEvent.pointerUp(strip().element, { button: 0, ...at(0.5, 0.75) })
-    expect(sectionLength()).toBeNull()
-    await user.click(within(editor).getByRole('button', { name: 'Section 2', exact: true }))
-    expect(sectionLength()).not.toBeNull()
+    // A drag on a section's body tilts the thread rather than moving it
+    fireEvent.pointerDown(body(), { button: 0, buttons: 1, ...at(1, 0.9) })
+    fireEvent.pointerMove(body(), { buttons: 1, ...at(3, 0.9) })
+    expect(useTilt.getState().target).not.toBe(0)
+    fireEvent.pointerUp(body(), { button: 0, ...at(3, 0.9) })
+    expect(sections()[1]).toMatchObject({ startMm: 0, endMm: 4, acrossStart: 0.75 })
+    act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
+
+    // A click on the thread picks the section under it; a click around it lets go; Escape lets go, then leaves
+    fireEvent.pointerDown(strip().element, { button: 0, buttons: 1, ...at(0.5, 0.25) })
+    fireEvent.pointerUp(strip().element, { button: 0, ...at(0.5, 0.25) })
+    expect(within(editor).getByRole('heading', { name: 'Lane ↔' })).toBeDefined()
+    const view = strip().element.parentElement!.parentElement!.parentElement!
+    fireEvent.pointerDown(view, { button: 0, buttons: 1, clientX: 5, clientY: 5, pointerId: 1 })
+    fireEvent.pointerUp(view, { button: 0, clientX: 5, clientY: 5, pointerId: 1 })
+    expect(within(editor).queryByRole('heading', { name: 'Lane ↔' })).toBeNull()
+    await user.click(within(editor).getByRole('button', { name: added.name, exact: true }))
+    expect(within(editor).getByRole('heading', { name: added.name })).toBeDefined()
     await user.keyboard('{Escape}')
-    expect(sectionLength()).toBeNull()
+    expect(within(editor).queryByRole('heading', { name: added.name })).toBeNull()
     expect(screen.getByRole('region', { name: 'Thread editor' })).toBeDefined()
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('region', { name: 'Thread editor' })).toBeNull()
@@ -231,12 +238,8 @@ describe('thread editor', () => {
     expect(sections().map((s) => s.name)).toEqual(['Lane ↔', 'Lane ↔ 2', 'Lane ↕'])
     expect(within(editor).getByRole('heading', { name: 'Lane ↔ 2' })).toBeDefined()
 
-    // Delete selects the next section in the list; the thread under the pointer is empty now, ready to draw on
-    const third = sections()[1].id
-    fireEvent.pointerEnter(strip().element.querySelector(`[data-section-id="${third}"][data-copy="1"]`)!)
-    expect(strip().element.className).toContain('cursor-move')
+    // Delete selects the next section in the list
     await user.keyboard('{Delete}')
-    expect(strip().element.className).toContain('cursor-crosshair')
     expect(sections().map((s) => s.name)).toEqual(['Lane ↔', 'Lane ↕'])
     expect(within(editor).getByRole('heading', { name: 'Lane ↕' })).toBeDefined()
     // The last one has no next: the one before it is selected
@@ -273,11 +276,11 @@ describe('thread editor', () => {
     fireEvent.doubleClick(strip().element, at(3, 0.2))
     expect(sections()).toEqual([side, updown])
 
-    // A whole lane deleted. A section drawn beside the other lane takes its look and its name
+    // A whole lane deleted. A section added beside the other lane takes its look and its name
     await user.click(within(editor).getByRole('button', { name: 'Lane ↕', exact: true }))
     await user.keyboard('{Delete}')
-    drag(strip().element, { along: 0.6, across: 0.52 }, { along: 2.9, across: 0.95 })
-    expect(sections()[1]).toMatchObject({ name: 'Lane ↔ 2', startMm: 0.5, endMm: 3, acrossStart: 0.5, lens: side.lens })
+    await user.click(within(editor).getByRole('button', { name: 'Add section', exact: true }))
+    expect(sections()[1]).toMatchObject({ name: 'Lane ↔ 2', startMm: 0, endMm: 4, acrossStart: 0.5, lens: side.lens })
     expect(sections()[1].track).toEqual(side.track)
     expect(within(editor).getByRole('heading', { name: 'Lane ↔ 2' })).toBeDefined()
     // Undone, a double-click fills the gap instead: the lane grows across the thread
@@ -417,9 +420,10 @@ describe('thread editor', () => {
       expect(sections().map((s) => s.name)).toEqual(names)
       // A preset never switches Mixed angles off
       expect(note().pattern!.mixed).toBe(true)
-      // The first section is selected; only the middle repeat's sections take the pointer, the copies either side follow
+      // The first section is selected, and only its edges on the middle repeat take a drag; the copies either side follow
       expect(within(editor).getByRole('heading', { name: names[0] })).toBeDefined()
-      expect(strip().element.querySelectorAll('[data-section-id]')).toHaveLength(names.length)
+      expect(strip().element.querySelectorAll('[data-section-id]')).toHaveLength(3 * names.length)
+      expect(strip().element.querySelectorAll('[data-edge]')).toHaveLength(4)
     }
 
     // Each preset's picture keeps its own size inside its button, which would otherwise shrink an svg to an icon,
@@ -481,13 +485,13 @@ describe('thread editor', () => {
     expect(within(editor).getByText('Lens angle').nextElementSibling!.textContent).toBe('45° /')
   })
 
-  it('pans when dragged around, tilts when dragged on with Tilt on, and edits the measurements beside the middle repeat', async () => {
+  it('pans when dragged around, tilts when dragged on, in perspective, and edits the measurements beside the middle repeat', async () => {
     const user = await openDemo('thread-view-ui-test')
     await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     const { scale } = strip()
 
-    // A drag around the thread pans the view; Tilt starts off, so the thread lies flat whatever the tilt
+    // A drag around the thread pans the view, and tilts nothing
     const view = strip().element.parentElement!.parentElement!.parentElement!
     const placed = strip().element.parentElement!.style.transform
     fireEvent.pointerDown(view, { button: 0, buttons: 1, clientX: 10, clientY: 100, pointerId: 1 })
@@ -495,30 +499,41 @@ describe('thread editor', () => {
     fireEvent.pointerUp(view, { button: 0, clientX: 40, clientY: 60, pointerId: 1 })
     expect(useTilt.getState().target).toBe(0)
     expect(strip().element.parentElement!.style.transform).not.toBe(placed)
-    act(() => setTilt({ source: 'drag', angle: 20, target: 20, angleX: 0, targetX: 0 }))
-    expect(strip().element.style.transform).toBe('')
 
-    // With Tilt on the thread turns with the tilt, and a drag on it tilts it rather than drawing
-    await user.click(within(editor).getByRole('button', { name: 'Tilt', exact: true }))
+    // A drag on the thread tilts it, on the copies either side too, and never draws
+    for (const along of [1, -2]) {
+      const on = at(along, 0.5)
+      fireEvent.pointerDown(strip().element, { button: 0, buttons: 1, ...on })
+      fireEvent.pointerMove(strip().element, { buttons: 1, ...on, clientY: on.clientY - 80 })
+      expect(useTilt.getState().target).toBe(15)
+      fireEvent.pointerUp(strip().element, { button: 0, ...on })
+      act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
+    }
+    expect(sections()).toHaveLength(1)
+
+    // Tilted from elsewhere, the thread turns with it; with Perspective off it stays flat, until a drag on it
+    act(() => setTilt({ source: 'slider', angle: 20, target: 20, angleX: 0, targetX: 0 }))
     expect(strip().element.style.transform).toBe('rotateX(20deg) rotateY(0deg)')
-    act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
+    await user.click(within(editor).getByRole('button', { name: 'Perspective', exact: true }))
+    expect(strip().element.style.transform).toBe('')
     const on = at(1, 0.5)
     fireEvent.pointerDown(strip().element, { button: 0, buttons: 1, ...on })
-    fireEvent.pointerMove(strip().element, { buttons: 1, ...on, clientY: on.clientY - 80 })
-    expect(useTilt.getState().target).toBe(15)
+    fireEvent.pointerMove(strip().element, { buttons: 1, ...on, clientY: on.clientY - 16 })
+    expect(strip().element.style.transform).toContain('rotateX(')
     fireEvent.pointerUp(strip().element, { button: 0, ...on })
-    expect(sections()).toHaveLength(1)
-    await user.click(within(editor).getByRole('button', { name: 'Tilt', exact: true }))
+    await user.click(within(editor).getByRole('button', { name: 'Perspective', exact: true }))
     act(() => setTilt({ source: 'drag', angle: 0, target: 0, angleX: 0, targetX: 0 }))
 
-    // Beside the thread: the repeat and thickness, and the selected section's length and width, to type in
+    // Ridges shown, a slider beside them sets how strongly
+    await user.click(within(editor).getByRole('button', { name: 'Ridges', exact: true }))
+    expect(editor.querySelector('[data-slot="slider"]')).not.toBeNull()
+    await user.click(within(editor).getByRole('button', { name: 'Ridges', exact: true }))
+    expect(editor.querySelector('[data-slot="slider"]')).toBeNull()
+
+    // Beside the thread: the repeat and the thickness, to type in
     const field = (title: string) => within(strip().element).getByTitle(title).querySelector('input')!
     const type = (title: string, value: string) => { fireEvent.change(field(title), { target: { value } }); fireEvent.blur(field(title)) }
     expect(field('Length of one repeat of the pattern along the thread').value).toBe('4')
-    type('The selected section\'s length along the thread', '2.5')
-    expect(sections()[0]).toMatchObject({ startMm: 0, endMm: 2.5 })
-    type('The selected section\'s width across the thread', '2')
-    expect(sections()[0].acrossEnd).toBe(0.5)
     type('Thread width vertically, or height horizontally', '5')
     expect(note().thread.widthMm).toBe(5)
     // Changing the thickness or the repeat keeps the zoom, so the thread itself grows, over three repeats however long
