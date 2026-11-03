@@ -351,7 +351,7 @@ function TrackEditor({ note, section, onChange }: { note: Note; section: ThreadS
           <DropdownMenuContent className="w-36">
             <DropdownMenuRadioGroup value={String(frame)} onValueChange={(v) => onChange(slots.map((f, k) => (k === strip ? Number(v) : f)))}>
               {note.frames.map((f, i) => (
-                <DropdownMenuRadioItem key={f.id} value={String(i)}>
+                <DropdownMenuRadioItem key={f.id} value={String(i)} closeOnClick>
                   <span className="size-3 shrink-0 rounded-sm" style={{ backgroundColor: swatch(note, i) }} />
                   Frame {i + 1}
                 </DropdownMenuRadioItem>

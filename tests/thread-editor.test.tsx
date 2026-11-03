@@ -2,7 +2,7 @@
 import React from 'react'
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../src/App'
 import { preparePattern } from '../src/lib/pattern'
@@ -170,6 +170,9 @@ describe('thread editor', () => {
     await user.click(within(editor).getByRole('button', { name: 'Strip 1: frame 1', exact: true }))
     await user.click(await screen.findByRole('menuitemradio', { name: 'Frame 2' }))
     expect(sections()[2].track).toEqual([note().frames[1].id, note().frames[1].id])
+    // Picking a frame closes the menu
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    expect(within(editor).getByRole('button', { name: 'Strip 1: frame 2', exact: true }).getAttribute('aria-expanded')).not.toBe('true')
 
     // Now it rests on another frame than the rest: the check says so, and a click on it selects the section
     await user.click(within(editor).getByRole('button', { name: 'Whole thread', exact: true }))
