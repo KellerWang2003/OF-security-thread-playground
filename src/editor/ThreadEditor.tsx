@@ -397,7 +397,7 @@ function CheckList({ checks, onSelect, onFillGaps }: { checks: PatternCheck[]; o
               ) : check.id === 'gaps' ? (
                 <div key={k} className="flex items-center gap-2 pl-5">
                   <p title={issue.title} className="min-w-0 flex-1 py-1 text-xs leading-snug text-muted-foreground">{issue.text}</p>
-                  <Button variant="outline" size="xs" title="Fill each empty area with a new section like the one beside it" onClick={onFillGaps}>Fill</Button>
+                  <Button variant="outline" size="xs" title="Fill each empty area: the section in line with it runs on over it, or a new one takes its look" onClick={onFillGaps}>Fill</Button>
                 </div>
               ) : (
                 <p key={k} title={issue.title} className="py-1 pl-5 text-xs leading-snug text-muted-foreground">{issue.text}</p>

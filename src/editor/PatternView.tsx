@@ -172,7 +172,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
   // A section deleted or undone away under the pointer never sees it leave
   const hovered = pattern.sections.some((s) => s.id === hover)
 
-  // A double-click on empty thread fills that whole gap with sections like the ones around it
+  // A double-click on empty thread fills that whole gap, as Fill does: the section in line with it runs on, or new ones take its look
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('[data-section-id]')) return
     const at = locate(e)

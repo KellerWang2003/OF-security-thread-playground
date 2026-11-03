@@ -470,16 +470,26 @@ describe('filling gaps', () => {
     expect(gapRects({ repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 2 }), section({ id: 'b', startMm: 2.0005 })] })).toEqual([])
   })
 
-  it('fills each gap with a section that looks like the one it borders most, leaving no gap', () => {
+  it('grows a section over a gap that shares a whole side with it, so a lane cut short runs on again', () => {
     const covered = lanes()
     const [side, updown] = covered.sections
     expect(fillGaps(covered, 4)).toBeUndefined()
-    const filled = fillGaps(removeSection(covered, updown.id), 4)!
-    expect(filled.pattern.sections[1]).toEqual({ id: filled.id, name: 'Section 2', startMm: 0, endMm: 4, acrossStart: 0.5, acrossEnd: 1, lens: side.lens, track: side.track })
-    const note = { ...banknote(), pattern: filled.pattern }
-    expect(issues(note, 'gaps')).toEqual([])
+    // The ↔ lane split along, its new half deleted: the gap sits in line with ↔, though on a 3 mm thread it shares
+    // a longer edge with ↕. Fill runs ↔ on over it, as it was, with no new section
+    const cut = addBlankSection(covered, 3, side.id)!
+    const gap = removeSection(cut.pattern, cut.id)
+    const filled = fillGaps(gap, 3)!
+    expect(filled.id).toBe(side.id)
+    expect(filled.pattern.sections).toEqual([side, updown])
+    // A deleted lane: the other grows across the whole thread
+    const wide = fillGaps(removeSection(covered, updown.id), 4)!
+    expect(wide.id).toBe(side.id)
+    expect(wide.pattern.sections).toEqual([{ ...side, acrossEnd: 1 }])
+    expect(issues({ ...banknote(), pattern: wide.pattern }, 'gaps')).toEqual([])
+  })
 
-    // A gap at the end of the repeat borders the next repeat's first section too, here along the whole width
+  it('otherwise fills each gap with a new section like the one it sits in line with, else the one it borders most', () => {
+    // A gap at the end of the repeat runs on into the next repeat's first section, in line with it across the whole width
     const blocks = { repeatMm: 4, mixed: true, sections: [
       section({ id: 'a', endMm: 1, lens: { effect: 'side' } }),
       section({ id: 'b', startMm: 1, endMm: 3, acrossEnd: 0.5, lens: { effect: 'updown' } }),
@@ -487,9 +497,22 @@ describe('filling gaps', () => {
     ] }
     const wrapped = fillGaps(blocks, 4)!
     expect(wrapped.pattern.sections.at(-1)).toMatchObject({ id: wrapped.id, startMm: 3, endMm: 4, acrossStart: 0, acrossEnd: 1, lens: { effect: 'side' } })
-    // Several gaps: each filled, the largest new section returned to select
-    const corner = fillGaps({ repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 1, acrossEnd: 0.5 })] }, 4)!
-    expect(corner.pattern.sections.map((s) => s.name)).toEqual(['S', 'Section 2', 'Section 3'])
+    // A strip of a lane's width, beside a longer edge of another section: still the lane it carries on
+    const lane = { repeatMm: 4, mixed: true, sections: [
+      section({ id: 'a', endMm: 1, acrossEnd: 0.5, lens: { effect: 'side' } }),
+      section({ id: 'b', acrossStart: 0.5, lens: { effect: 'updown' } }),
+      section({ id: 'd', startMm: 2, acrossStart: 0.25, acrossEnd: 0.5, lens: { effect: 'both' } }),
+    ] }
+    const carried = fillGaps(lane, 4)!
+    expect(carried.pattern.sections.at(-1)).toMatchObject({ id: carried.id, startMm: 1, endMm: 4, acrossStart: 0, acrossEnd: 0.25, lens: { effect: 'side' } })
+    // and the rest of the gap, a whole side of d's, runs d on over it
+    expect(carried.pattern.sections.find((s) => s.id === 'd')).toMatchObject({ startMm: 1, endMm: 4, acrossStart: 0.25, acrossEnd: 0.5 })
+    // In line with nothing: the one it borders most
+    const corner = fillGaps({ repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 1, acrossEnd: 0.5, track: ['f1'] })] }, 4)!
+    // The largest gap gets a new section like the corner; the corner then grows over the strip beside it
+    expect(corner.pattern.sections.map((s) => [s.name, s.startMm, s.endMm, s.acrossStart, s.acrossEnd, s.track])).toEqual([
+      ['S', 0, 1, 0, 1, ['f1']], ['Section 2', 1, 4, 0, 1, ['f1']],
+    ])
     expect(corner.id).toBe(corner.pattern.sections[1].id)
     expect(issues({ ...banknote(), pattern: corner.pattern }, 'gaps')).toEqual([])
   })

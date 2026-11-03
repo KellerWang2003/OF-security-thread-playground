@@ -214,31 +214,36 @@ describe('thread editor', () => {
     await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
-    const [side] = sections()
-    await user.click(within(editor).getByRole('button', { name: 'Lane ↕', exact: true }))
+    const [side, updown] = sections()
+    // The ↔ lane split in two, and its new half deleted
+    await user.click(within(editor).getByRole('button', { name: 'Lane ↔', exact: true }))
+    await user.click(within(editor).getByRole('button', { name: 'Add section', exact: true }))
     await user.keyboard('{Delete}')
     const gaps = () => editor.querySelector('[data-check="gaps"]')!
-    expect(gaps().textContent).toContain('50% of each repeat is empty')
+    expect(gaps().textContent).toContain('25% of each repeat is empty')
 
-    // Fill: one new section over the empty half, looking like the lane beside it, selected
+    // Fill: the gap sits in line with the ↔ lane, so that lane runs on over it, as before, selected; no new section
     await user.click(within(gaps() as HTMLElement).getByRole('button', { name: 'Fill', exact: true }))
-    expect(sections()).toHaveLength(2)
-    expect(sections()[1]).toMatchObject({ name: 'Section 2', startMm: 0, endMm: 4, acrossStart: 0.5, acrossEnd: 1, lens: side.lens })
-    expect(sections()[1].track).toEqual(side.track)
-    expect(within(editor).getByRole('heading', { name: 'Section 2' })).toBeDefined()
+    expect(sections()).toEqual([side, updown])
+    expect(within(editor).getByRole('heading', { name: 'Lane ↔' })).toBeDefined()
     expect(gaps().textContent).not.toContain('empty')
     expect(within(gaps() as HTMLElement).queryByRole('button', { name: 'Fill', exact: true })).toBeNull()
 
-    // Undone, the gap is back; a double-click in it fills it too, in whichever repeat it's clicked
+    // One undo takes the whole fill back; a double-click in the gap fills it too, in whichever repeat it's clicked
     await user.click(within(editor).getByRole('button', { name: 'Undo', exact: true }))
-    expect(sections()).toHaveLength(1)
+    expect(sections().map((s) => [s.name, s.endMm])).toEqual([['Lane ↔', 2], ['Lane ↕', 4]])
+    fireEvent.doubleClick(strip().element, at(7, 0.2))
+    expect(sections()).toEqual([side, updown])
+
+    // A whole lane deleted: the other grows across the thread
+    await user.click(within(editor).getByRole('button', { name: 'Lane ↕', exact: true }))
+    await user.keyboard('{Delete}')
     fireEvent.doubleClick(strip().element, at(5, 0.8))
-    expect(sections()).toHaveLength(2)
-    expect(sections()[1]).toMatchObject({ startMm: 0, endMm: 4, acrossStart: 0.5, acrossEnd: 1 })
-    expect(within(editor).getByRole('heading', { name: 'Section 2' })).toBeDefined()
+    expect(sections()).toEqual([{ ...side, acrossEnd: 1 }])
+    expect(within(editor).getByRole('heading', { name: 'Lane ↔' })).toBeDefined()
     // On a section, a double-click adds nothing
     fireEvent.doubleClick(strip().element.querySelector(`[data-section-id="${side.id}"][data-copy="0"]`)!, at(1, 0.2))
-    expect(sections()).toHaveLength(2)
+    expect(sections()).toHaveLength(1)
   })
 
   it('keeps a lens in the panel with nothing selected: the shared one, or with mixed angles the whole print', async () => {

@@ -559,17 +559,55 @@ export function gapRects(pattern: ThreadPattern, at?: PatternPoint): Rect[] {
   }
 }
 
-/** The section a new one over `rect` should look like: the one it shares the longest edge with, across the repeat's ends too */
-function bordering(pattern: ThreadPattern, rect: Rect, widthMm: number): ThreadSection | undefined {
+/** How a section meets a rectangle: on its ends along the thread (`along`, or `seam` across the repeat's ends) or beside it (`across`) */
+interface Touch {
+  section: ThreadSection
+  side: 'along' | 'seam' | 'across'
+  /** Edge they share, mm */
+  shared: number
+  /** The section runs the rectangle's whole side: the rectangle sits in line with it, as a gap left in a lane does */
+  inline: boolean
+  /** The two sides match exactly, so together they make one rectangle */
+  exact: boolean
+}
+
+function touches(pattern: ThreadPattern, rect: Rect, widthMm: number): Touch[] {
   const near = (a: number, b: number) => Math.abs(a - b) <= EPS
   const repeat = pattern.repeatMm
+  const found: Touch[] = []
+  for (const s of pattern.sections) {
+    const across = overlap(s.acrossStart, s.acrossEnd, rect.acrossStart, rect.acrossEnd)
+    if (across > EPS) {
+      const inline = s.acrossStart <= rect.acrossStart + EPS && s.acrossEnd >= rect.acrossEnd - EPS
+      const touch = { section: s, shared: across * widthMm, inline, exact: inline && near(s.acrossStart, rect.acrossStart) && near(s.acrossEnd, rect.acrossEnd) }
+      if (near(s.endMm, rect.startMm) || near(s.startMm, rect.endMm)) found.push({ ...touch, side: 'along' })
+      else if ((near(s.endMm, repeat) && near(rect.startMm, 0)) || (near(s.startMm, 0) && near(rect.endMm, repeat))) found.push({ ...touch, side: 'seam' })
+    }
+    const along = overlap(s.startMm, s.endMm, rect.startMm, rect.endMm)
+    if (along > EPS && (near(s.acrossEnd, rect.acrossStart) || near(s.acrossStart, rect.acrossEnd))) {
+      const inline = s.startMm <= rect.startMm + EPS && s.endMm >= rect.endMm - EPS
+      found.push({ section: s, side: 'across', shared: along, inline, exact: inline && near(s.startMm, rect.startMm) && near(s.endMm, rect.endMm) })
+    }
+  }
+  return found
+}
+/** Closest in line first: an exact match, then along the thread (the lane it carries on) before beside it, then not across the seam, then the longer edge */
+const closer = (a: Touch, b: Touch) =>
+  Number(b.exact) - Number(a.exact) || Number(b.side !== 'across') - Number(a.side !== 'across')
+  || Number(b.side !== 'seam') - Number(a.side !== 'seam') || b.shared - a.shared
+
+/**
+ * The section a new one over `rect` should look like: the one it sits in line with, so a gap left in a lane goes
+ * back to that lane, else the one it shares the most edge with, across the repeat's ends too. Undefined when it
+ * touches none.
+ */
+export function neighbourLook(pattern: ThreadPattern, rect: Rect, widthMm: number): ThreadSection | undefined {
+  const found = touches(pattern, rect, widthMm)
+  const inline = found.filter((t) => t.inline).toSorted(closer).at(0)
+  if (inline) return inline.section
   let best: ThreadSection | undefined, most = EPS
   for (const s of pattern.sections) {
-    let shared = 0
-    const meetsAlong = near(s.endMm, rect.startMm) || near(s.startMm, rect.endMm)
-      || (near(s.endMm, repeat) && near(rect.startMm, 0)) || (near(s.startMm, 0) && near(rect.endMm, repeat))
-    if (meetsAlong) shared += Math.max(0, overlap(s.acrossStart, s.acrossEnd, rect.acrossStart, rect.acrossEnd)) * widthMm
-    if (near(s.acrossEnd, rect.acrossStart) || near(s.acrossStart, rect.acrossEnd)) shared += Math.max(0, overlap(s.startMm, s.endMm, rect.startMm, rect.endMm))
+    const shared = found.reduce((sum, t) => sum + (t.section === s ? t.shared : 0), 0)
     if (shared > most) {
       most = shared
       best = s
@@ -578,15 +616,30 @@ function bordering(pattern: ThreadPattern, rect: Rect, widthMm: number): ThreadS
   return best
 }
 
+/** The section that `rect` would grow into one bigger rectangle: sharing one whole side with it, within the repeat (along the thread first) */
+function growInto(pattern: ThreadPattern, rect: Rect, widthMm: number): ThreadSection | undefined {
+  return touches(pattern, rect, widthMm).filter((t) => t.exact && t.side !== 'seam').toSorted(closer).at(0)?.section
+}
+
 /**
- * Every empty area of the repeat (or only the one around `at`) filled with new sections, each with the lens and
- * track of the section it borders most, so the thread carries on as it looks next to it. The id is the largest
- * new section's, to select. Undefined when there's no gap.
+ * Every empty area of the repeat (or only the one around `at`) filled, so the thread carries on as it looks next to
+ * it: a section that shares a whole side with the gap grows over it (a lane cut short runs on again), otherwise a
+ * new section takes the lens and track of the one it sits in line with, else the one it borders most. The id is the
+ * section over the largest gap, to select. Undefined when there's no gap.
  */
 export function fillGaps(pattern: ThreadPattern, widthMm: number, at?: PatternPoint): { pattern: ThreadPattern; id: string } | undefined {
   let next = pattern, first: string | undefined
   for (const rect of gapRects(pattern, at)) {
-    const look = bordering(next, rect, widthMm)
+    const grow = growInto(next, rect, widthMm)
+    if (grow) {
+      next = updateSection(next, grow.id, {
+        startMm: Math.min(grow.startMm, rect.startMm), endMm: Math.max(grow.endMm, rect.endMm),
+        acrossStart: Math.min(grow.acrossStart, rect.acrossStart), acrossEnd: Math.max(grow.acrossEnd, rect.acrossEnd),
+      })
+      first ??= grow.id
+      continue
+    }
+    const look = neighbourLook(next, rect, widthMm)
     const added = addSection(next, rect)
     next = look ? updateSection(added.pattern, added.id, { ...(look.lens && { lens: look.lens }), ...(look.track && { track: look.track }) }) : added.pattern
     first ??= added.id
