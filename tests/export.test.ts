@@ -12,8 +12,8 @@ const makeNote = (widthMm = 68, heightMm = 120) => createNote({ name: 'Test', x:
 describe('playback angles', () => {
   it('goes from flat up through the cycle and back, like live playback', () => {
     const tilt = { cycleDeg: 30, transition: 0, speed: 1, curve: 'linear' as const }
-    // 1⅓ s up and 1⅓ s down at 1×: 40 frames each at 30 fps
-    const angles = playbackAngles(tilt, 30)
+    // A sweep up and one down at 1×, 40 frames each
+    const angles = playbackAngles(tilt, 40 / SWEEP_SECONDS)
     expect(angles).toHaveLength(80)
     expect(angles[0]).toBe(0)
     expect(angles[20]).toBeCloseTo(15)
@@ -23,8 +23,8 @@ describe('playback angles', () => {
 
   it('loops at the project speed, turning straight back at full tilt', () => {
     const tilt = { cycleDeg: 20, transition: 0, speed: 2, curve: 'smooth' as const }
-    // ⅔ s up, ⅔ s down at 2×: 10 frames each at 15 fps
-    const angles = playbackAngles(tilt, 15, 2)
+    // Half a sweep's time up and half down at 2×: 10 frames each
+    const angles = playbackAngles(tilt, 20 / SWEEP_SECONDS, 2)
     expect(angles).toHaveLength(40)
     expect(angles[10]).toBeCloseTo(20)
     expect(angles[13]).toBeLessThan(20)
@@ -74,8 +74,9 @@ describe('layout', () => {
     expect(together.height).toBe(720)
     expect(apart.height).toBe(720)
     expect(apart.width).toBeLessThan(together.width)
-    // The default playlist at 1×: a glide out to 30° at a 60° sweep's pace (half a sweep), then one sweep back to flat
-    expect(apart.seconds).toBeCloseTo(1.5 * SWEEP_SECONDS)
+    // The default playlist at 1×: a glide out to 30° at a 60° sweep's pace (half a sweep), then one sweep back to flat,
+    // in whole frames
+    expect(apart.seconds).toBeCloseTo(Math.round(1.5 * SWEEP_SECONDS * 30) / 30)
   })
 
   it('hits the chosen resolution with tilt, and keeps wide rows within 4K', () => {

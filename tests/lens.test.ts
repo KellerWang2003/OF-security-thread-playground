@@ -3,6 +3,7 @@ import { playbackAngles, playbackTilts } from '../src/lib/exportRender'
 import { frameMix, frameSpans } from '../src/lib/frames'
 import { cyclesFromLens, flatLabel, flatOffset, flatStep, framesReached, lensAngle, lensCycle, lensMix, lensState, reachSpans, revealCycle, revealMinFast, revealOptions, revealReaches, tiltForPosition } from '../src/lib/lens'
 import { migrateProject } from '../src/lib/notes'
+import { SWEEP_SECONDS } from '../src/lib/playback'
 import type { TiltSettings } from '../src/lib/types'
 
 const frames = (lengths: number[]) => lengths.map((length, i) => ({ id: String(i), kind: 'color' as const, color: '#000', name: '', length }))
@@ -86,8 +87,8 @@ describe('reveal on one tilt', () => {
 describe('playback', () => {
   it('plays the default on each chosen tilt in turn, gliding a full cycle out and sweeping back to flat', () => {
     const note = { frames: frames([10, 10, 10]), tilt: { cycleDeg: 40, cycleXDeg: 80, effect: 'both', runX: 'left', playTilt: 'both', transition: 0, speed: 1, curve: 'linear' } as TiltSettings }
-    // At 9 fps each glide out (40° at 45°/s, 8⁄9 s) takes 8 frames and each sweep back (1⅓ s) 12
-    const tilts = playbackTilts(note, 9)
+    // At 12 frames a sweep, each glide out (40°, at a 60° sweep's pace) takes 8 frames and each sweep back 12
+    const tilts = playbackTilts(note, 12 / SWEEP_SECONDS)
     expect(tilts).toHaveLength(40)
     expect(tilts[0]).toEqual({ x: 0, y: 0 })
     // Frames run up on this lens, so up/down starts below flat

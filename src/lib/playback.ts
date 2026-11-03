@@ -11,9 +11,10 @@ export const SPEED_LIMITS = { min: 0.25, max: 4, step: 0.25 }
 export const DEFAULT_PLAYBACK = { speed: 1, curve: 'smooth' as PlaybackCurve }
 /**
  * Seconds one sweep takes at 1×, out or back. It was 1 until 3 November, when Keller slowed playback everywhere to
- * three quarters of that speed, 1× still reading 1×. Holds and recordings keep their own time
+ * three quarters of that speed, then to 70% of that (about 1.9 s), 1× still reading 1×. Holds and recordings keep
+ * their own time
  */
-export const SWEEP_SECONDS = 4 / 3
+export const SWEEP_SECONDS = 4 / 3 / 0.7
 export type PlaybackSettings = Pick<TiltSettings, 'speed' | 'curve'>
 
 export function playbackSettings(settings: PlaybackSettings = {}) {

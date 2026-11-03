@@ -576,7 +576,7 @@ describe('username workspace editor', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Playback settings' })
     expect(dialog).toBeDefined()
     fireEvent.change(screen.getByTitle('How much neighbouring frames blend into each other').querySelector('input')!, { target: { value: '60' } })
-    fireEvent.change(screen.getByTitle('Playback speed multiplier; 1× takes 1⅓ seconds each way').querySelector('input')!, { target: { value: '2' } })
+    fireEvent.change(screen.getByTitle('Playback speed multiplier; 1× takes 1.9 seconds each way').querySelector('input')!, { target: { value: '2' } })
     await user.click(within(dialog).getByRole('button', { name: 'Hold', exact: true }))
     fireEvent.change(screen.getByTitle('Seconds held flat, at 1× speed').querySelector('input')!, { target: { value: '0.4' } })
     await user.click(screen.getByRole('combobox', { name: 'Playback curve' }))
@@ -587,10 +587,11 @@ describe('username workspace editor', () => {
       expect(note.tilt).toMatchObject({ transition: 0.6, speed: 2, curve: 'linear' })
       expect(note.tilt.moves?.map((m) => [m.kind, m.seconds])).toEqual([['y', undefined], ['hold', 0.4]])
     }
-    // The default Up/down stays as it was, 30° back to flat (1 s at 2×: a ⅓ s glide out and ⅔ s back), then the hold (0.2 s at 2×)
+    // The default Up/down stays as it was, 30° back to flat (1.4 s at 2×: a quarter sweep's glide out and half a sweep back),
+    // then the hold (0.2 s at 2×)
     const field = (title: string) => (within(dialog).getByTitle(title).querySelector('input') as HTMLInputElement).value
     expect([field('Up/down tilt the move starts from; negative tilts down'), field('Up/down tilt this move reaches; negative tilts down')]).toEqual(['30', '0'])
-    expect(screen.getByText('1.2 s loop')).toBeDefined()
+    expect(screen.getByText('1.6 s loop')).toBeDefined()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Playback settings' })).toBeNull())
     expect(screen.getByRole('button', { name: 'Playback settings', exact: true })).toBeDefined()

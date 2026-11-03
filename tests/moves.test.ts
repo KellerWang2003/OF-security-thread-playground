@@ -11,7 +11,7 @@ import type { TiltSettings } from '../src/lib/types'
 
 const frames = [10, 10, 10].map((length, i) => ({ id: String(i), kind: 'color' as const, color: '#000', name: '', length }))
 const base = { cycleDeg: 40, cycleXDeg: 80, effect: 'both', transition: 0, speed: 1, curve: 'linear' } as TiltSettings
-/** Seconds one sweep takes at 1× (1⅓), and a glide between flat and a swing's start or end, which keeps a 60° sweep's pace */
+/** Seconds one sweep takes at 1× (about 1.9), and a glide between flat and a swing's start or end, which keeps a 60° sweep's pace */
 const leg = SWEEP_SECONDS
 const glide = (deg: number) => (deg / 60) * SWEEP_SECONDS
 const planOf = (moves: TiltSettings['moves'], settings: Partial<TiltSettings> = {}) => {
@@ -28,8 +28,8 @@ describe('playback moves', () => {
   it('moves both tilts at once on a diagonal, to the angles set', () => {
     const tilt = { ...base, moves: [{ id: 'a', kind: 'diagonal', x: -30, y: 20 }] } as TiltSettings
     const plan = playbackPlan(tilt, lensState(tilt, frames))
-    // Out and back, a sweep of 1⅓ s each at 1× (Keller slowed 1× to three quarters of a second's sweep on 3 November)
-    expect(plan.seconds).toBeCloseTo(8 / 3)
+    // Out and back, a sweep each at 1×
+    expect(plan.seconds).toBeCloseTo(2 * leg)
     expect(tiltAt(plan, leg / 2)).toEqual({ x: expect.closeTo(-15), y: expect.closeTo(10) })
     expect(tiltAt(plan, leg)).toEqual({ x: expect.closeTo(-30), y: expect.closeTo(20) })
     expect(tiltAt(plan, 2 * leg)).toEqual({ x: expect.closeTo(0), y: expect.closeTo(0) })
@@ -42,7 +42,7 @@ describe('playback moves', () => {
     expect(tiltAt(plan, leg).y).toBeCloseTo(30)
     expect(tiltAt(plan, 1.5 * leg).x).toBeCloseTo(30, 0)
     expect(tiltAt(plan, 2 * leg).y).toBeCloseTo(-30, 0)
-    expect(playbackTilts({ tilt, frames }, 15)).toHaveLength(80)
+    expect(playbackTilts({ tilt, frames }, 15)).toHaveLength(Math.round(4 * leg * 15))
   })
 
   it('plays a recorded gesture in its own time, joined to flat', () => {
@@ -182,14 +182,14 @@ describe('hold to light', () => {
   })
 
   it('fades a lit gesture in and out on its way to and from flat', () => {
-    const recording = { id: 'r', name: 'R', points: [{ t: 0, x: 10, y: 0, light: 1 }, { t: 1, x: 20, y: 0, light: 1 }] }
+    const recording = { id: 'r', name: 'R', points: [{ t: 0, x: 10, y: 0, light: 1 }, { t: 1, x: 14, y: 0, light: 1 }] }
     const plan = planOf([moveFromRecording(recording)])
-    // Each join takes at least the light's fade
+    // Each join takes at least the light's fade, longer than these short glides take
     expect(plan.seconds).toBeCloseTo(2 * LIGHT_FADE_SECONDS + 1)
     expect(tiltAt(plan, 0.25).x).toBeCloseTo(5)
     expect(lightAt(plan, 0.25)).toBeCloseTo(0.5)
     expect(lightAt(plan, 1)).toBe(1)
-    expect(tiltAt(plan, 1.75).x).toBeCloseTo(10)
+    expect(tiltAt(plan, 1.75).x).toBeCloseTo(7)
     expect(lightAt(plan, 1.75)).toBeCloseTo(0.5)
   })
 
