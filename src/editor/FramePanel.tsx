@@ -13,8 +13,9 @@ import { swatch } from './LensVisuals'
  * The frame the timeline is on, in Thread Studio's Frames tab and the canvas's Thread tab (Keller). In Thread Studio,
  * for finer control, a row of frame numbers to go to another frame without the timeline (`picker`) and, for an image,
  * where it sits in the tile (`place`: X and Y of its top-left corner as drawn, and its width, its height following);
- * on the canvas an image simply fits the thread's width, the tile following it. Then its fill, one row that opens the
- * fill's own panel (`FrameFillRow`); + and − add and remove it, as in Figma, an empty frame showing the banknote through.
+ * on the canvas an image simply fits the thread's width, the tile following it. Then its fill, called Pattern (Keller:
+ * people upload the whole thread's artwork, not one tile), one row that opens the fill's own panel (`FrameFillRow`);
+ * + and − add and remove it, as in Figma, an empty frame showing the banknote through.
  */
 export function FramePanel({ note, noteRef, frame, index, onShow, picker = true, place = true }: {
   note: Note
@@ -50,9 +51,9 @@ export function FramePanel({ note, noteRef, frame, index, onShow, picker = true,
         </Section>
       )}
       {place && frame.kind === 'image' && frame.aspect && <ImagePlaceFields note={note} frame={frame} aspect={frame.aspect} set={set} />}
-      <Section nested title="Fill" action={frame.kind === 'none'
-        ? <IconButton label="Add fill" size="icon-xs" onClick={() => set({ kind: 'color' })}><Plus /></IconButton>
-        : <IconButton label="Remove fill" size="icon-xs" onClick={() => set({ kind: 'none' })}><Minus /></IconButton>}>
+      <Section nested title="Pattern" action={frame.kind === 'none'
+        ? <IconButton label="Add pattern" size="icon-xs" onClick={() => set({ kind: 'color' })}><Plus /></IconButton>
+        : <IconButton label="Remove pattern" size="icon-xs" onClick={() => set({ kind: 'none' })}><Minus /></IconButton>}>
         {frame.kind !== 'none' && <FrameFillRow noteRef={noteRef} frame={frame} />}
       </Section>
     </>

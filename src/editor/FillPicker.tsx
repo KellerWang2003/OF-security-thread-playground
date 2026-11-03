@@ -135,10 +135,10 @@ function frameFill(noteRef: NoteRef, frame: Frame, url: string | undefined): { f
   }
 }
 
-/** A frame's fill row, under Fill in the right panels */
+/** A frame's fill row, under Pattern in the right panels */
 export function FrameFillRow({ noteRef, frame }: { noteRef: NoteRef; frame: Frame }) {
   const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
-  return <FillRow name="Fill" {...frameFill(noteRef, frame, url)} />
+  return <FillRow name="Pattern" {...frameFill(noteRef, frame, url)} />
 }
 
 /** A frame's fill panel, opened from somewhere else: the pencil on its clip in the timeline */
