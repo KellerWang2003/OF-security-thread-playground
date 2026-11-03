@@ -8,8 +8,10 @@ import {
   defaultPattern,
   drawRect,
   duplicateSection,
+  fillGaps,
   framesMissed,
   freeRect,
+  gapRects,
   migratePattern,
   moveRect,
   padTrack,
@@ -446,6 +448,48 @@ describe('editing sections', () => {
     expect(shown(after, sweep('x'))).toEqual([...shown(before, sweep('x')).slice(0, 1), ...shown(before, sweep('x'))])
     // Nothing selected: the largest section is cut
     expect(addBlankSection(covered, 4)!.pattern.sections).toHaveLength(3)
+  })
+})
+
+describe('filling gaps', () => {
+  const lanes = () => withPreset('split').pattern!
+
+  it('finds every gap as rectangles, largest first, or only the one around a point', () => {
+    expect(gapRects(lanes())).toEqual([])
+    // Two separate gaps either side of a middle block, and an L-shaped one round a corner
+    const two = { repeatMm: 4, mixed: false, sections: [section({ id: 'a', startMm: 1, endMm: 2 })] }
+    expect(gapRects(two)).toEqual([{ startMm: 2, endMm: 4, acrossStart: 0, acrossEnd: 1 }, { startMm: 0, endMm: 1, acrossStart: 0, acrossEnd: 1 }])
+    expect(gapRects(two, { along: 0.5, across: 0.5 })).toEqual([{ startMm: 0, endMm: 1, acrossStart: 0, acrossEnd: 1 }])
+    expect(gapRects(two, { along: 1.5, across: 0.5 })).toEqual([])
+    const corner = { repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 1, acrossEnd: 0.5 })] }
+    expect(gapRects(corner)).toEqual([{ startMm: 1, endMm: 4, acrossStart: 0, acrossEnd: 1 }, { startMm: 0, endMm: 1, acrossStart: 0.5, acrossEnd: 1 }])
+    // Edges off the snapping grid leave no sliver behind
+    const scaled = setRepeat({ repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 1 }), section({ id: 'b', startMm: 3, endMm: 4 })] }, 5)
+    expect(gapRects(scaled)).toEqual([{ startMm: 1.25, endMm: 3.75, acrossStart: 0, acrossEnd: 1 }])
+  })
+
+  it('fills each gap with a section that looks like the one it borders most, leaving no gap', () => {
+    const covered = lanes()
+    const [side, updown] = covered.sections
+    expect(fillGaps(covered, 4)).toBeUndefined()
+    const filled = fillGaps(removeSection(covered, updown.id), 4)!
+    expect(filled.pattern.sections[1]).toEqual({ id: filled.id, name: 'Section 2', startMm: 0, endMm: 4, acrossStart: 0.5, acrossEnd: 1, lens: side.lens, track: side.track })
+    const note = { ...banknote(), pattern: filled.pattern }
+    expect(issues(note, 'gaps')).toEqual([])
+
+    // A gap at the end of the repeat borders the next repeat's first section too, here along the whole width
+    const blocks = { repeatMm: 4, mixed: true, sections: [
+      section({ id: 'a', endMm: 1, lens: { effect: 'side' } }),
+      section({ id: 'b', startMm: 1, endMm: 3, acrossEnd: 0.5, lens: { effect: 'updown' } }),
+      section({ id: 'c', startMm: 1, endMm: 3, acrossStart: 0.5, lens: { effect: 'updown' } }),
+    ] }
+    const wrapped = fillGaps(blocks, 4)!
+    expect(wrapped.pattern.sections.at(-1)).toMatchObject({ id: wrapped.id, startMm: 3, endMm: 4, acrossStart: 0, acrossEnd: 1, lens: { effect: 'side' } })
+    // Several gaps: each filled, the largest new section returned to select
+    const corner = fillGaps({ repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 1, acrossEnd: 0.5 })] }, 4)!
+    expect(corner.pattern.sections.map((s) => s.name)).toEqual(['S', 'Section 2', 'Section 3'])
+    expect(corner.id).toBe(corner.pattern.sections[1].id)
+    expect(issues({ ...banknote(), pattern: corner.pattern }, 'gaps')).toEqual([])
   })
 })
 

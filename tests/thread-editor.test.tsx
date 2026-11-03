@@ -205,6 +205,38 @@ describe('thread editor', () => {
     expect(within(editor).getByRole('heading', { name: 'Lane ↔' })).toBeDefined()
   })
 
+  it('fills the gap a deleted section leaves, from the No gaps check or with a double-click on it', async () => {
+    const user = await openDemo('thread-fill-gaps-ui-test')
+    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    const editor = screen.getByRole('region', { name: 'Thread editor' })
+    await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
+    const [side] = sections()
+    await user.click(within(editor).getByRole('button', { name: 'Lane ↕', exact: true }))
+    await user.keyboard('{Delete}')
+    const gaps = () => editor.querySelector('[data-check="gaps"]')!
+    expect(gaps().textContent).toContain('50% of each repeat is empty')
+
+    // Fill: one new section over the empty half, looking like the lane beside it, selected
+    await user.click(within(gaps() as HTMLElement).getByRole('button', { name: 'Fill', exact: true }))
+    expect(sections()).toHaveLength(2)
+    expect(sections()[1]).toMatchObject({ name: 'Section 2', startMm: 0, endMm: 4, acrossStart: 0.5, acrossEnd: 1, lens: side.lens })
+    expect(sections()[1].track).toEqual(side.track)
+    expect(within(editor).getByRole('heading', { name: 'Section 2' })).toBeDefined()
+    expect(gaps().textContent).not.toContain('empty')
+    expect(within(gaps() as HTMLElement).queryByRole('button', { name: 'Fill', exact: true })).toBeNull()
+
+    // Undone, the gap is back; a double-click in it fills it too, in whichever repeat it's clicked
+    await user.click(within(editor).getByRole('button', { name: 'Undo', exact: true }))
+    expect(sections()).toHaveLength(1)
+    fireEvent.doubleClick(strip().element, at(5, 0.8))
+    expect(sections()).toHaveLength(2)
+    expect(sections()[1]).toMatchObject({ startMm: 0, endMm: 4, acrossStart: 0.5, acrossEnd: 1 })
+    expect(within(editor).getByRole('heading', { name: 'Section 2' })).toBeDefined()
+    // On a section, a double-click adds nothing
+    fireEvent.doubleClick(strip().element.querySelector(`[data-section-id="${side.id}"][data-copy="0"]`)!, at(1, 0.2))
+    expect(sections()).toHaveLength(2)
+  })
+
   it('keeps a lens in the panel with nothing selected: the shared one, or with mixed angles the whole print', async () => {
     const user = await openDemo('thread-deselect-ui-test')
     await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))

@@ -495,6 +495,103 @@ export function addBlankSection(pattern: ThreadPattern, widthMm: number, fromId?
   return splitLonger(pattern, from.id, widthMm, nextName(pattern)) ?? (from === largest ? undefined : splitLonger(pattern, largest.id, widthMm, nextName(pattern)))
 }
 
+/**
+ * The empty parts of the repeat as rectangles, largest first. The repeat is cut along every section edge, so a gap
+ * left by an edge off the snapping grid is filled exactly, with no sliver; given `at`, only the gap around that point.
+ */
+export function gapRects(pattern: ThreadPattern, at?: PatternPoint): Rect[] {
+  const lines = (values: number[], max: number) => [0, max, ...values.map((v) => clamp(v, 0, max))]
+    .toSorted((a, b) => a - b)
+    .filter((v, i, all) => i === 0 || v - all[i - 1] > EPS)
+  const along = lines(pattern.sections.flatMap((s) => [s.startMm, s.endMm]), pattern.repeatMm)
+  const across = lines(pattern.sections.flatMap((s) => [s.acrossStart, s.acrossEnd]), 1)
+  const cols = along.length - 1, rows = across.length - 1
+  // No section edge runs through a cell, so its middle says whether a section covers it
+  const free = Array.from({ length: cols }, (_, c) => Array.from({ length: rows }, (_, r) => {
+    const a = (along[c] + along[c + 1]) / 2, x = (across[r] + across[r + 1]) / 2
+    return !pattern.sections.some((s) => a > s.startMm && a < s.endMm && x > s.acrossStart && x < s.acrossEnd)
+  }))
+  if (at) {
+    // The cells at the point (more than one on an edge), and of those a free one
+    const cells = (lines: number[], v: number) => lines.slice(0, -1).flatMap((line, i) => (v >= line - EPS && v <= lines[i + 1] + EPS ? [i] : []))
+    const start = cells(along, at.along).flatMap((c) => cells(across, at.across).map((r) => [c, r])).find(([c, r]) => free[c][r])
+    if (!start) return []
+    const [c0, r0] = start
+    // Only the free cells joined to that one
+    const keep = free.map((col) => col.map(() => false))
+    const todo = [[c0, r0]]
+    keep[c0][r0] = true
+    while (todo.length) {
+      const [c, r] = todo.pop()!
+      for (const [nc, nr] of [[c - 1, r], [c + 1, r], [c, r - 1], [c, r + 1]]) {
+        if (nc < 0 || nr < 0 || nc >= cols || nr >= rows || keep[nc][nr] || !free[nc][nr]) continue
+        keep[nc][nr] = true
+        todo.push([nc, nr])
+      }
+    }
+    free.forEach((col, c) => col.forEach((_, r) => (col[r] = keep[c][r])))
+  }
+  const rects: Rect[] = []
+  for (;;) {
+    // The largest free rectangle: each column's run of free cells ending at this row, then the widest stretch of columns at least as tall
+    const heights = new Array<number>(cols).fill(0)
+    let best: { c0: number; c1: number; r0: number; r1: number } | undefined, most = EPS * EPS
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) heights[c] = free[c][r] ? heights[c] + 1 : 0
+      for (let c = 0; c < cols; c++) {
+        const h = heights[c]
+        if (!h) continue
+        let lo = c, hi = c
+        while (lo > 0 && heights[lo - 1] >= h) lo--
+        while (hi < cols - 1 && heights[hi + 1] >= h) hi++
+        const size = (along[hi + 1] - along[lo]) * (across[r + 1] - across[r + 1 - h])
+        if (size > most) {
+          most = size
+          best = { c0: lo, c1: hi, r0: r + 1 - h, r1: r }
+        }
+      }
+    }
+    if (!best) return rects
+    for (let c = best.c0; c <= best.c1; c++) for (let r = best.r0; r <= best.r1; r++) free[c][r] = false
+    rects.push({ startMm: tidy(along[best.c0]), endMm: tidy(along[best.c1 + 1]), acrossStart: tidyShare(across[best.r0]), acrossEnd: tidyShare(across[best.r1 + 1]) })
+  }
+}
+
+/** The section a new one over `rect` should look like: the one it shares the longest edge with, across the repeat's ends too */
+function bordering(pattern: ThreadPattern, rect: Rect, widthMm: number): ThreadSection | undefined {
+  const near = (a: number, b: number) => Math.abs(a - b) <= EPS
+  const repeat = pattern.repeatMm
+  let best: ThreadSection | undefined, most = EPS
+  for (const s of pattern.sections) {
+    let shared = 0
+    const meetsAlong = near(s.endMm, rect.startMm) || near(s.startMm, rect.endMm)
+      || (near(s.endMm, repeat) && near(rect.startMm, 0)) || (near(s.startMm, 0) && near(rect.endMm, repeat))
+    if (meetsAlong) shared += Math.max(0, overlap(s.acrossStart, s.acrossEnd, rect.acrossStart, rect.acrossEnd)) * widthMm
+    if (near(s.acrossEnd, rect.acrossStart) || near(s.acrossStart, rect.acrossEnd)) shared += Math.max(0, overlap(s.startMm, s.endMm, rect.startMm, rect.endMm))
+    if (shared > most) {
+      most = shared
+      best = s
+    }
+  }
+  return best
+}
+
+/**
+ * Every empty area of the repeat (or only the one around `at`) filled with new sections, each with the lens and
+ * track of the section it borders most, so the thread carries on as it looks next to it. The id is the largest
+ * new section's, to select. Undefined when there's no gap.
+ */
+export function fillGaps(pattern: ThreadPattern, widthMm: number, at?: PatternPoint): { pattern: ThreadPattern; id: string } | undefined {
+  let next = pattern, first: string | undefined
+  for (const rect of gapRects(pattern, at)) {
+    const look = bordering(next, rect, widthMm)
+    const added = addSection(next, rect)
+    next = look ? updateSection(added.pattern, added.id, { ...(look.lens && { lens: look.lens }), ...(look.track && { track: look.track }) }) : added.pattern
+    first ??= added.id
+  }
+  return first === undefined ? undefined : { pattern: next, id: first }
+}
+
 export const removeSection = (pattern: ThreadPattern, id: string): ThreadPattern =>
   pattern.sections.length > 1 ? { ...pattern, sections: pattern.sections.filter((s) => s.id !== id) } : pattern
 

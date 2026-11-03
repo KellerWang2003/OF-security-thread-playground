@@ -6,6 +6,7 @@ import { lensMix } from '../lib/lens'
 import {
   addSection,
   drawRect,
+  fillGaps,
   moveRect,
   patternMix,
   patternOf,
@@ -29,7 +30,7 @@ const EDGE_PX = 5
 
 type Rect = Pick<ThreadSection, 'startMm' | 'endMm' | 'acrossStart' | 'acrossEnd'>
 type Gesture =
-  | { mode: 'draw'; copy: number; from: PatternPoint; moved: boolean }
+  | { mode: 'draw'; copy: number; from: PatternPoint; moved: boolean; rect?: Rect }
   | { mode: 'move'; id: string; start: ThreadSection; pattern: ThreadPattern; at: { along: number; across: number }; moved: boolean }
   | { mode: 'resize'; id: string; edge: Edge; pattern: ThreadPattern; copy: number }
 
@@ -49,7 +50,7 @@ function layout(box: { width: number; height: number }, repeatMm: number, widthM
  * The centre of the thread editor: the thread magnified over two or three repeats, in its own direction, showing
  * the real artwork at the current tilt, with the repeat's ends, each section's outline and, optionally, its ridges.
  * Drag on empty thread to draw a section, drag a section to move it or its edges to resize it (snapping to 0.5 mm
- * along and twelfths across); a click selects.
+ * along and twelfths across); a click selects, and a double-click on an empty area fills it with a new section.
  */
 export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
   note: Note
@@ -95,7 +96,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
     const c0 = r.acrossStart * thickness, c1 = r.acrossEnd * thickness
     return vertical ? { x: c0, y: a0, width: c1 - c0, height: a1 - a0 } : { x: a0, y: c0, width: a1 - a0, height: c1 - c0 }
   }
-  const locate = (e: React.PointerEvent) => {
+  const locate = (e: { clientX: number; clientY: number }) => {
     const r = strip.current!.getBoundingClientRect()
     const px = e.clientX - r.left, py = e.clientY - r.top
     return { along: (vertical ? py : px) / scale, across: (vertical ? px : py) / thickness }
@@ -136,6 +137,8 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
       const to = { along: clamp(at.along - g.copy * repeat, 0, repeat), across: clamp(at.across, 0, 1) }
       g.moved ||= Math.hypot((to.along - g.from.along) * scale, (to.across - g.from.across) * thickness) > 3
       const rect = g.moved ? drawRect(pattern, g.from, to) : undefined
+      // Kept on the gesture too: a quick release can come before the preview has rendered
+      g.rect = rect
       setPreview(rect && { rect, copy: g.copy })
     } else if (g.mode === 'move') {
       const by = { along: at.along - g.at.along, across: at.across - g.at.across }
@@ -156,7 +159,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
     gesture.current = null
     if (g?.mode !== 'draw') return
     setPreview(undefined)
-    const rect = preview?.rect
+    const rect = g.rect
     if (rect) {
       const added = addSection(pattern, rect)
       write(added.pattern)
@@ -164,6 +167,17 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
     } else if (!g.moved) {
       onSelect(undefined)
     }
+  }
+
+  // A double-click on empty thread fills that whole gap with sections like the ones around it
+  const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('[data-section-id]')) return
+    const at = locate(e)
+    const copy = copyOf(at.along)
+    const filled = fillGaps(pattern, thread.widthMm, { along: clamp(at.along - copy * repeat, 0, repeat), across: clamp(at.across, 0, 1) })
+    if (!filled) return
+    write(filled.pattern)
+    onSelect(filled.id)
   }
 
   return (
@@ -180,6 +194,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
         onPointerUp={end}
         onPointerCancel={end}
         onLostPointerCapture={end}
+        onDoubleClick={onDoubleClick}
       >
         <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: thread.backgroundColor, ...EMPTY }}>
           <ThreadArt note={note} shown={shown} blends={mixes.map((m) => m.blend)} fill={fill} lengthMm={lengthMm} scale={scale} />

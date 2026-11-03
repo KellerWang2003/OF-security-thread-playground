@@ -19,6 +19,7 @@ import {
   REPEAT_LIMITS,
   addBlankSection,
   duplicateSection,
+  fillGaps,
   isIdentity,
   patternOf,
   playbackLens,
@@ -228,7 +229,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
         <div ref={checksRef}>
           <Group title="Checks" action={warnings > 0 ? <span className="text-xs text-amber-600 tabular-nums dark:text-amber-500">{warnings}</span> : undefined}>
             <Section nested>
-              <CheckList checks={checks} onSelect={setSelectedId} />
+              <CheckList checks={checks} onSelect={setSelectedId} onFillGaps={() => added(fillGaps(pattern, note.thread.widthMm))} />
             </Section>
           </Group>
         </div>
@@ -371,8 +372,8 @@ function TrackEditor({ note, section, onChange }: { note: Note; section: ThreadS
   )
 }
 
-/** Every rule as a line, ticked or with what breaks it; a click on a problem selects its section */
-function CheckList({ checks, onSelect }: { checks: PatternCheck[]; onSelect: (id: string) => void }) {
+/** Every rule as a line, ticked or with what breaks it; a click on a problem selects its section, and gaps can be filled from here */
+function CheckList({ checks, onSelect, onFillGaps }: { checks: PatternCheck[]; onSelect: (id: string) => void; onFillGaps: () => void }) {
   return (
     <div className="flex flex-col gap-2">
       {checks.map((check) => {
@@ -393,6 +394,11 @@ function CheckList({ checks, onSelect }: { checks: PatternCheck[]; onSelect: (id
                   onClick={() => onSelect(sectionId)}>
                   {issue.text}
                 </Button>
+              ) : check.id === 'gaps' ? (
+                <div key={k} className="flex items-center gap-2 pl-5">
+                  <p title={issue.title} className="min-w-0 flex-1 py-1 text-xs leading-snug text-muted-foreground">{issue.text}</p>
+                  <Button variant="outline" size="xs" title="Fill each empty area with a new section like the one beside it" onClick={onFillGaps}>Fill</Button>
+                </div>
               ) : (
                 <p key={k} title={issue.title} className="py-1 pl-5 text-xs leading-snug text-muted-foreground">{issue.text}</p>
               )
