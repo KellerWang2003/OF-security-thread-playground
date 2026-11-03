@@ -55,12 +55,6 @@ type Gesture =
   /** A placed layer (the watermark, magnetic ink) moves only once the drag passes a few px, so a click just picks it */
   | { mode: 'placed'; layer: PlacedLayer; noteId: string; startX: number; startY: number; original: PlacedBox; moved: boolean }
 
-/** Where the Edit thread button hangs, px from the banknote's top-left: under the thread's middle, or under the banknote at the thread for a vertical one */
-const threadButtonAt = ({ thread, widthMm, heightMm }: Note, scale: number) =>
-  thread.direction === 'vertical'
-    ? { left: thread.positionMm * scale, top: heightMm * scale }
-    : { left: (widthMm / 2) * scale, top: (thread.positionMm + thread.widthMm / 2) * scale }
-
 function fitView(notes: Note[], size: { width: number; height: number }): View {
   // A widened right panel takes more room
   const FIT_INSETS = { ...FIT, right: Math.max(FIT.right, usePanelWidth.getState().width + 36) }
@@ -564,13 +558,6 @@ export function Canvas({
                 )}
               </div>
               {drift && <EdgeMarks note={note} scale={scale} drift={drift} quiet={quiet} />}
-              {picked === 'thread' && !quiet && onEditThread && (
-                // Just under the picked thread (under the banknote for a vertical one), the way into the thread editor. It
-                // keeps its size while a zoom is under way, as the labels do, and takes its own clicks
-                <div data-edit-thread="" data-keep-size="" className="absolute origin-top -translate-x-1/2 pt-2" style={threadButtonAt(note, scale)} onPointerDown={(e) => e.stopPropagation()}>
-                  <Button size="sm" className="shadow-panel" onClick={() => onEditThread(note.id)}>Edit in Thread Studio</Button>
-                </div>
-              )}
             </div>
           )
         })}

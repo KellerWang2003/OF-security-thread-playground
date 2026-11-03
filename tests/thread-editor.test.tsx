@@ -189,7 +189,7 @@ describe('thread editor', () => {
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('region', { name: 'Thread editor' })).toBeNull()
 
-    // Back on the canvas, the banknote's thread is still selected, with the way back in just under it (not in the panel)
+    // Back on the canvas, the banknote's thread is still selected, with the way back in above the timeline (not in the panel)
     expect(screen.getByRole('button', { name: 'Export', exact: true })).toBeDefined()
     expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Thread')
     expect(screen.queryByRole('button', { name: 'Edit thread' })).toBeNull()

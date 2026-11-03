@@ -280,6 +280,12 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
               // Scrubbing the frames is working on the thread, so the panel turns to it (Keller)
               onScrub={() => note && shownLayer !== 'thread' && selectLayer(note.id, 'thread')} />
           )}
+          {/* The way into Thread Studio while a thread is picked: above the timeline, in the middle of the workspace (Keller) */}
+          {note && shownLayer === 'thread' && (
+            <div data-edit-thread="" className="pointer-events-none absolute right-[calc(var(--panel-w)+20px)] bottom-[112px] left-3 flex justify-center">
+              <Button size="sm" className="pointer-events-auto shadow-panel" onClick={() => editThread(note.id)}>Edit in Thread Studio</Button>
+            </div>
+          )}
           {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} layer={shownLayer} onLayer={(next) => selectLayer(note.id, next)}
             selectedWindowId={editingWindows ? selectedWindowId : undefined}
             onWindowSelect={(windowId) => {
