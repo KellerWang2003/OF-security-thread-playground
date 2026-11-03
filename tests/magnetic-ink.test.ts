@@ -29,7 +29,8 @@ describe('placing magnetic ink', () => {
   })
 
   it('keeps it on the banknote as the watermark is kept, and repairs a damaged save', () => {
-    expect(fitMagneticInk(ink({ xMm: 90.3, yMm: -5 }), note)).toEqual(ink({ xMm: 80, yMm: 0 }))
+    expect(fitMagneticInk(ink({ xMm: 90.3, yMm: -5 }), note)).toEqual(ink({ xMm: 90.3, yMm: -5 }))
+    expect(fitMagneticInk(ink({ xMm: 99, yMm: -9 }), note)).toEqual(ink({ xMm: 95, yMm: -7.5 }))
     expect(fitMagneticInk(ink({ widthMm: 1, heightMm: 0.5 }), note)).toMatchObject({ widthMm: 4, heightMm: 2 })
     const damaged = { imageId: 'img', xMm: Number.NaN, yMm: 'left', widthMm: -3, heightMm: null, color: 'gold', tiltedColor: '#12345',
       barAxis: 'z', barWidth: 7, invert: 'yes', glow: true } as unknown as MagneticInk
@@ -44,9 +45,13 @@ describe('placing magnetic ink', () => {
 
   it('stays where it was, with the watermark, when the banknote is resized, and keeps its place when it turns', () => {
     const n = { ...banknote(), watermark: newWatermark(banknote()), magneticInk: newMagneticInk(banknote()) }
-    const narrower = fitLayers({ ...n, widthMm: 100 })
+    // Wholly on the banknote before, so wholly on it after
+    const narrower = fitLayers({ ...n, widthMm: 100 }, n)
     expect(narrower.magneticInk).toEqual({ ...n.magneticInk, xMm: 79 })
     expect(narrower.watermark).toEqual(n.watermark)
+    // Hanging off the edge before, so left hanging, a quarter of it on
+    const hanging = { ...n, magneticInk: { ...n.magneticInk!, xMm: 140 } }
+    expect(fitLayers({ ...hanging, widthMm: 100 }, hanging).magneticInk).toEqual({ ...n.magneticInk, xMm: 94.75 })
     const turned = moveLayersTo({ ...n, widthMm: 70, heightMm: 150 }, n)
     // Its middle stays at 80% across and 70% down
     expect(turned.magneticInk).toEqual({ ...n.magneticInk, xMm: 45.5, yMm: 94.5 })
@@ -127,7 +132,7 @@ describe('saved magnetic ink', () => {
 
   it('comes back from a save, put back on its banknote if it was off it', () => {
     expect(saved(ink({ imageId: 'img', invert: true, barAxis: 'x' })).magneticInk).toEqual(ink({ imageId: 'img', invert: true, barAxis: 'x' }))
-    expect(saved(ink({ xMm: 500 })).magneticInk).toEqual(ink({ xMm: 80 }))
+    expect(saved(ink({ xMm: 500 })).magneticInk).toEqual(ink({ xMm: 95 }))
   })
 
   it('is left out when there is none, or it is not magnetic ink at all', () => {

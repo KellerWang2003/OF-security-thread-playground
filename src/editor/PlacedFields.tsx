@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { IconButton, Labeled, LengthField } from '../components/controls'
 import { reportError } from '../cloud/notices'
 import { THUMB_PX, pickFiles, useImageUrl } from '../lib/images'
-import { PLACE_MIN_MM, PLACE_STEP, type PlacedBox, maxBoxWidth, resizeBox } from '../lib/placed'
+import { PLACE_MIN_MM, PLACE_STEP, type PlacedBox, boxRange, maxBoxWidth, resizeBox } from '../lib/placed'
 import type { Note } from '../lib/types'
 
 /**
@@ -65,14 +65,16 @@ export function PlaceFields<T extends PlacedBox>({ note, box, name, onChange, ch
   onChange: (change: (box: T, note: Note) => T) => void
   children?: ReactNode
 }) {
+  // It may hang off the edges, as long as a quarter of it stays on the banknote
+  const range = boxRange(box, note)
   return (
     <div className="grid grid-cols-2 gap-2">
       <Labeled label="From left">
-        <LengthField label="X" title={`${name} position from the left edge`} value={box.xMm} min={0} max={Math.max(0, note.widthMm - box.widthMm)}
+        <LengthField label="X" title={`${name} position from the left edge`} value={box.xMm} min={range.x[0]} max={range.x[1]}
           step={PLACE_STEP} onChange={(xMm) => onChange((b) => ({ ...b, xMm }))} />
       </Labeled>
       <Labeled label="From top">
-        <LengthField label="Y" title={`${name} position from the top edge`} value={box.yMm} min={0} max={Math.max(0, note.heightMm - box.heightMm)}
+        <LengthField label="Y" title={`${name} position from the top edge`} value={box.yMm} min={range.y[0]} max={range.y[1]}
           step={PLACE_STEP} onChange={(yMm) => onChange((b) => ({ ...b, yMm }))} />
       </Labeled>
       <Labeled label="Width">

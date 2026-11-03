@@ -57,7 +57,7 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
   const setThread = (patch: Partial<Note['thread']>) => update((n) => ({ ...n, thread: { ...n.thread, ...patch } }))
   const acrossOf = (n: Pick<Note, 'widthMm' | 'heightMm'>, direction: Note['thread']['direction']) =>
     direction === 'vertical' ? n.widthMm : n.heightMm
-  // The watermark and magnetic ink stay where they were, as far as they fit
+  // The watermark and magnetic ink stay where they were, as far as they fit (wholly on the banknote if they were)
   const setSize = (widthMm: number, heightMm: number) =>
     update((n) => fitLayers({
       ...n,
@@ -65,7 +65,7 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
       heightMm,
       thread: { ...n.thread, positionMm: clamp(n.thread.positionMm, 0, acrossOf({ widthMm, heightMm }, n.thread.direction)),
         windows: { ...n.thread.windows, sections: fitSections(n.thread.windows.sections, n.thread.direction === 'vertical' ? heightMm : widthMm) } },
-    }))
+    }, n))
   // Turning the thread keeps it at the same relative position across the note
   const setDirection = (direction: Note['thread']['direction']) =>
     update((n) => ({

@@ -14,9 +14,13 @@ const note = { widthMm: 100, heightMm: 50 }
 const mark = (change: Partial<Watermark> = {}): Watermark => ({ xMm: 20, yMm: 10, widthMm: 20, heightMm: 10, depth: 0.6, ...change })
 
 describe('placing a watermark', () => {
-  it('keeps it wholly on the banknote, at least 2 mm and at most the banknote, its proportions kept', () => {
-    expect(fitWatermark(mark({ xMm: 90.3, yMm: -5, depth: 2 }), note)).toEqual(mark({ xMm: 80, yMm: 0, depth: 1 }))
-    expect(fitWatermark(mark({ widthMm: 200, heightMm: 200 }), note)).toMatchObject({ yMm: 0, widthMm: 50, heightMm: 50 })
+  it('lets it hang off the edges with a quarter of it kept on the banknote, at least 2 mm and at most the banknote', () => {
+    // Off the right and the top, a quarter still on: kept where it is
+    expect(fitWatermark(mark({ xMm: 90.3, yMm: -5, depth: 2 }), note)).toEqual(mark({ xMm: 90.3, yMm: -5, depth: 1 }))
+    // Further off, back to a quarter of it on: 5 of its 20 mm across, 2.5 of its 10 down
+    expect(fitWatermark(mark({ xMm: 99, yMm: -9 }), note)).toEqual(mark({ xMm: 95, yMm: -7.5 }))
+    expect(fitWatermark(mark({ xMm: -30, yMm: 60 }), note)).toEqual(mark({ xMm: -15, yMm: 47.5 }))
+    expect(fitWatermark(mark({ widthMm: 200, heightMm: 200 }), note)).toMatchObject({ yMm: 10, widthMm: 50, heightMm: 50 })
     expect(fitWatermark(mark({ widthMm: 1, heightMm: 0.5 }), note)).toMatchObject({ widthMm: 4, heightMm: 2 })
   })
 
@@ -30,10 +34,12 @@ describe('placing a watermark', () => {
     expect(newWatermark({ widthMm: 68, heightMm: 134 })).toEqual({ xMm: 19, yMm: 89.5, widthMm: 30.5, heightMm: 30.5, depth: WATERMARK_DEPTH })
   })
 
-  it('resizes from its top-left corner up to the banknote edges', () => {
+  it('resizes from its top-left corner, past the edges as long as a quarter stays on, up to the banknote’s size', () => {
     const w = mark({ xMm: 60 })
-    expect(maxWatermarkWidth(w, note)).toBe(40)
-    expect(resizeWatermark(w, 100, note)).toEqual(mark({ xMm: 60, widthMm: 40, heightMm: 20 }))
+    expect(maxWatermarkWidth(w, note)).toBe(100)
+    expect(resizeWatermark(w, 120, note)).toEqual(mark({ xMm: 60, widthMm: 100, heightMm: 50 }))
+    // Near the right edge it can only grow until a quarter of it is on: 5 mm on, so 20 mm wide
+    expect(maxWatermarkWidth(mark({ xMm: 95 }), note)).toBe(20)
     // Neither side goes under 2 mm
     expect(resizeWatermark(w, 1, note)).toMatchObject({ widthMm: 4, heightMm: 2 })
   })
@@ -43,14 +49,17 @@ describe('placing a watermark', () => {
     expect(dragWatermarkCorner(mark(), 'se', 10.2, 0, note)).toEqual(mark({ widthMm: 30, heightMm: 15 }))
     // In from the top-left, mostly downwards: the bottom-right stays at 40, 20
     expect(dragWatermarkCorner(mark(), 'nw', 0, 4, note)).toEqual(mark({ xMm: 28, yMm: 14, widthMm: 12, heightMm: 6 }))
-    // Stops at the banknote's edges
-    expect(dragWatermarkCorner(mark(), 'se', 500, 0, note)).toEqual(mark({ widthMm: 80, heightMm: 40 }))
-    expect(dragWatermarkCorner(mark(), 'nw', -500, 0, note)).toEqual(mark({ xMm: 0, yMm: 0, widthMm: 40, heightMm: 20 }))
+    // Out past the edges, up to the banknote's size
+    expect(dragWatermarkCorner(mark(), 'se', 500, 0, note)).toEqual(mark({ widthMm: 100, heightMm: 50 }))
+    expect(dragWatermarkCorner(mark(), 'nw', -500, 0, note)).toEqual(mark({ xMm: -60, yMm: -30, widthMm: 100, heightMm: 50 }))
+    // Or until only a quarter of it would be on: from 5 mm inside the right edge, 20 mm wide
+    expect(dragWatermarkCorner(mark({ xMm: 95, widthMm: 4, heightMm: 2 }), 'se', 500, 0, note)).toEqual(mark({ xMm: 95, widthMm: 20, heightMm: 10 }))
   })
 
-  it('moves by a drag or a nudge, snapped and kept on the banknote', () => {
-    expect(moveWatermark(mark(), 3.2, -20, note)).toEqual(mark({ xMm: 23, yMm: 0 }))
-    expect(moveWatermark(mark(), 500, 500, note)).toEqual(mark({ xMm: 80, yMm: 40 }))
+  it('moves by a drag or a nudge, snapped, off the edges as far as keeps a quarter of it on the banknote', () => {
+    expect(moveWatermark(mark(), 3.2, -20, note)).toEqual(mark({ xMm: 23, yMm: -7.5 }))
+    expect(moveWatermark(mark(), 500, 500, note)).toEqual(mark({ xMm: 95, yMm: 47.5 }))
+    expect(moveWatermark(mark(), -500, 0, note)).toEqual(mark({ xMm: -15 }))
   })
 
   it("takes a new image's proportions about its centre", () => {
@@ -107,7 +116,7 @@ describe('a saved watermark', () => {
 
   it('comes back from a save, put back on its banknote if it was off it', () => {
     expect(saved(mark({ imageId: 'img' })).watermark).toEqual(mark({ imageId: 'img' }))
-    expect(saved(mark({ xMm: 500 })).watermark).toEqual(mark({ xMm: 80 }))
+    expect(saved(mark({ xMm: 500 })).watermark).toEqual(mark({ xMm: 95 }))
     expect(saved(mark({ imageId: 'img', invert: true })).watermark).toEqual(mark({ imageId: 'img', invert: true }))
     const levels = { low: 0.05, high: 0.8, gamma: 0.7 }
     expect(saved(mark({ imageId: 'img', levels })).watermark).toEqual(mark({ imageId: 'img', levels }))

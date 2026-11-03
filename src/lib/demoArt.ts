@@ -26,7 +26,7 @@ const VIOLETS: Palette = { paper: ['#A698D0', '#8676B9'], plain: '236, 232, 248'
 
 const MICROTEXT = 'SILLY BIRD DEMO · '
 
-function sheet(width: number, height: number) {
+export function sheet(width: number, height: number) {
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
@@ -35,7 +35,7 @@ function sheet(width: number, height: number) {
   return { canvas, g }
 }
 
-const toBlob = (canvas: HTMLCanvasElement, type = 'image/png', quality?: number) =>
+export const toBlob = (canvas: HTMLCanvasElement, type = 'image/png', quality?: number) =>
   new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not draw the demo'))), type, quality))
 
 /** Strokes the line `at` traces as t runs from 0 to 1, in `steps` straight pieces */
@@ -275,9 +275,10 @@ async function drawStudioFace() {
 
 /**
  * The watermark's bird, as a photo of a watermark held to the light shows one: brightest where the paper is thinnest,
- * on black, so the black reads as plain paper. It fades out towards the bottom, as portrait watermarks do.
+ * on black, so the black reads as plain paper. It fades out towards the bottom, as portrait watermarks do. A new
+ * watermark starts with it too (standIns.ts).
  */
-async function drawPortrait() {
+export async function drawPortrait() {
   const W = 800
   const H = 1000
   const { canvas, g } = sheet(W, H)
@@ -369,7 +370,7 @@ async function drawPortrait() {
 }
 
 /** Traces a five-pointed star `turn` radians from upright */
-function starPath(g: CanvasRenderingContext2D, cx: number, cy: number, outer: number, inner: number, turn: number) {
+export function starPath(g: CanvasRenderingContext2D, cx: number, cy: number, outer: number, inner: number, turn: number) {
   g.beginPath()
   for (let i = 0; i < 10; i++) {
     const a = -Math.PI / 2 + turn + (i * Math.PI) / 5

@@ -1,8 +1,10 @@
+import { beginHistoryGroup, endHistoryGroup } from '../lib/history'
 import { imageAspect, removeImage, storeImage } from '../lib/images'
 import { type PlacedLayer, fitPlaced, isPlaced, newPlaced, withPlaced } from '../lib/layers'
 import { withInkImage } from '../lib/magneticInk'
 import type { PlacedBox } from '../lib/placed'
 import { findNote, updateNote } from '../lib/store'
+import { standIn } from '../lib/standIns'
 import type { MagneticInk, Note, Watermark } from '../lib/types'
 import { fitWatermark, withWatermarkImage } from '../lib/watermark'
 import type { NoteRef } from './frameActions'
@@ -14,9 +16,25 @@ export type Layer = 'note' | 'thread' | PlacedLayer
 export const layerOf = (note: Pick<Note, PlacedLayer> | undefined, layer: Layer): Layer =>
   isPlaced(layer) && !note?.[layer] ? 'note' : layer
 
-/** Adds an empty layer in its own place on the banknote; a banknote has at most one of each */
-export function addLayer({ projectId, noteId }: NoteRef, layer: PlacedLayer) {
+/**
+ * Adds a layer in its own place on the banknote (a banknote has at most one of each), with a stand-in image so it shows
+ * what it does straight away (`standIn`): the box at once, the image a moment later, both one undo step
+ */
+export function addLayer(ref: NoteRef, layer: PlacedLayer) {
+  const { projectId, noteId } = ref
+  if (findNote(projectId, noteId)?.[layer]) return
+  beginHistoryGroup(projectId)
   updateNote(projectId, noteId, (n) => (n[layer] ? n : withPlaced(n, layer, newPlaced(layer, n))))
+  void standIn(layer)
+    .then((file) => {
+      // Unless it went (undone) or got an image of its own meanwhile
+      const added = findNote(projectId, noteId)?.[layer]
+      if (!added || added.imageId) return
+      return layer === 'watermark' ? setWatermarkImage(ref, file) : setMagneticInkImage(ref, file)
+    })
+    // Where it can't be drawn (an old browser, the tests), the layer starts empty, as it used to
+    .catch(() => {})
+    .finally(() => endHistoryGroup(projectId))
 }
 
 /** Removes a layer, and its image with it */

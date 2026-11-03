@@ -1,5 +1,5 @@
 import { fitMagneticInk, newMagneticInk } from './magneticInk'
-import { type PlacedBox, type Size, moveBoxTo } from './placed'
+import { type PlacedBox, type Size, isWhollyOn, moveBoxTo, onto } from './placed'
 import type { MagneticInk, Note, Watermark } from './types'
 import { fitWatermark, newWatermark } from './watermark'
 
@@ -38,11 +38,16 @@ export function withPlaced(note: Note, layer: PlacedLayer, box: PlacedBox | unde
   return next as unknown as Note
 }
 
-/** Every layer the banknote has kept on it as it is now, after a new size was typed: each where it was, as far as it fits */
-export const fitLayers = (note: Note): Note =>
+/**
+ * Every layer the banknote has kept on it as it is now, after a new size was typed (`from`, the size it had): each
+ * where it was, as far as it fits, and one that sat wholly on the banknote still wholly on it
+ */
+export const fitLayers = (note: Note, from?: Size): Note =>
   PLACED_LAYERS.reduce((n, layer) => {
     const box = n[layer]
-    return box ? withPlaced(n, layer, fitPlaced(layer, box, n)) : n
+    if (!box) return n
+    const fitted = fitPlaced(layer, box, n)
+    return withPlaced(n, layer, from && isWhollyOn(box, from) ? fitPlaced(layer, onto(fitted, n), n) : fitted)
   }, note)
 
 /** Every layer the banknote has in the same place after it turned from `from`: its middle at the same share across and down */
