@@ -10,7 +10,7 @@ export function CloudStatus({ showWorkspace = false, isDemo = false }: { showWor
   return <div className="flex min-w-0 items-center gap-1">
     <span className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground" role="status" title={title}>
       {status === 'saved' ? <Cloud className="size-3.5" /> : status === 'saving' ? <CloudUpload className="size-3.5" /> : <CloudAlert className="size-3.5 text-destructive" />}
-      {isDemo ? 'Demo preview' : status === 'saved' ? 'Saved' : status === 'saving' ? 'Saving…' : status === 'conflict' ? 'Conflict' : 'Couldn’t save'}
+      {isDemo ? 'Preview' : status === 'saved' ? 'Saved' : status === 'saving' ? 'Saving…' : status === 'conflict' ? 'Conflict' : 'Couldn’t save'}
     </span>
     {!isDemo && status === 'error' && <Button variant="ghost" size="xs" onClick={() => runAction(Promise.resolve(retrySync()))}>Retry</Button>}
     {showWorkspace && <><span className="ml-2 min-w-0 max-w-24 truncate text-xs text-muted-foreground" title={workspace}>{workspace}</span><Button variant="ghost" size="sm" onClick={() => runAction(signOut())}><LogOut />Sign out</Button></>}

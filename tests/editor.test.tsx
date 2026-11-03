@@ -392,7 +392,7 @@ describe('username workspace editor', () => {
     const name = screen.getByRole('textbox', { name: 'Project name' })
     await user.clear(name)
     await user.type(name, 'Unsaved demo edit')
-    expect(screen.getByRole('status').textContent).toBe('Demo preview')
+    expect(screen.getByRole('status').textContent).toBe('Preview')
     await user.click(screen.getByRole('button', { name: 'Exit demo' }))
     await screen.findByRole('button', { name: 'New project', exact: true })
     expect(screen.queryByText('Unsaved demo edit')).toBeNull()

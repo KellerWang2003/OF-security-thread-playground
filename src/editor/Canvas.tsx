@@ -26,8 +26,8 @@ import { useElementSize } from './useElementSize'
 const PX_PER_MM = 96 / 25.4
 const MIN_ZOOM = 0.1
 const MAX_ZOOM = 8
-/** Room kept clear of the floating panels when fitting notes into view */
-const FIT = { left: 284, right: 284, top: 48, bottom: 128 }
+/** Room kept clear of the floating panels when fitting notes into view: the Banknotes panel is 224 px wide */
+const FIT = { left: 260, right: 284, top: 48, bottom: 128 }
 /** How close, in screen px, a moving banknote's edge or centre must come to another's to snap to it */
 const SNAP_PX = 6
 /** How long a pan or zoom pauses before banknotes are redrawn at the new view */
