@@ -41,7 +41,8 @@ function layout(box: { width: number; height: number }, repeatMm: number, widthM
   const room = { along: (vertical ? box.height : box.width) - 2 * MARGIN, across: (vertical ? box.width : box.height) - 2 * MARGIN }
   const fit = (n: number) => Math.min(MAX_SCALE, room.along / (n * repeatMm), room.across / widthMm)
   const repeats = fit(3) * widthMm >= 140 ? 3 : 2
-  return { repeats, scale: Math.max(1, fit(repeats)) }
+  // However long the repeat, the thread fits: a cramped view shrinks it rather than spilling over the panels
+  return { repeats, scale: Math.max(0.05, fit(repeats)) }
 }
 
 /**
@@ -74,7 +75,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
   const pattern = patternOf(note)
   const repeat = pattern.repeatMm
   const view = size ? layout(size, repeat, thread.widthMm, vertical) : undefined
-  if (!view) return <div ref={box} className="absolute inset-0" />
+  if (!view) return <div ref={box} className="absolute inset-0 overflow-hidden" />
   const { repeats, scale } = view
   const lengthMm = repeats * repeat
   const thickness = thread.widthMm * scale
@@ -166,7 +167,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges }: {
   }
 
   return (
-    <div ref={box} className="absolute inset-0 flex items-center justify-center">
+    <div ref={box} className="absolute inset-0 flex items-center justify-center overflow-hidden">
       <div
         ref={strip}
         role="group"
