@@ -230,6 +230,36 @@ describe('username workspace editor', () => {
     expect(screen.queryByRole('combobox', { name: 'Effect' })).toBeNull()
     expect(saves).not.toHaveBeenCalled()
   })
+  it('switches the panel between tabs, folder tags and a tree, each picking parts the same way', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'panel-options-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const tabs = () => screen.getAllByRole('tab').map((t) => t.textContent)
+    expect(screen.getByRole('tablist').getAttribute('aria-orientation')).not.toBe('vertical')
+
+    // Folder tags beside the panel, the open part named under the banknote
+    await user.click(screen.getByRole('button', { name: 'Tags', exact: true }))
+    expect(screen.getByRole('tablist').getAttribute('aria-orientation')).toBe('vertical')
+    expect(tabs()).toEqual(['Banknote', 'Thread'])
+    await user.click(screen.getByRole('tab', { name: 'Thread' }))
+    expect(tab()).toBe('Thread')
+    // Named under the banknote too, beside its row in the list
+    expect(screen.getAllByText('Security thread', { selector: 'span' })).toHaveLength(2)
+
+    // The tree: the banknote by its name, its parts under it
+    await user.click(screen.getByRole('button', { name: 'Tree', exact: true }))
+    expect(tabs()).toEqual(['Demo banknote', 'Security thread'])
+    expect(tab()).toBe('Security thread')
+    await user.click(screen.getByRole('tab', { name: 'Demo banknote' }))
+    expect(screen.getByText('W', { exact: true })).toBeDefined()
+    // Remembered in this browser
+    expect(localStorage.getItem('of-playground.panel-option')).toBe('tree')
+    await user.click(screen.getByRole('button', { name: 'Tabs', exact: true }))
+    expect(tabs()).toEqual(['Banknote', 'Thread'])
+    expect(saves).not.toHaveBeenCalled()
+  })
   it('outlines what a click would pick under the pointer, and only what is picked', async () => {
     vi.stubGlobal('ResizeObserver', class {
       callback: ResizeObserverCallback
