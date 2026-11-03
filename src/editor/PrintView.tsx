@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { reportError } from '../cloud/notices'
-import { loadArtwork } from '../lib/exportRender'
+import { framePx, loadArtwork } from '../lib/exportRender'
+import { stepFor } from '../lib/images'
 import { patternMix, preparePattern } from '../lib/pattern'
 import { cutPattern, printedAt, type CutSource } from '../lib/print'
 import { copyStarts, imageBox } from '../lib/artwork'
 import { threadLength } from '../lib/thread'
-import type { Note } from '../lib/types'
+import type { Frame, Note } from '../lib/types'
 import { framesTiltOf, useTilt } from '../tilt/tilt'
 
 /** Strips the lens isn't showing at the current tilt fade to this much */
@@ -31,7 +32,6 @@ const litPrints = new WeakMap<Uint8ClampedArray, Map<string, ImageData>>()
  */
 export function PrintCanvas({ note, ridges, sizePx }: { note: Note; ridges: number; sizePx: number }) {
   const canvas = useRef<HTMLCanvasElement>(null)
-  const images = useFrameImages(note)
   const prepared = preparePattern(note)
   // The strip under each section's ridges now: the only part of a tilt that changes the picture
   const current = useTilt((s) => patternMix(note, framesTiltOf(s, note.id)).map((m) => m.slot).join(','))
@@ -46,6 +46,8 @@ export function PrintCanvas({ note, ridges, sizePx }: { note: Note; ridges: numb
   const scale = (sizePx * dpr) / Math.max(across, along)
   const w = Math.max(1, Math.round((vertical ? across : along) * scale))
   const h = Math.max(1, Math.round((vertical ? along : across) * scale))
+  // Each frame's image only as big as the print draws it
+  const images = useFrameImages(note, scale)
 
   // Everything that shapes each section's cut (its area, strips and lens) as one key, so a tilt or a move of the
   // banknote doesn't redo the print
@@ -143,14 +145,19 @@ export function PrintCanvas({ note, ridges, sizePx }: { note: Note; ridges: numb
   )
 }
 
-/** The banknote's frame images, by frame id, once loaded */
-function useFrameImages(note: Note) {
-  const key = note.frames.flatMap((f) => (f.kind === 'image' && f.imageId ? [`${f.id}:${f.imageId}`] : [])).join('|')
+/** The banknote's frame images, by frame id, once loaded, each as big as it is drawn at `scale` px per mm */
+function useFrameImages(note: Note, scale: number) {
+  // By the display copy each needs, so a new size loads again only once it needs another copy
+  const stepOf = (frame: Frame) => {
+    const px = framePx(note, frame, scale)
+    return px === undefined ? '' : stepFor(px)
+  }
+  const key = note.frames.flatMap((f) => (f.kind === 'image' && f.imageId ? [`${f.id}:${f.imageId}:${stepOf(f)}`] : [])).join('|')
   const [loaded, setLoaded] = useState<{ key: string; images: Map<string, HTMLImageElement> }>()
   useEffect(() => {
     let live = true
-    const pairs = key ? key.split('|').map((pair) => pair.split(':') as [string, string]) : []
-    Promise.all(pairs.map(async ([frameId, imageId]) => [frameId, await loadArtwork(imageId)] as const))
+    const entries = key ? key.split('|').map((entry) => entry.split(':') as [string, string, string]) : []
+    Promise.all(entries.map(async ([frameId, imageId, px]) => [frameId, await loadArtwork(imageId, px ? Number(px) : undefined)] as const))
       .then((all) => {
         if (!live) return
         const images = new Map<string, HTMLImageElement>()

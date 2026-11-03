@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils'
 import { reportError } from '../cloud/notices'
 import { ColorField, IconButton, Segmented, SwitchField } from '../components/controls'
-import { pickFiles, useImageUrl } from '../lib/images'
+import { THUMB_PX, pickFiles, useImageUrl } from '../lib/images'
 import { updateNote } from '../lib/store'
 import type { Frame, Note } from '../lib/types'
 import { replaceFrameImage, setFaceImage, updateFrame, type NoteRef } from './frameActions'
@@ -155,13 +155,13 @@ function frameFill(note: Note, noteRef: NoteRef, frame: Frame, url: string | und
 
 /** A frame's fill row, under Tile pattern in the right panels */
 export function FrameFillRow({ note, noteRef, frame }: { note: Note; noteRef: NoteRef; frame: Frame }) {
-  const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
+  const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined, THUMB_PX)
   return <FillRow name="Tile pattern" {...frameFill(note, noteRef, frame, url)} />
 }
 
 /** A frame's fill panel, opened from somewhere else: the pencil on its clip in the timeline */
 export function FrameFillPanel({ note, noteRef, frame, ...place }: { note: Note; noteRef: NoteRef; frame: Frame } & PanelPlace) {
-  const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
+  const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined, THUMB_PX)
   return <FillPanel {...frameFill(note, noteRef, frame, url)} {...place} />
 }
 
@@ -170,7 +170,7 @@ export function FrameFillPanel({ note, noteRef, frame, ...place }: { note: Note;
  * image that can be removed again, which falls back to the colour
  */
 export function BackgroundFillRow({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
-  const url = useImageUrl(note.faceImageId)
+  const url = useImageUrl(note.faceImageId, THUMB_PX)
   const set = (patch: Partial<Note>) => updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, ...patch }))
   return (
     <FillRow

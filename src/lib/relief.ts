@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { clamp } from './frames'
 import { loadImageUrl } from './images'
+import { pictureOf } from './imageWork'
 import type { Watermark, WatermarkLevels } from './types'
 import { LEVELS_GAP } from './watermark'
 
@@ -186,22 +187,14 @@ const recent = new Map<string, string[]>()
 /** Each reading's light layers, latest first, by levels */
 const drawn = new Map<string, { levels: string; relief: Relief }[]>()
 
-function loadImage(url: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('The image could not be loaded.'))
-    img.src = url
-  })
-}
-
 async function readSource(imageId: string): Promise<Source | undefined> {
   const url = await loadImageUrl(imageId)
   if (!url) return undefined
-  const img = await loadImage(url)
+  // Shrunk off the main thread where it can be, so a large upload doesn't freeze the page while it is read
+  const picture = await pictureOf(url, RELIEF_MAX_PX)
   // SVGs without a size of their own draw at 512 px
-  const naturalWidth = img.naturalWidth || 512
-  const naturalHeight = img.naturalHeight || 512
+  const naturalWidth = picture.width || 512
+  const naturalHeight = picture.height || 512
   const k = Math.min(1, RELIEF_MAX_PX / Math.max(naturalWidth, naturalHeight))
   const width = Math.max(1, Math.round(naturalWidth * k))
   const height = Math.max(1, Math.round(naturalHeight * k))
@@ -210,7 +203,7 @@ async function readSource(imageId: string): Promise<Source | undefined> {
   canvas.height = height
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return undefined
-  ctx.drawImage(img, 0, 0, width, height)
+  ctx.drawImage(picture.source, 0, 0, width, height)
   return { data: ctx.getImageData(0, 0, width, height).data, width, height }
 }
 

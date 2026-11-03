@@ -69,7 +69,9 @@ src/
                 length units (units.ts: everything is stored in mm; the unit only changes how lengths read),
                 how clearly the watermark shows (light.ts), placed layers (layers.ts; their box maths, placed.ts),
                 the watermark (watermark.ts) and its relief (relief.ts), magnetic ink (magneticInk.ts) and its
-                shape (inkMask.ts), legacy IndexedDB import, editor actions, frame maths, demo
+                shape (inkMask.ts), uploaded images and their display copies (images.ts, made off the main
+                thread by imageWork.ts and imageWorker.ts), legacy IndexedDB import, editor actions, frame
+                maths, demo
 ```
 
 ## Undo and redo

@@ -1,6 +1,6 @@
 import { DesignTiles } from '../components/DesignTiles'
 import { edgeBreaks, useDesign, type CutDrift } from '../lib/continuous'
-import { useImageUrl } from '../lib/images'
+import { designPx, useImageUrl } from '../lib/images'
 import type { Note } from '../lib/types'
 import { useTilt } from '../tilt/tilt'
 
@@ -38,7 +38,8 @@ function useShown(quiet: boolean) {
  * as the banknote by it and fading out further away. Where an edge doesn't carry on into its copy, the seam shows.
  */
 export function NeighbourRing({ note, scale, drift, quiet }: { note: Note; scale: number; drift: CutDrift; quiet: boolean }) {
-  const url = useImageUrl(note.faceImageId)
+  // The same copy the banknote shows, so both draw from one
+  const url = useImageUrl(note.faceImageId, designPx(note, scale))
   const shown = useShown(quiet)
   if (!url) return null
   const width = note.widthMm * scale

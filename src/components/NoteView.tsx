@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import { SHADE_DEG, TILT_LIMIT } from '../lib/frames'
 import { lensMix } from '../lib/lens'
 import { watermarkOpacity, watermarkReveal } from '../lib/light'
-import { useImageUrl } from '../lib/images'
+import { THUMB_PX, designPx, devicePx, useImageUrl, useWarmImages } from '../lib/images'
 import { copyStarts, imageBox } from '../lib/artwork'
 import { patternMix, patternOf, preparePattern, sectionClip, shownLabel } from '../lib/pattern'
 import { threadWindowMask, windowEdges } from '../lib/thread'
@@ -66,12 +66,15 @@ export function FrameFill({
   frame: Frame
   opacity?: number
 }) {
-  const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
-  const measured = useImageAspect(frame.aspect ? undefined : url)
+  const imageId = frame.kind === 'image' ? frame.imageId : undefined
+  // Frames from before their proportions were recorded are measured once, from the original
+  const measured = useImageAspect(useImageUrl(frame.aspect ? undefined : imageId))
   const aspect = frame.aspect ?? measured
+  const box = aspect ? imageBox(frame.place, aspect, repeatMm, thicknessMm, direction) : undefined
+  // The display copy with as many pixels as the image shows with on this screen, however large the upload
+  const url = useImageUrl(box && imageId, box && devicePx(Math.max(box.acrossSize, box.alongSize) * scale))
   if (frame.kind === 'color') return <div className="absolute inset-0" style={{ opacity, backgroundColor: frame.color }} />
-  if (frame.kind !== 'image' || !url || !aspect) return null
-  const box = imageBox(frame.place, aspect, repeatMm, thicknessMm, direction)
+  if (frame.kind !== 'image' || !url || !box) return null
   const vertical = direction === 'vertical'
   return (
     <div className="absolute inset-0" style={{ opacity }}>
@@ -86,7 +89,7 @@ export function FrameFill({
 
 /** A frame as a thumbnail: the uploaded image whole, or its colour; an empty one shows the thread's background */
 export function FrameThumb({ frame, backgroundColor }: { frame: Frame; backgroundColor?: string }) {
-  const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
+  const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined, THUMB_PX)
   if (frame.kind !== 'image' || !url) {
     return <div className="absolute inset-0" style={{ backgroundColor: frame.kind === 'color' ? frame.color : backgroundColor }} />
   }
@@ -178,6 +181,8 @@ export function ThreadArt({ note, shown, blends, fill }: {
 }) {
   const { lengthMm, scale, offsetMm } = fill
   const { frames } = note
+  // Only the frames shown are drawn; the others' copies get ready for when a tilt comes to them
+  useWarmImages(frames.map((frame) => (frame.kind === 'image' ? frame.imageId : undefined)))
   const prepared = preparePattern(note)
   if (prepared.plain) {
     const [base, next] = shown[0] ?? []
@@ -266,7 +271,7 @@ export function NoteView({
   const { thread, frames, watermark, magneticInk } = note
   const root = useRef<HTMLDivElement>(null)
   const mm = (value: number) => value * scale
-  const face = useImageUrl(note.background === 'image' ? note.faceImageId : undefined)
+  const face = useImageUrl(note.background === 'image' ? note.faceImageId : undefined, designPx(note, scale))
   // Live notes re-render only when this changes, not on every animation frame
   const liveShown = useTilt((s) => (live ? shownKey(note, framesTiltOf(s, note.id).y, framesTiltOf(s, note.id).x) : ''))
   const shown = parseShown(live ? liveShown : shownKey(note, angle, angleX))

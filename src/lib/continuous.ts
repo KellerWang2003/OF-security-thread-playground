@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { create } from 'zustand'
 import { clamp } from './frames'
 import { loadImageUrl } from './images'
+import { pictureOf, type Picture } from './imageWork'
 import { levelsCurve, type Reading } from './relief'
 import { fitSections, threadLength } from './thread'
 import type { ContinuousDesign, Note, Watermark } from './types'
@@ -122,19 +123,17 @@ function keepLatest<V>(map: Map<string, V>, key: string, value: V, onDrop?: (key
   }
 }
 
-const images = new Map<string, Promise<HTMLImageElement | undefined>>()
-
-const decode = (url: string) => new Promise<HTMLImageElement | undefined>((resolve) => {
-  const img = new Image()
-  img.onload = () => resolve(img)
-  img.onerror = () => resolve(undefined)
-  img.src = url
-})
+const images = new Map<string, Promise<Picture | undefined>>()
+/**
+ * The design is shrunk off the main thread where it can be, so a large upload doesn't freeze the page while it is
+ * read, to twice the most it is read at, which leaves enough once it is cut to the banknote's proportions
+ */
+const SOURCE_MAX_PX = 2 * READ_MAX_PX
 
 function imageOf(imageId: string) {
   let image = images.get(imageId)
   if (!image) {
-    const loading = loadImageUrl(imageId).then((url) => (url ? decode(url) : undefined)).catch(() => undefined)
+    const loading = loadImageUrl(imageId).then((url) => (url ? pictureOf(url, SOURCE_MAX_PX, 'high') : undefined)).catch(() => undefined)
     // A failed load is tried again next time
     void loading.then((loaded) => { if (!loaded && images.get(imageId) === loading) images.delete(imageId) })
     image = loading
@@ -144,11 +143,11 @@ function imageOf(imageId: string) {
 }
 
 async function readDesign(look: DesignLook): Promise<DesignPixels | undefined> {
-  const img = await imageOf(look.imageId)
-  if (!img) return undefined
+  const picture = await imageOf(look.imageId)
+  if (!picture) return undefined
   // SVGs without a size of their own draw at 512 px
-  const imageWidth = img.naturalWidth || 512
-  const imageHeight = img.naturalHeight || 512
+  const imageWidth = picture.width || 512
+  const imageHeight = picture.height || 512
   const k = Math.min(READ_PX_PER_MM, READ_MAX_PX / Math.max(look.widthMm, look.heightMm))
   const width = Math.max(1, Math.round(look.widthMm * k))
   const height = Math.max(1, Math.round(look.heightMm * k))
@@ -162,7 +161,7 @@ async function readDesign(look: DesignLook): Promise<DesignPixels | undefined> {
   ctx.fillStyle = look.color
   ctx.fillRect(0, 0, width, height)
   ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, width, height)
+  ctx.drawImage(picture.source, sx, sy, sw, sh, 0, 0, width, height)
   return { data: ctx.getImageData(0, 0, width, height).data, width, height, widthMm: look.widthMm, heightMm: look.heightMm, crop }
 }
 

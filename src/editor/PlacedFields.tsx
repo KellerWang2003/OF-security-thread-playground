@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { IconButton, Labeled, LengthField } from '../components/controls'
 import { reportError } from '../cloud/notices'
-import { pickFiles, useImageUrl } from '../lib/images'
+import { THUMB_PX, pickFiles, useImageUrl } from '../lib/images'
 import { PLACE_MIN_MM, PLACE_STEP, type PlacedBox, maxBoxWidth, resizeBox } from '../lib/placed'
 import type { Note } from '../lib/types'
 
@@ -19,7 +19,7 @@ export function LayerImage({ imageId, grayscale = false, onUpload, onRemove }: {
   onUpload: (file: File) => Promise<void>
   onRemove: () => void
 }) {
-  const image = useImageUrl(imageId)
+  const image = useImageUrl(imageId, THUMB_PX)
   return (
     <Labeled label="Image">
       <div className="flex items-center gap-2">

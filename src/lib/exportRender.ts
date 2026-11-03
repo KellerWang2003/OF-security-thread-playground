@@ -10,7 +10,7 @@ import { type InkMask, loadInkMask } from './inkMask'
 import { INK_BAR_LIGHT, barCentre, inkRoll, inkShift } from './magneticInk'
 import { copyStarts, imageBox } from './artwork'
 import { fitSections, threadLength } from './thread'
-import type { MagneticInk, Note } from './types'
+import type { Frame, MagneticInk, Note } from './types'
 
 // Draws banknotes to a canvas exactly as NoteView shows them on the canvas, so the tilt can be exported
 
@@ -106,20 +106,29 @@ function loadImage(url: string) {
   })
 }
 
-export async function loadArtwork(id: string) {
-  const url = await loadImageUrl(id)
+/** An artwork image to draw on a canvas; given `px`, the pixels it is drawn across, its display copy for that size */
+export async function loadArtwork(id: string, px?: number) {
+  const url = await loadImageUrl(id, px)
   return url ? loadImage(url) : undefined
 }
 
-export async function loadNoteAssets(note: Note): Promise<NoteAssets> {
+/** Pixels a frame's image is drawn across at `scale` px per mm, once its proportions are known */
+export function framePx(note: Note, frame: Frame, scale: number) {
+  if (!frame.aspect) return undefined
+  const box = imageBox(frame.place, frame.aspect, preparePattern(note).pattern.repeatMm, note.thread.widthMm, note.thread.direction)
+  return Math.max(box.acrossSize, box.alongSize) * scale
+}
+
+/** A banknote's images, ready to draw; given the `scale` (px per mm) they are drawn at, each only as big as it needs */
+export async function loadNoteAssets(note: Note, scale?: number): Promise<NoteAssets> {
   const frames = new Map<string, HTMLImageElement>()
   const [face, relief, ink] = await Promise.all([
-    note.background === 'image' && note.faceImageId ? loadArtwork(note.faceImageId) : undefined,
+    note.background === 'image' && note.faceImageId ? loadArtwork(note.faceImageId, scale && Math.max(note.widthMm, note.heightMm) * scale) : undefined,
     note.watermark?.imageId ? loadRelief({ imageId: note.watermark.imageId, invert: note.watermark.invert, levels: note.watermark.levels }) : undefined,
     note.magneticInk?.imageId ? loadInkMask(note.magneticInk.imageId, note.magneticInk.invert) : undefined,
     ...note.frames.map(async (frame) => {
       if (frame.kind !== 'image' || !frame.imageId) return
-      const img = await loadArtwork(frame.imageId)
+      const img = await loadArtwork(frame.imageId, scale && framePx(note, frame, scale))
       if (img) frames.set(frame.id, img)
     }),
   ])

@@ -10,7 +10,10 @@ import { defaultPattern } from '../src/lib/pattern'
 import { presetPattern } from '../src/lib/patternPresets'
 import type { Frame } from '../src/lib/types'
 
-vi.mock('../src/lib/images', () => ({ useImageUrl: (id?: string) => id ? `blob:${id}` : undefined }))
+vi.mock('../src/lib/images', async (original) => ({
+  ...(await original<typeof import('../src/lib/images')>()),
+  useImageUrl: (id?: string) => id ? `blob:${id}` : undefined,
+}))
 
 const image: Frame = { id: 'frame', kind: 'image', imageId: 'portrait', name: 'Artwork', color: '#fff', length: 10 }
 const makeNote = () => createNote({ name: 'Test', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#123456' })

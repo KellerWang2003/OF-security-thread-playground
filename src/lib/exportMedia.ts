@@ -95,8 +95,15 @@ async function renderFile(notes: Note[], assets: Map<string, NoteAssets>, option
 /** Renders and encodes the export, reporting progress from 0 to 1. Resolves with the file to download. */
 export async function exportTilt(projectName: string, options: ExportOptions, onProgress: (progress: number) => void, signal: AbortSignal) {
   const { notes } = options
-  const assets = new Map(await Promise.all(notes.map(async (n) => [n.id, await loadNoteAssets(n)] as const)))
   const groups = exportGroups(notes, options.separate)
+  // The scale each banknote is drawn at, as renderFile works it out, so its images load only as big as they are drawn
+  const scales = new Map<string, number>()
+  for (const group of groups) {
+    const angles = playbackTilts(group[0], options.fps, options.format === 'gif' ? 1 : options.loops)
+    const scale = scaleForHeight(group, angles, options.perspective, options.height)
+    for (const note of group) scales.set(note.id, Math.max(scales.get(note.id) ?? 0, scale))
+  }
+  const assets = new Map(await Promise.all(notes.map(async (n) => [n.id, await loadNoteAssets(n, scales.get(n.id))] as const)))
   const framesEach = playbackTilts(notes[0], options.fps, options.format === 'gif' ? 1 : options.loops).length
   const total = framesEach * groups.length
   let done = 0

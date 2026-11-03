@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import { drawInk, exportLayout, exportSize, perspectiveFor, playbackAngles, projectRow, sourceRow, tiltedBounds } from '../src/lib/exportRender'
+import { drawInk, exportLayout, exportSize, framePx, loadNoteAssets, perspectiveFor, playbackAngles, projectRow, sourceRow, tiltedBounds } from '../src/lib/exportRender'
 import { DEFAULT_INK, INK_BAR_LIGHT, INK_ROLL_DEG, barCentre, inkShift } from '../src/lib/magneticInk'
 import { createNote } from '../src/lib/notes'
 import { SWEEP_SECONDS } from '../src/lib/playback'
 import { copyStarts, imageBox } from '../src/lib/artwork'
 
-vi.mock('../src/lib/images', () => ({ loadImageUrl: async () => undefined }))
+const loadImageUrl = vi.hoisted(() => vi.fn(async (_id: string, _px?: number): Promise<string | undefined> => undefined))
+vi.mock('../src/lib/images', () => ({ loadImageUrl }))
 
 const makeNote = (widthMm = 68, heightMm = 120) => createNote({ name: 'Test', x: 0, y: 0, widthMm, heightMm, color: '#ffffff' })
 
@@ -108,6 +109,30 @@ describe('an image in the repeat', () => {
     // The copy from before the stretch shows its last 5 mm at the start
     expect(copyStarts(box, 25, 0, 90)).toEqual([-5, 20, 45, 70])
     expect(copyStarts(box, 25, 3, 90)).toEqual([-2, 23, 48, 73])
+  })
+})
+
+describe('images in an export', () => {
+  it('works out how many pixels a frame’s image is drawn across, once its proportions are known', () => {
+    const note = makeNote()
+    const frame = { ...note.frames[0], kind: 'image' as const, imageId: 'art', aspect: 1.5 }
+    const box = imageBox(undefined, 1.5, note.pattern!.repeatMm, note.thread.widthMm, note.thread.direction)
+    expect(framePx(note, frame, 10)).toBeCloseTo(Math.max(box.acrossSize, box.alongSize) * 10)
+    expect(framePx(note, { ...frame, aspect: undefined }, 10)).toBeUndefined()
+  })
+
+  it('loads each image only as big as the video draws it, and the originals without a scale', async () => {
+    const plain = makeNote(150, 75)
+    const frame = { ...plain.frames[0], kind: 'image' as const, imageId: 'art', aspect: 2 }
+    const note = { ...plain, background: 'image' as const, faceImageId: 'design', frames: [frame, ...plain.frames.slice(1)] }
+    loadImageUrl.mockClear()
+    await loadNoteAssets(note, 10)
+    expect(loadImageUrl).toHaveBeenCalledWith('design', 1500)
+    expect(loadImageUrl).toHaveBeenCalledWith('art', framePx(note, frame, 10))
+    loadImageUrl.mockClear()
+    await loadNoteAssets(note)
+    expect(loadImageUrl).toHaveBeenCalledWith('design', undefined)
+    expect(loadImageUrl).toHaveBeenCalledWith('art', undefined)
   })
 })
 
