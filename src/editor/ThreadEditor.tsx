@@ -12,10 +12,9 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
-import { Drawer, Group, IconButton, Labeled, Panel, ScrubField, Section, SwitchField } from '../components/controls'
+import { Drawer, Group, IconButton, Labeled, Panel, Section, SwitchField } from '../components/controls'
 import { canStepNote, useHistory } from '../lib/history'
 import {
-  ALONG_STEP,
   addBlankSection,
   duplicateSection,
   fillGaps,
@@ -25,13 +24,11 @@ import {
   playbackTilt,
   preparePattern,
   removeSection,
-  resizeEdge,
   sectionSlots,
   sectionView,
   setSectionLens,
   setSectionTrack,
   updateSection,
-  type Edge,
 } from '../lib/pattern'
 import { PATTERN_PRESETS, presetPattern } from '../lib/patternPresets'
 import { checkPattern, warningCount, type PatternCheck } from '../lib/patternRules'
@@ -42,16 +39,17 @@ import { Explain, RidgeIcon, swatch } from './LensVisuals'
 import { PanelResizer } from './PanelResizer'
 import { PatternPicture } from './PatternPicture'
 import { PatternView } from './PatternView'
-import { ThreadSettings } from './ThreadSettings'
+import { ArtworkSettings } from './ArtworkSettings'
 import { TiltRail } from './TiltRail'
 import { TimelineBar } from './TimelineBar'
 
 /**
  * One banknote's thread pattern, full screen. Top: back, the banknote, the repeat, the view toggles and undo. Left:
  * Mixed angles, the presets it allows and the sections. Middle: the thread magnified, where sections are drawn, moved
- * and resized, and the view panned, zoomed and tilted. Right, scrolling: the selected section's area and frames, the
- * lens (the section's own with mixed angles, otherwise the shared one) and the thread (direction, thickness,
- * artwork); under them, fixed at the bottom, Preview and Checks, for information only, open upwards. Bottom: the tilt pad and the playback bar, as on the canvas.
+ * and resized, and the view panned, zoomed and tilted. Right, scrolling: the selected section's frames, the lens (the
+ * section's own with mixed angles, otherwise the shared one) and the artwork (background, image gap), which is set
+ * only here; where the thread sits on the banknote is set on the canvas. Under them, fixed at the bottom, Preview and
+ * Checks, for information only, open upwards. Bottom: the tilt pad and the playback bar, as on the canvas.
  */
 export function ThreadEditor({ project, note, onClose }: { project: Project; note: Note; onClose: () => void }) {
   const pattern = patternOf(note)
@@ -139,9 +137,9 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
     <div role="region" aria-label="Thread editor" data-thread-editor="" className="absolute inset-0 z-10 bg-background">
       <div className="absolute inset-0 bg-muted/40" />
 
-      {/* The whole editor, behind the panels, as on the canvas; the thread fits between them */}
-      <PatternView note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={setSelectedId} ridges={ridges}
-        limit={lens.viewDeg} room="top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[272px]" />
+      {/* The whole editor, behind the panels, as on the canvas; the thread fits between them, and fits again once turned */}
+      <PatternView key={note.thread.direction} note={note} projectId={project.id} selectedId={selectedSectionId} onSelect={setSelectedId} ridges={ridges}
+        limit={lens.viewDeg} room="top-16 right-[calc(var(--panel-w)+24px)] bottom-[112px] left-[248px]" />
 
       <Panel className="absolute top-3 right-3 left-3 flex h-11 items-center gap-2 rounded-[calc(var(--radius)+0.375rem+1px)] pr-1.5 pl-1.5">
         <IconButton className="rounded-lg" label="Back to the canvas" onClick={onClose}><ChevronLeft /></IconButton>
@@ -166,7 +164,8 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
         </div>
       </Panel>
 
-      <Panel className="absolute top-16 left-3 flex max-h-[calc(100%-376px)] min-h-12 w-[248px] flex-col rounded-[calc(var(--radius)+0.375rem+1px)]">
+      {/* As wide as the canvas's Banknotes panel */}
+      <Panel className="absolute top-16 left-3 flex max-h-[calc(100%-376px)] min-h-12 w-[224px] flex-col rounded-[calc(var(--radius)+0.375rem+1px)]">
         {/* The hero control: whether sections can each have their own lens, and so which presets apply */}
         <div className="px-3 pt-3 pb-2">
           <SwitchField label="Mixed angles" title="Each section plays its own lens; off, every section plays the banknote's"
@@ -184,7 +183,7 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
                   edit(() => next)
                   setSelectedId(next.sections.at(0)?.id)
                 }}>
-                <PatternPicture note={note} pattern={presetPattern(note, preset.value)} width={vertical ? 40 : 84} height={vertical ? 52 : 32} />
+                <PatternPicture note={note} pattern={presetPattern(note, preset.value)} width={vertical ? 40 : 76} height={vertical ? 52 : 29} />
                 {preset.label}
               </Button>
             ))}
@@ -201,12 +200,9 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       <PanelResizer className="top-16" />
       <Panel className="absolute top-16 right-3 bottom-3 flex w-(--panel-w) flex-col overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {/* The selected section's frames; its length and width are edited beside the thread, its place by dragging it */}
           {selected && (
             <Group title={selected.name}>
-              <Section nested title="Area" action={<span className="text-[11px] text-muted-foreground">mm</span>}>
-                <AreaFields section={selected} repeatMm={pattern.repeatMm} widthMm={note.thread.widthMm} vertical={vertical}
-                  onChange={(edge, value) => edit((n) => resizeEdge(patternOf(n), selected.id, edge, value, false))} />
-              </Section>
               <Section nested title="Frames" action={
                 <IconButton label="Every frame in order" size="icon-xs" disabled={isIdentity(sectionSlots(note.frames, selected))}
                   onClick={() => edit((n) => setSectionTrack(n, selected.id, n.frames.map((_, i) => i)))}>
@@ -230,8 +226,8 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
               <EffectSection key={pattern.mixed ? selectedSectionId : 'shared'} note={lensNote} set={setLens} printNote={note} preview={false} />
             </Group>
           )}
-          <Group title="Thread">
-            <ThreadSettings note={note} projectId={project.id} />
+          <Group title="Artwork">
+            <ArtworkSettings note={note} projectId={project.id} />
           </Group>
         </div>
 
@@ -323,33 +319,6 @@ function SectionList({ note, selectedId, onSelect, onAdd, onDuplicate, onRemove,
           )
         })}
       </ul>
-    </div>
-  )
-}
-
-/**
- * The selected section's area: along the repeat from its start, and across from the thread's left or top edge, in
- * mm. The unit sits once on the Area title: in a narrow panel a unit in every field left too little room for values.
- */
-function AreaFields({ section, repeatMm, widthMm, vertical, onChange }: {
-  section: ThreadSection
-  repeatMm: number
-  widthMm: number
-  vertical: boolean
-  onChange: (edge: Edge, value: number) => void
-}) {
-  const across = (edge: 'acrossStart' | 'acrossEnd', label: string, title: string) => (
-    <ScrubField label={label} title={title} value={section[edge] * widthMm} min={0} max={widthMm} step={widthMm / 12}
-      onChange={(mm) => onChange(edge, mm / widthMm)} />
-  )
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      <ScrubField label="Start" title="Where the section starts, from the start of the repeat" value={section.startMm} min={0} max={repeatMm}
-        step={ALONG_STEP} onChange={(mm) => onChange('startMm', mm)} />
-      <ScrubField label="End" title="Where the section ends, from the start of the repeat" value={section.endMm} min={0} max={repeatMm}
-        step={ALONG_STEP} onChange={(mm) => onChange('endMm', mm)} />
-      {vertical ? across('acrossStart', 'Left', "Left edge, from the thread's left edge") : across('acrossStart', 'Top', "Top edge, from the thread's top edge")}
-      {vertical ? across('acrossEnd', 'Right', "Right edge, from the thread's left edge") : across('acrossEnd', 'Bottom', "Bottom edge, from the thread's top edge")}
     </div>
   )
 }

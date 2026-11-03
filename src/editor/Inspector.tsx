@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ColorField, Drawer, Group, IconButton, Labeled, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
+import { ColorField, Drawer, Group, IconButton, Labeled, Panel, ScrubField, Section, Segmented } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
 import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
@@ -32,8 +32,9 @@ const TAB = "h-7 flex-none rounded-md px-2.5 text-[13px] font-medium text-muted-
 
 /**
  * Right: the selected banknote, one tab per part, as the Banknotes list has its layers: the banknote itself (size,
- * background), its security thread (placement, artwork and its lens, with the lens's preview in a drawer at the foot;
- * Thread Studio opens from the button under the thread on the canvas) and its watermark once it has one. The tab is the
+ * background), its security thread (where it sits and its lens, with the lens's preview in a drawer at the foot; what
+ * is printed on it, its artwork and sections, is designed in Thread Studio, which opens from the button under the
+ * thread on the canvas) and its watermark once it has one. The tab is the
  * part picked: a click on the canvas or in the list turns to it, and turning to a tab picks that part. One part at a
  * time, so the panel never grows with features. Every control has a small label over it (`Labeled`) unless a word in
  * it or beside it already says what it is.
@@ -53,7 +54,6 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
 }) {
   const update = (change: Change) => updateNote(noteRef.projectId, noteRef.noteId, change)
   const { thread } = note
-  const threadLength = thread.direction === 'vertical' ? note.heightMm : note.widthMm
   const setThread = (patch: Partial<Note['thread']>) => update((n) => ({ ...n, thread: { ...n.thread, ...patch } }))
   const acrossOf = (n: Pick<Note, 'widthMm' | 'heightMm'>, direction: Note['thread']['direction']) =>
     direction === 'vertical' ? n.widthMm : n.heightMm
@@ -228,27 +228,6 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
           </Labeled>
         </div>
         <WindowsCard note={note} noteRef={noteRef} selectedWindowId={selectedWindowId} onWindowSelect={onWindowSelect} />
-      </Section>
-
-      <Section nested title="Artwork">
-        <SwitchField
-          label="Background"
-          checked={!!thread.backgroundColor}
-          onChange={(enabled) => setThread({ backgroundColor: enabled ? '#ffffff' : undefined })}
-        />
-        {thread.backgroundColor && (
-          <ColorField value={thread.backgroundColor} onChange={(backgroundColor) => setThread({ backgroundColor })} />
-        )}
-        <ScrubField
-          label="Image gap"
-          title="Space between complete image copies along the thread"
-          value={thread.imageGapMm ?? 0}
-          min={0}
-          max={threadLength}
-          step={0.5}
-          unit="mm"
-          onChange={(imageGapMm) => setThread({ imageGapMm })}
-        />
       </Section>
 
       <LensEffect note={note} noteRef={noteRef} />

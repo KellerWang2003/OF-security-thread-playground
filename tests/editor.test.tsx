@@ -218,6 +218,9 @@ describe('username workspace editor', () => {
 
     // Small labels say what each control is
     for (const label of ['Direction', 'Thickness', 'Position', 'Effect', 'Seen flat']) expect(screen.getByText(label, { exact: true })).toBeDefined()
+    // The artwork printed on the thread is set in Thread Studio, not here
+    expect(screen.queryByRole('switch', { name: 'Background' })).toBeNull()
+    expect(screen.queryByTitle('Space between complete image copies along the thread')).toBeNull()
 
     // The lens's controls, edited for this banknote right here; Thread Studio opens from the canvas, not the panel
     expect(screen.getByRole('combobox', { name: 'Effect' })).toBeDefined()

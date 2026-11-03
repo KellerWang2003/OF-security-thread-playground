@@ -42,26 +42,29 @@ type Gesture =
   | { mode: 'tilt'; startX: number; startY: number; start: number; startSide: number; moved: boolean }
   | { mode: 'pan'; startX: number; startY: number; from: View }
 
-/** The view's zoom (1 fits the repeats shown) and how far it is panned from the middle, px */
-type View = { zoom: number; x: number; y: number }
-const FIT: View = { zoom: 1, x: 0, y: 0 }
+/** Repeats shown: always three, however long the repeat (Keller) */
+const REPEATS = 3
+
+/** The view: px per mm, and where the thread's start (its top or left end, at the middle of its width) sits, px from the middle of the room */
+type View = { scale: number; x: number; y: number }
+/** How far the view zooms out and in from its fit */
 const ZOOM_LIMITS = { min: 0.25, max: 8 }
 
 const EDGES: Edge[] = ['startMm', 'endMm', 'acrossStart', 'acrossEnd']
 const isAlong = (edge: Edge) => edge === 'startMm' || edge === 'endMm'
 
-/** Two repeats, or three when they still leave the thread wide enough to work on */
-function layout(box: { width: number; height: number }, repeatMm: number, widthMm: number, vertical: boolean) {
+/** Three repeats of `repeatMm` on a thread `widthMm` thick, fitted into the room and centred in it */
+function fitView(box: { width: number; height: number }, repeatMm: number, widthMm: number, vertical: boolean): View {
   const free = { width: box.width - 2 * MARGIN.x, height: box.height - 2 * MARGIN.y }
   const room = { along: vertical ? free.height : free.width, across: vertical ? free.width : free.height }
-  const fit = (n: number) => Math.min(MAX_SCALE, room.along / (n * repeatMm), room.across / widthMm)
-  const repeats = fit(3) * widthMm >= 140 ? 3 : 2
   // However long the repeat, the thread fits: a cramped view shrinks it rather than spilling over the panels
-  return { repeats, scale: Math.max(0.05, fit(repeats)) }
+  const scale = Math.max(0.05, Math.min(MAX_SCALE, room.along / (REPEATS * repeatMm), room.across / widthMm))
+  const half = (REPEATS * repeatMm * scale) / 2
+  return { scale, x: vertical ? 0 : -half, y: vertical ? -half : 0 }
 }
 
 /**
- * The centre of the thread editor: the thread magnified over two or three repeats, in its own direction, showing
+ * The centre of the thread editor: the thread magnified over three repeats, in its own direction, showing
  * the real artwork at the current tilt, with the repeat's ends, each section's outline and, optionally, its ridges.
  * Drag on empty thread to draw a section (it takes the look of the section beside it, as Fill does, or plays plain
  * when it touches none), drag a section to move it or its edges to resize it (snapping to 0.5 mm along and twelfths
@@ -70,7 +73,8 @@ function layout(box: { width: number; height: number }, repeatMm: number, widthM
  * canvas, a drag around the thread tilts it, always in perspective (editing still lands where the pointer is),
  * scrolling or a middle-button drag pans, and pinching or ⌘/Ctrl-scrolling zooms. The
  * view fills its parent, behind the floating panels, as the canvas does; the thread fits and centres in `room`
- * (Tailwind insets clear of the panels), and panned it runs on under them instead of being cut off at that box.
+ * (Tailwind insets clear of the panels), and panned it runs on under them instead of being cut off at that box. A
+ * longer repeat or a thicker thread keeps the zoom, so the thread itself grows.
  */
 export function PatternView({ note, projectId, selectedId, onSelect, ridges, limit = 90, room: roomClassName }: {
   note: Note
@@ -94,9 +98,24 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, lim
   const uid = useId().replace(/:/g, '')
   const angle = useTilt((s) => s.angle)
   const angleX = useTilt((s) => s.angleX)
-  const [viewState, setView] = useState<View>(FIT)
-  const viewRef = useRef(viewState)
-  useEffect(() => { viewRef.current = viewState })
+  const { thread } = note
+  const vertical = thread.direction === 'vertical'
+  const pattern = patternOf(note)
+  const repeat = pattern.repeatMm
+  // The view fits the repeat and thickness it opened with, or had when Fit was last asked for: changing them later
+  // keeps the zoom, so the thread grows from its start and about its middle instead (Keller). Once panned or zoomed,
+  // the view stays as it was left. Turning the thread opens a new view (ThreadEditor keys this one by direction)
+  const [basis, setBasis] = useState(() => ({ repeatMm: repeat, widthMm: thread.widthMm }))
+  const [moved, setView] = useState<View>()
+  const fitted = size ? fitView(size, basis.repeatMm, basis.widthMm, vertical) : undefined
+  const view = moved ?? fitted
+  const refit = () => {
+    setBasis({ repeatMm: repeat, widthMm: thread.widthMm })
+    setView(undefined)
+  }
+  // The wheel's listener is added once, so it reads the view from here
+  const latest = useRef({ view, fit: fitted?.scale })
+  useEffect(() => { latest.current = { view, fit: fitted?.scale } })
   const [panning, setPanning] = useState(false)
 
   // Wheel needs a non-passive listener so the page never scrolls or zooms: scroll pans, pinch or ⌘/Ctrl-scroll zooms
@@ -105,12 +124,13 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, lim
     if (!element) return
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      const v = viewRef.current
+      const { view: v, fit } = latest.current
+      if (!v || !fit) return
       if (e.ctrlKey || e.metaKey) {
         // About the pointer, measured from the middle of the room, where the thread is centred
         const r = (room.current ?? element).getBoundingClientRect()
         // Mouse wheels send big steps, trackpad pinches small ones; cap each step so neither jumps
-        setView(zoomAround(v, Math.exp(-clamp(e.deltaY, -40, 40) * 0.01), e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2))
+        setView(zoomAround(v, Math.exp(-clamp(e.deltaY, -40, 40) * 0.01), e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2, fit))
       } else {
         setView({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY })
       }
@@ -119,20 +139,18 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, lim
     return () => element.removeEventListener('wheel', onWheel)
   }, [])
 
-  const { thread } = note
-  const vertical = thread.direction === 'vertical'
   const prepared = preparePattern(note)
-  const pattern = patternOf(note)
-  const repeat = pattern.repeatMm
-  const view = size ? layout(size, repeat, thread.widthMm, vertical) : undefined
   if (!view) return <div ref={box} className="absolute inset-0 overflow-hidden"><div ref={room} className={cn('absolute inset-0', roomClassName)} /></div>
-  const { repeats } = view
-  const scale = view.scale * viewState.zoom
+  const repeats = REPEATS
+  const { scale } = view
+  const fit = fitted?.scale ?? scale
   const lengthMm = repeats * repeat
   const thickness = thread.widthMm * scale
   const length = lengthMm * scale
   const width = vertical ? thickness : length
   const height = vertical ? length : thickness
+  // The strip is centred in the room: shifted so its start sits at the view's point, whatever its length and width
+  const shift = vertical ? { x: view.x, y: view.y + height / 2 } : { x: view.x + width / 2, y: view.y }
 
   // What each section shows now: the view follows the tilt, re-rendering as it moves
   const tilt = { x: angleX, y: angle }
@@ -269,7 +287,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, lim
         if (e.button !== 0 && e.button !== 1) return
         e.currentTarget.setPointerCapture(e.pointerId)
         if (e.button === 1) {
-          gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, from: viewState }
+          gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, from: view }
           setPanning(true)
           return
         }
@@ -280,10 +298,10 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, lim
         setTilt({ source: 'drag', target: start, targetX: startSide })
       }}
       onPointerMove={onPointerMove} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}
-      onDoubleClick={(e) => { if (e.target === e.currentTarget) setView(FIT) }}>
+      onDoubleClick={(e) => { if (e.target === e.currentTarget) refit() }}>
       {/* Lets presses through to the view, so they tilt, except on the thread, its measurements and the zoom controls */}
       <div ref={room} className={cn('pointer-events-none absolute inset-0 flex items-center justify-center', roomClassName)}>
-      <div className="pointer-events-auto relative shrink-0" style={{ width, height, transform: `translate(${viewState.x}px, ${viewState.y}px)`, perspective: depth }}>
+      <div className="pointer-events-auto relative shrink-0" style={{ width, height, transform: `translate(${shift.x}px, ${shift.y}px)`, perspective: depth }}>
       <div
         ref={strip}
         role="group"
@@ -370,20 +388,20 @@ export function PatternView({ note, projectId, selectedId, onSelect, ridges, lim
       {/* Zoom, as on the canvas; its own pointer events, so a click never starts a pan */}
       <div className="pointer-events-auto absolute top-3 right-3 flex items-center gap-0.5 rounded-lg border border-border/70 bg-background p-0.5 shadow-panel [&>[data-slot=button]]:rounded-[calc(var(--radius)-3px)]"
         onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-        <IconButton label="Zoom out" onClick={() => setView((v) => zoomAround(v, 1 / 1.25, 0, 0))}><Minus /></IconButton>
-        <IconButton label="Zoom in" onClick={() => setView((v) => zoomAround(v, 1.25, 0, 0))}><Plus /></IconButton>
-        <IconButton label="Fit" onClick={() => setView(FIT)}><Maximize /></IconButton>
+        <IconButton label="Zoom out" onClick={() => setView(zoomAround(view, 1 / 1.25, 0, 0, fit))}><Minus /></IconButton>
+        <IconButton label="Zoom in" onClick={() => setView(zoomAround(view, 1.25, 0, 0, fit))}><Plus /></IconButton>
+        <IconButton label="Fit" onClick={refit}><Maximize /></IconButton>
       </div>
       </div>
     </div>
   )
 }
 
-/** The view zoomed by `factor` about a point given from the middle of the view, px, which stays put */
-function zoomAround(v: View, factor: number, cx: number, cy: number): View {
-  const zoom = clamp(v.zoom * factor, ZOOM_LIMITS.min, ZOOM_LIMITS.max)
-  const k = zoom / v.zoom
-  return { zoom, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k }
+/** The view zoomed by `factor` about a point given from the middle of the view, px, which stays put; within ZOOM_LIMITS of its `fit` */
+function zoomAround(v: View, factor: number, cx: number, cy: number, fit: number): View {
+  const scale = clamp(v.scale * factor, fit * ZOOM_LIMITS.min, fit * ZOOM_LIMITS.max)
+  const k = scale / v.scale
+  return { scale, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k }
 }
 
 /**

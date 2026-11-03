@@ -65,6 +65,8 @@ function strip() {
   const thickness = parseFloat(element.style.width)
   return { element, thickness, scale: thickness / 4 }
 }
+/** The selected section's length beside the thread, shown only while a section is selected */
+const sectionLength = () => screen.queryByTitle('The selected section\'s length along the thread')
 const at = (along: number, across: number) => {
   const { thickness, scale } = strip()
   return { clientX: across * thickness, clientY: along * scale, pointerId: 1 }
@@ -101,12 +103,10 @@ describe('thread editor', () => {
     expect(note().pattern!.mixed).toBe(true)
     expect(within(editor).getByRole('switch', { name: 'Mixed angles' }).getAttribute('aria-checked')).toBe('true')
 
-    // Select a lane in the list and delete it
+    // Select a lane in the list and delete it; its size shows beside the thread, not in the panel
     await user.click(within(editor).getByRole('button', { name: 'Lane ↕', exact: true }))
-    expect((screen.getByTitle("Left edge, from the thread's left edge").querySelector('input')!).value).toBe('2')
-    // The unit sits once on the Area title, leaving the narrow fields room for their values
-    expect(screen.getByTitle("Left edge, from the thread's left edge").textContent).toBe('Left')
-    expect(within(editor).getByRole('heading', { name: 'Area' }).parentElement!.textContent).toBe('Areamm')
+    expect(within(strip().element).getByTitle('The selected section\'s width across the thread').querySelector('input')!.value).toBe('2')
+    expect(within(editor).queryByRole('heading', { name: 'Area' })).toBeNull()
     await user.keyboard('{Delete}')
     expect(sections().map((s) => s.name)).toEqual(['Lane ↔'])
 
@@ -116,7 +116,7 @@ describe('thread editor', () => {
     const drawn = sections()[1]
     expect(drawn).toMatchObject({ name: 'Section 2', startMm: 0.5, endMm: 3, acrossStart: 0.75 })
     expect(drawn.acrossEnd).toBeCloseTo(11 / 12, 9)
-    expect(screen.getByTitle('Where the section starts, from the start of the repeat').querySelector('input')!.value).toBe('0.5')
+    expect(sectionLength()!.querySelector('input')!.value).toBe('2.5')
 
     // Move it 1 mm along, until it meets the end of the repeat
     const body = () => strip().element.querySelector(`[data-section-id="${drawn.id}"][data-copy="0"]`)!
@@ -134,11 +134,11 @@ describe('thread editor', () => {
     // A click on empty thread deselects; Escape deselects, then leaves
     fireEvent.pointerDown(strip().element, { button: 0, buttons: 1, ...at(0.5, 0.75) })
     fireEvent.pointerUp(strip().element, { button: 0, ...at(0.5, 0.75) })
-    expect(screen.queryByTitle('Where the section starts, from the start of the repeat')).toBeNull()
+    expect(sectionLength()).toBeNull()
     await user.click(within(editor).getByRole('button', { name: 'Section 2', exact: true }))
-    expect(screen.getByTitle('Where the section starts, from the start of the repeat')).toBeDefined()
+    expect(sectionLength()).not.toBeNull()
     await user.keyboard('{Escape}')
-    expect(screen.queryByTitle('Where the section starts, from the start of the repeat')).toBeNull()
+    expect(sectionLength()).toBeNull()
     expect(screen.getByRole('region', { name: 'Thread editor' })).toBeDefined()
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('region', { name: 'Thread editor' })).toBeNull()
@@ -412,7 +412,7 @@ describe('thread editor', () => {
     const picture = () => within(editor).getByRole('button', { name: /^Split band/ }).querySelector('svg')!
     expect([picture().style.width, picture().style.height]).toEqual(['40px', '52px'])
     act(() => updateNote(useProjects.getState().demoPreview!.id, note().id, (n) => ({ ...n, thread: { ...n.thread, direction: 'horizontal' } })))
-    expect([picture().style.width, picture().style.height]).toEqual(['84px', '32px'])
+    expect([picture().style.width, picture().style.height]).toEqual(['76px', '29px'])
     act(() => updateNote(useProjects.getState().demoPreview!.id, note().id, (n) => ({ ...n, thread: { ...n.thread, direction: 'vertical' } })))
 
     // Split band: tilting up or down changes only the ↕ lane, tilting sideways only the ↔ lane
@@ -470,6 +470,7 @@ describe('thread editor', () => {
     const user = await openDemo('thread-view-ui-test')
     await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
+    const { scale } = strip()
 
     // A drag around the thread tilts it, as on the canvas, and never draws
     const view = strip().element.parentElement!.parentElement!.parentElement!
@@ -494,6 +495,12 @@ describe('thread editor', () => {
     expect(sections()[0].acrossEnd).toBe(0.5)
     type('Thread width vertically, or height horizontally', '5')
     expect(note().thread.widthMm).toBe(5)
+    // Changing the thickness or the repeat keeps the zoom, so the thread itself grows, over three repeats however long
+    expect(parseFloat(strip().element.style.width)).toBeCloseTo(5 * scale, 6)
+    type('Length of one repeat of the pattern along the thread', '40')
+    expect(note().pattern!.repeatMm).toBe(40)
+    expect(parseFloat(strip().element.style.height)).toBeCloseTo(3 * 40 * scale, 6)
+    expect(strip().element.querySelectorAll('[data-repeat-edge]')).toHaveLength(2)
     // Nothing is selected: only the thread's own measurements show
     await user.keyboard('{Escape}')
     expect(within(strip().element).queryByTitle('The selected section\'s length along the thread')).toBeNull()
@@ -504,8 +511,12 @@ describe('thread editor', () => {
     expect(strip().element.querySelectorAll('pattern').length).toBeGreaterThan(0)
     expect(strip().element.querySelector('rect[fill^="url("]')).not.toBeNull()
 
-    // The thread can be turned from the panel
-    await user.click(within(editor).getByRole('button', { name: 'Horizontal', exact: true }))
-    expect(note().thread.direction).toBe('horizontal')
+    // The panel sets the artwork, which lives only here; where the thread sits is set on the canvas
+    expect(within(editor).queryByRole('button', { name: 'Horizontal', exact: true })).toBeNull()
+    expect(within(editor).getByRole('heading', { name: 'Artwork' })).toBeDefined()
+    await user.click(within(editor).getByRole('switch', { name: 'Background' }))
+    expect(note().thread.backgroundColor).toBe('#ffffff')
+    fireEvent.change(within(editor).getByTitle('Space between complete image copies along the thread').querySelector('input')!, { target: { value: '2' } })
+    expect(note().thread.imageGapMm).toBe(2)
   })
 })
