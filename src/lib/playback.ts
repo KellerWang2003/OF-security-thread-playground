@@ -9,11 +9,13 @@ export const PLAYBACK_CURVES: { value: PlaybackCurve; label: string }[] = [
 ]
 export const SPEED_LIMITS = { min: 0.25, max: 4, step: 0.25 }
 export const HOLD_LIMITS = { min: 0, max: 3, step: 0.1 }
-export const DEFAULT_PLAYBACK = { speed: 1, curve: 'smooth' as PlaybackCurve, holdSeconds: 0 }
+/** New banknotes play at 0.75× (Keller, 3 November: 1× felt fast); a project keeps the speed it was saved with */
+export const DEFAULT_PLAYBACK = { speed: 0.75, curve: 'smooth' as PlaybackCurve, holdSeconds: 0 }
 export type PlaybackSettings = Pick<TiltSettings, 'speed' | 'curve' | 'holdSeconds'>
 
 export function playbackSettings(settings: PlaybackSettings = {}) {
   return {
+    // Saves from before playback settings played at 1×, and still do
     speed: Number.isFinite(settings.speed) ? clamp(settings.speed!, SPEED_LIMITS.min, SPEED_LIMITS.max) : 1,
     curve: PLAYBACK_CURVES.some((c) => c.value === settings.curve) ? settings.curve! : DEFAULT_PLAYBACK.curve,
     holdSeconds: Number.isFinite(settings.holdSeconds) ? clamp(settings.holdSeconds!, HOLD_LIMITS.min, HOLD_LIMITS.max) : 0,

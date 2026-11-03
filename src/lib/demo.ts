@@ -2,14 +2,13 @@ import { BIRD_WORDS, drawDemoArt, type DemoArt } from './demoArt'
 import { storeImageAs } from './images'
 import { DEFAULT_TILT, createNote, createProject } from './notes'
 import { defaultPattern } from './pattern'
-import { presetPattern } from './patternPresets'
 import type { Frame, Note, PlaybackMove, Project, TiltSettings } from './types'
 
 /**
  * The demo the project list's Demo button opens. It is built here, its artwork drawn in code (demoArt.ts), so it
  * ships with the app and changes only with it. Banknote 1 shows the watermark beside the flapping bird; Banknote 2
- * what Thread Studio does: images placed in the repeat, colour and background fills, and two lanes of Mixed angles.
- * Its playlist shows both in one loop.
+ * what Thread Studio does: images placed in the repeat, and colour and background fills. Mixed angles stays out of
+ * it until it is known to be printable (Keller). Its playlist plays both.
  */
 
 /** The artwork's ids, fixed so opening the demo again reuses what it stored instead of adding more */
@@ -31,12 +30,9 @@ const newId = () => crypto.randomUUID()
 
 /** The demo, with fresh ids every time; its artwork is referred to by DEMO_ART's ids */
 export function demoProject(): Project {
-  // Playback for both: up/down and side to side far enough for the watermark to come out fully, then held to the light
-  const moves: PlaybackMove[] = [
-    { id: newId(), kind: 'y', from: -30, y: 30 },
-    { id: newId(), kind: 'x', from: -30, x: 30 },
-    { id: newId(), kind: 'light' },
-  ]
+  // Playback for both: up and down far enough for the watermark to come out fully at either end; no light, which
+  // only matters flat
+  const moves: PlaybackMove[] = [{ id: newId(), kind: 'y', from: -30, y: 30 }]
   const tilt: TiltSettings = { ...DEFAULT_TILT, transition: 0.3, moves }
   const windowAt = (startMm: number, endMm: number) => ({ id: newId(), startMm, endMm })
 
@@ -55,9 +51,8 @@ export function demoProject(): Project {
     watermark: { imageId: DEMO_ART.portrait, xMm: 10, yMm: 18.5, widthMm: 30, heightMm: 37.5, depth: 0.8 },
   }
 
-  // Banknote 2: a frame of each fill, the star and the bird's head placed apart in the 16 mm repeat, and Split band,
-  // whose lanes play up/down and side to side with Mixed angles
-  const second = createNote({ name: 'Two-lane thread', x: 170, y: 0, widthMm: 75, heightMm: 150, color: '#9A8BC6' })
+  // Banknote 2: a frame of each fill, and the star and the bird's head placed apart in the 16 mm repeat
+  const second = createNote({ name: 'Star thread', x: 170, y: 0, widthMm: 75, heightMm: 150, color: '#9A8BC6' })
   const studio: Note = {
     ...second,
     background: 'image',
@@ -73,7 +68,7 @@ export function demoProject(): Project {
     pattern: defaultPattern(16),
   }
 
-  return { ...createProject('Silly bird demo'), notes: [watermark, { ...studio, pattern: presetPattern(studio, 'split') }] }
+  return { ...createProject('Silly bird demo'), notes: [watermark, studio] }
 }
 
 let drawn: Promise<DemoArt> | undefined

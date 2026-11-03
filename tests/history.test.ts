@@ -133,7 +133,8 @@ describe('undo in one banknote’s thread editor', () => {
     // An older project where B plays faster than A: playback set to A's speed for every banknote leaves A as it was
     project = { ...project, notes: project.notes.map((n, i) => (i === 1 ? { ...n, tilt: { ...n.tilt, speed: 2 } } : n)) }
     const before = JSON.stringify(project.notes[0])
-    project = edit(project, (p) => ({ ...p, notes: p.notes.map((n) => ({ ...n, tilt: { ...n.tilt, speed: 1 } })) }))
+    const { speed } = project.notes[0].tilt
+    project = edit(project, (p) => ({ ...p, notes: p.notes.map((n) => ({ ...n, tilt: { ...n.tilt, speed } })) }))
     expect(JSON.stringify(project.notes[0])).toBe(before)
     // Still undoable from A's editor, and an edit to A on top of it too, one after the other
     project = editNote(project, 0, (n) => ({ ...n, tilt: { ...n.tilt, cycleDeg: 40 } }))

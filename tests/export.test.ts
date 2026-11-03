@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { exportLayout, exportSize, perspectiveFor, playbackAngles, projectRow, sourceRow, tiltedBounds } from '../src/lib/exportRender'
 import { createNote } from '../src/lib/notes'
+import { DEFAULT_PLAYBACK } from '../src/lib/playback'
 import { copyStarts, imageBox } from '../src/lib/artwork'
 
 vi.mock('../src/lib/images', () => ({ loadImageUrl: async () => undefined }))
@@ -70,7 +71,8 @@ describe('layout', () => {
     expect(together.height).toBe(720)
     expect(apart.height).toBe(720)
     expect(apart.width).toBeLessThan(together.width)
-    expect(apart.seconds).toBeCloseTo(2)
+    // One sweep out and back takes 2 s at 1×
+    expect(apart.seconds).toBeCloseTo(2 / DEFAULT_PLAYBACK.speed)
   })
 
   it('hits the chosen resolution with tilt, and keeps wide rows within 4K', () => {

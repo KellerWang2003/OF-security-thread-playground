@@ -9,8 +9,10 @@
 const FACE_PX = 12
 
 interface Palette {
-  /** The paper, from one end of the banknote to the other: mid-tones, so a watermark has room to brighten them */
+  /** The paper, from one end of the banknote to the other */
   paper: [string, string]
+  /** The unprinted paper a watermark sits in, as r, g, b: almost white, with the paper's tint (Keller) */
+  plain: string
   /** Fine lines a little darker and lighter than the paper */
   dark: string
   light: string
@@ -19,8 +21,8 @@ interface Palette {
   edge: string
 }
 
-const GREENS: Palette = { paper: ['#8DB49C', '#729B84'], dark: 'rgba(28, 76, 56, 0.5)', light: 'rgba(232, 246, 237, 0.45)', ink: '#E6F3EA', edge: '#2A5A46' }
-const VIOLETS: Palette = { paper: ['#A698D0', '#8676B9'], dark: 'rgba(50, 36, 102, 0.5)', light: 'rgba(242, 238, 252, 0.45)', ink: '#F1EDFB', edge: '#43347C' }
+const GREENS: Palette = { paper: ['#8DB49C', '#729B84'], plain: '226, 239, 229', dark: 'rgba(28, 76, 56, 0.5)', light: 'rgba(232, 246, 237, 0.45)', ink: '#E6F3EA', edge: '#2A5A46' }
+const VIOLETS: Palette = { paper: ['#A698D0', '#8676B9'], plain: '236, 232, 248', dark: 'rgba(50, 36, 102, 0.5)', light: 'rgba(242, 238, 252, 0.45)', ink: '#F1EDFB', edge: '#43347C' }
 
 const MICROTEXT = 'SILLY BIRD DEMO · '
 
@@ -157,6 +159,22 @@ function rosette(g: CanvasRenderingContext2D, cx: number, cy: number, size: numb
   }
 }
 
+/** Lays the unprinted paper a watermark sits in over an oval, its edge fading into the print round it */
+function plainOval(g: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number, p: Palette) {
+  g.save()
+  g.translate(cx, cy)
+  g.scale(rx, ry)
+  const fill = g.createRadialGradient(0, 0, 0, 0, 0, 1)
+  fill.addColorStop(0, `rgba(${p.plain}, 1)`)
+  fill.addColorStop(0.84, `rgba(${p.plain}, 1)`)
+  fill.addColorStop(1, `rgba(${p.plain}, 0)`)
+  g.fillStyle = fill
+  g.beginPath()
+  g.arc(0, 0, 1, 0, Math.PI * 2)
+  g.fill()
+  g.restore()
+}
+
 /** A fine scalloped ring round the plain paper a watermark sits in */
 function ovalRing(g: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number, p: Palette) {
   g.lineWidth = 0.08
@@ -212,7 +230,10 @@ function paper(width: number, height: number, p: Palette, vertical: boolean) {
   return { canvas, g }
 }
 
-/** Banknote 1's face, 150 × 75 mm: plain paper in an oval on the left for the watermark, a rosette, the thread's place at 100 mm */
+/**
+ * Banknote 1's face, 150 × 75 mm: almost white unprinted paper in an oval on the left for the watermark, a rosette,
+ * the thread's place at 100 mm
+ */
 async function drawWatermarkFace() {
   const width = 150
   const height = 75
@@ -223,6 +244,7 @@ async function drawWatermarkFace() {
   waves(layer.g, width, height, p)
   clearOval(layer.g, 25, 37.5, 18.5, 28)
   g.drawImage(layer.canvas, 0, 0, width, height)
+  plainOval(g, 25, 37.5, 18.5, 28, p)
   ovalRing(g, 25, 37.5, 18.5, 28, p)
   rosette(g, 70, 37.5, 17, p)
   rosette(g, 124, 25, 10, p)

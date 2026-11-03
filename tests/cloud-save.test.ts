@@ -55,15 +55,14 @@ describe('saving to the cloud', () => {
     expect(cloud.uploads.toSorted()).toEqual([note.faceImageId, note.watermark!.imageId, note.frames[2].imageId].toSorted())
   })
 
-  it('saves the demo with all it shows: a watermark, placed images, every fill, two lanes and a playlist', async () => {
+  it('saves the demo with all it shows: a watermark, placed images, every fill and a playlist, but no mixed angles', async () => {
     const demo = demoProject()
-    const [bird, lanes] = demo.notes
+    const [bird, stars] = demo.notes
     expect(bird.watermark?.imageId).toBe(DEMO_ART.portrait)
-    expect(lanes.frames.map((f) => f.kind)).toEqual(['color', 'image', 'none', 'image'])
-    expect(lanes.frames.filter((f) => f.kind === 'image').every((f) => f.place)).toBe(true)
-    expect(lanes.pattern?.mixed).toBe(true)
-    expect(lanes.pattern?.sections.map((s) => s.lens?.effect)).toEqual(['side', 'updown'])
-    expect(demo.notes.map((n) => n.tilt.moves?.map((m) => m.kind))).toEqual([['y', 'x', 'light'], ['y', 'x', 'light']])
+    expect(stars.frames.map((f) => f.kind)).toEqual(['color', 'image', 'none', 'image'])
+    expect(stars.frames.filter((f) => f.kind === 'image').every((f) => f.place)).toBe(true)
+    expect(demo.notes.map((n) => [n.pattern?.mixed, n.pattern?.sections.length])).toEqual([[false, 1], [false, 1]])
+    expect(demo.notes.map((n) => n.tilt.moves?.map((m) => m.kind))).toEqual([['y'], ['y']])
     // It opens as it was built: nothing for an old save's migrations to change
     expect(migrateProject(structuredClone(demo))).toEqual(demo)
     expect(projectImageIds(demo).toSorted()).toEqual([...DEMO_ART.faces, DEMO_ART.portrait, DEMO_ART.star, DEMO_ART.birdHead, ...DEMO_ART.birds].toSorted())
