@@ -302,6 +302,14 @@ describe('thread editor', () => {
       expect(strip().element.querySelectorAll('[data-section-id]')).toHaveLength(3 * names.length)
     }
 
+    // Each preset's picture keeps its own size inside its button, which would otherwise shrink an svg to an icon,
+    // and still fits the panel's two columns: tall on a vertical thread, wide on a horizontal one
+    const picture = () => within(editor).getByRole('button', { name: /^Split band/ }).querySelector('svg')!
+    expect([picture().style.width, picture().style.height]).toEqual(['40px', '52px'])
+    act(() => updateNote(useProjects.getState().demoPreview!.id, note().id, (n) => ({ ...n, thread: { ...n.thread, direction: 'horizontal' } })))
+    expect([picture().style.width, picture().style.height]).toEqual(['84px', '32px'])
+    act(() => updateNote(useProjects.getState().demoPreview!.id, note().id, (n) => ({ ...n, thread: { ...n.thread, direction: 'vertical' } })))
+
     // Split band: tilting up or down changes only the ↕ lane, tilting sideways only the ↔ lane
     await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
     const colour = (i: number) => strip().element.querySelector<HTMLElement>(`[data-section="${i}"] > div`)!.style.backgroundColor

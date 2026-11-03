@@ -30,7 +30,8 @@ export function PatternPicture({ note, pattern = note.pattern, width = 56, heigh
       : { x: along0, y: across0, width: along1 - along0, height: across1 - across0 }
   }
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-hidden
+    // Sized inline as well: inside a Button, its `[&_svg]:size-4` would otherwise squash the picture to an icon
+    <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} style={{ width, height }} aria-hidden
       className={cn('shrink-0 overflow-hidden rounded-[3px] bg-muted', className)}>
       <defs>
         {sections.map((s, i) => (
