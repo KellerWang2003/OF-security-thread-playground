@@ -275,6 +275,13 @@ describe('username workspace editor', () => {
     await user.click(fill()!)
     expect(screen.getAllByRole('button', { name: /^(Colour|Image)$/ }).map((b) => b.textContent)).toEqual(['Colour', 'Image'])
     expect(screen.queryByRole('switch', { name: 'Background colour' })).toBeNull()
+    // Image starts empty, an image to add with its button, rather than asking for a file straight away (Keller)
+    await user.click(screen.getByRole('button', { name: 'Image', exact: true }))
+    expect(note().frames[emptied].kind).toBe('image')
+    expect(note().frames[emptied].imageId).toBeUndefined()
+    expect(screen.getByRole('button', { name: 'Upload image' })).toBeDefined()
+    await user.click(screen.getByRole('button', { name: 'Colour', exact: true }))
+    expect(note().frames[emptied].kind).toBe('color')
     await user.click(fill()!)
     // There is no Image gap any more
     expect(screen.queryByTitle('Space between complete image copies along the thread')).toBeNull()

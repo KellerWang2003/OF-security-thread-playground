@@ -61,8 +61,9 @@ export function FillPopover({ noteRef, frame, trigger, side = 'left', align = 's
             { value: 'color', label: 'Colour' },
             { value: 'image', label: 'Image' },
           ]}
-          // An image needs one first; a frame that had one gets it back
-          onChange={(kind) => (kind === 'image' && !frame.imageId ? void upload() : set({ kind }))}
+          // Image starts empty, to add one with the button under it, rather than asking for a file at once (Keller); a
+          // frame that had one gets it back
+          onChange={(kind) => set({ kind })}
         />
         {frame.kind === 'color' && <ColorField value={frame.color} onChange={(color) => set({ color })} />}
         {frame.kind === 'image' && (
