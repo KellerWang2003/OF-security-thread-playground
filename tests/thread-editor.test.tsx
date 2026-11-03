@@ -56,6 +56,9 @@ async function openDemo(workspace: string) {
   return user
 }
 
+/** The panel's Edit thread; the canvas shows another just under the selected thread */
+const editThread = () => screen.getAllByRole('button', { name: 'Edit thread', exact: true }).find((button) => !button.closest('[data-edit-thread]'))!
+
 /** The magnified thread, and its scale: the demo thread is 4 mm wide, and the strip's coordinates are client coordinates (jsdom lays nothing out) */
 function strip() {
   const element = document.querySelector<HTMLElement>('[data-pattern-view]')!
@@ -75,7 +78,7 @@ function drag(target: Element, from: { along: number; across: number }, to: { al
 describe('thread editor', () => {
   it('opens from the panel, applies a preset, and draws, moves, resizes and deletes sections with undo', async () => {
     const user = await openDemo('thread-editor-ui-test')
-    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     // The canvas panels make way for it
     expect(screen.queryByRole('button', { name: 'Export', exact: true })).toBeNull()
@@ -129,10 +132,14 @@ describe('thread editor', () => {
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('region', { name: 'Thread editor' })).toBeNull()
 
-    // Back on the canvas, the banknote's thread is still selected, with Edit thread to go back in
+    // Back on the canvas, the banknote's thread is still selected, with Edit thread to go back in, in the panel and under the thread
     expect(screen.getByRole('button', { name: 'Export', exact: true })).toBeDefined()
     expect(screen.getByRole('heading', { name: 'Security thread', exact: true })).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Edit thread', exact: true })).toBeDefined()
+    expect(screen.getAllByRole('button', { name: 'Edit thread', exact: true })).toHaveLength(2)
+    await user.click(within(document.querySelector<HTMLElement>('[data-edit-thread]')!).getByRole('button', { name: 'Edit thread' }))
+    expect(screen.getByRole('region', { name: 'Thread editor' })).toBeDefined()
+    // Nothing of the canvas's under it
+    expect(document.querySelector('[data-edit-thread]')).toBeNull()
   })
 
   it('adds, duplicates and renames sections, and edits each section’s lens only while angles are mixed', async () => {
@@ -189,7 +196,7 @@ describe('thread editor', () => {
 
   it('selects the next section after a delete, else the one before', async () => {
     const user = await openDemo('thread-delete-select-ui-test')
-    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
     // Splitting the first lane puts the new half straight after it, named after it and selected
@@ -214,7 +221,7 @@ describe('thread editor', () => {
 
   it('fills the gap a deleted section leaves, from the No gaps check or with a double-click on it', async () => {
     const user = await openDemo('thread-fill-gaps-ui-test')
-    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
     const [side, updown] = sections()
@@ -257,7 +264,7 @@ describe('thread editor', () => {
 
   it('keeps a lens in the panel with nothing selected: the shared one, or with mixed angles the whole print', async () => {
     const user = await openDemo('thread-deselect-ui-test')
-    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     await user.keyboard('{Escape}')
     expect(within(editor).queryByRole('heading', { name: 'Whole thread' })).toBeNull()
@@ -285,7 +292,7 @@ describe('thread editor', () => {
     const offsetTitle = 'Where the print lands along the thread: a preview, not saved in the project'
     // One section over the whole thread looks the same wherever it lands: no offset to set
     expect(screen.queryByTitle(offsetTitle)).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     await user.click(within(editor).getByRole('button', { name: /^Alternating/ }))
     // A repeat longer than the 8 mm windows, so a window can sit inside one block
@@ -325,7 +332,7 @@ describe('thread editor', () => {
     act(() => addNote(project().id, createNote({ name: 'Other', x: 200, y: 0, widthMm: 150, heightMm: 70, color: '#654321' })))
     const other = project().notes[1].id
     act(() => updateNote(project().id, other, (n) => ({ ...n, name: 'Other renamed' })))
-    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     const undo = () => within(editor).getByRole('button', { name: 'Undo', exact: true }) as HTMLButtonElement
     const redo = () => within(editor).getByRole('button', { name: 'Redo', exact: true }) as HTMLButtonElement
@@ -359,7 +366,7 @@ describe('thread editor', () => {
 
   it('applies each preset, and the magnified thread follows the tilt section by section', async () => {
     const user = await openDemo('thread-presets-ui-test')
-    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     const presets: [string, string[]][] = [
       ['Split band', ['Lane ↔', 'Lane ↕']],
@@ -410,7 +417,7 @@ describe('thread editor', () => {
 
   it('draws every section\'s ridges the way the print cuts them', async () => {
     const user = await openDemo('thread-ridges-ui-test')
-    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    await user.click(editThread())
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     await user.click(within(editor).getByRole('button', { name: /^Chevron lock/ }))
     await user.click(within(editor).getByRole('button', { name: 'Ridges', exact: true }))

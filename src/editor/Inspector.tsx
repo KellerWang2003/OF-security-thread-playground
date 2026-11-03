@@ -1,5 +1,5 @@
 import { reportError } from '../cloud/notices'
-import { ImageUp, RectangleHorizontal, RectangleVertical, Share, Shuffle, TriangleAlert, X } from 'lucide-react'
+import { Columns2, ImageUp, RectangleHorizontal, RectangleVertical, Rows2, Share, Shuffle, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ColorField, Group, IconButton, Panel, ScrubField, Section, Segmented, SwitchField } from '../components/controls'
 import { clamp } from '../lib/frames'
@@ -12,6 +12,7 @@ import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
 import { fitWatermark, moveWatermarkTo } from '../lib/watermark'
+import { EffectSection, LensMenu, ThreadPrint, type SetLens } from './EffectSection'
 import { PanelResizer } from './PanelResizer'
 import { WatermarkPanel } from './WatermarkPanel'
 import { WindowsCard } from './WindowsCard'
@@ -21,9 +22,9 @@ import type { Layer } from './watermarkActions'
 type Change = (note: Note) => Note
 
 /**
- * Right: the selected layer of the selected banknote, Figma style: the banknote itself (size, background), its
- * security thread with the way into the thread editor (where its lens effect is edited), or its watermark. One at a
- * time, so the panel never grows with features.
+ * Right: the selected banknote's own settings (size, background), always, and under them the layer picked, if any:
+ * its security thread (placement, artwork, and its lens with the way into the thread editor) or its watermark. One
+ * layer at a time, so the panel never grows with features.
  */
 export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSelect, onExport, onEditThread, onPlaceWatermark, onRemoveWatermark }: {
   note: Note
@@ -85,7 +86,6 @@ export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSele
         <Button variant="outline" size="sm" onClick={onExport}><Share />Export</Button>
       </div>
 
-      {layer === 'note' && (
       <Group title="Banknote">
       <Section nested>
         <Segmented
@@ -146,11 +146,10 @@ export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSele
         )}
       </Section>
       </Group>
-      )}
 
+      {/* The picked layer is a section of its own under the banknote's settings, titled with its icon from the list */}
       {layer === 'thread' && (
-      <>
-      <Group title="Security thread">
+      <Group title="Security thread" icon={thread.direction === 'vertical' ? <Columns2 /> : <Rows2 />}>
       <Section nested>
         <Segmented
           value={thread.direction}
@@ -206,15 +205,9 @@ export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSele
         />
       </Section>
 
+      <LensEffect note={note} noteRef={noteRef} onEditThread={onEditThread} />
+      <PrintOffset note={note} onWindowSelect={onWindowSelect} />
       </Group>
-
-      <Group title="Lens effect">
-        <Section nested>
-          <Button size="sm" onClick={onEditThread}>Edit thread</Button>
-        </Section>
-        <PrintOffset note={note} onWindowSelect={onWindowSelect} />
-      </Group>
-      </>
       )}
 
       {layer === 'watermark' && note.watermark && (
@@ -223,6 +216,25 @@ export function Inspector({ note, noteRef, layer, selectedWindowId, onWindowSele
     </Panel>
     </>
   )
+}
+
+/**
+ * The thread's lens, a section of the thread: Edit thread first, into the thread editor, then the lens's basic
+ * controls and its preview (the tilt map, or the print), as in the thread editor. With mixed angles there is no one
+ * lens to show, so the print of every section together.
+ */
+function LensEffect({ note, noteRef, onEditThread }: { note: Note; noteRef: NoteRef; onEditThread: () => void }) {
+  const set: SetLens = (patch) => updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, tilt: { ...n.tilt, ...patch } }))
+  const edit = <Button size="sm" onClick={onEditThread}>Edit thread</Button>
+  if (patternOf(note).mixed) {
+    return (
+      <Section nested title="Lens effect" action={<span className="text-[11px] text-muted-foreground" title="Mixed angles is on: each section plays its own lens">Mixed</span>}>
+        {edit}
+        <ThreadPrint note={note} />
+      </Section>
+    )
+  }
+  return <EffectSection note={note} set={set} title="Lens effect" action={<LensMenu note={note} set={set} />}>{edit}</EffectSection>
 }
 
 /**

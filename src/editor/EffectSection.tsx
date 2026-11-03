@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, EyeOff, MoreHorizontal } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -87,9 +87,17 @@ export function LensMenu({ note, set }: { note: Pick<Note, 'frames' | 'tilt'>; s
 /**
  * A lens, as an effect: what tilting does. Each effect asks only what it needs and works out the rest; Custom
  * exposes the raw values. `note` is the banknote, or one thread section as the lens sees it (`sectionView`: its
- * strips as frames, its own lens); the print shows `printNote`, the whole thread.
+ * strips as frames, its own lens); the print shows `printNote`, the whole thread. The right panel gives its first
+ * section a title and puts Edit thread (`children`) above the effect.
  */
-export function EffectSection({ note, set, printNote = note }: { note: Note; set: SetLens; printNote?: Note }) {
+export function EffectSection({ note, set, printNote = note, title, action, children }: {
+  note: Note
+  set: SetLens
+  printNote?: Note
+  title?: string
+  action?: ReactNode
+  children?: ReactNode
+}) {
   const { tilt } = note
   const lens = lensState(tilt, note.frames)
   const [setBy, setSetBy] = useState<'tilt' | 'lens'>('tilt')
@@ -115,7 +123,8 @@ export function EffectSection({ note, set, printNote = note }: { note: Note; set
   }
   return (
     <>
-    <Section nested>
+    <Section nested title={title} action={action}>
+      {children}
       <EffectPicker note={note} lens={lens} onChoose={chooseEffect} />
 
       {/* The main controls first: which tilt hides frames, where flat sits and how far each tilt reaches, the wobble

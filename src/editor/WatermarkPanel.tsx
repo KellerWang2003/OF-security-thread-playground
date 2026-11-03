@@ -1,4 +1,4 @@
-import { ImageUp, Trash2, X } from 'lucide-react'
+import { Droplet, ImageUp, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Group, IconButton, ScrubField, Section, SwitchField } from '../components/controls'
 import { reportError } from '../cloud/notices'
@@ -24,7 +24,7 @@ export function WatermarkPanel({ note, watermark, noteRef, onPlace, onRemove }: 
   const change = (next: (w: Watermark, n: Note) => Watermark) => updateWatermark(noteRef, next)
 
   return (
-    <Group title="Watermark" action={<IconButton label="Remove watermark" className="text-muted-foreground" onClick={onRemove}><Trash2 /></IconButton>}>
+    <Group title="Watermark" icon={<Droplet />} action={<IconButton label="Remove watermark" className="text-muted-foreground" onClick={onRemove}><Trash2 /></IconButton>}>
       <Section nested>
         <div className="flex items-center gap-2">
           <Button

@@ -8,6 +8,7 @@ import App from '../src/App'
 import { addNote, updateNote, useProjects } from '../src/lib/store'
 import { createNote, migrateProject } from '../src/lib/notes'
 import { newWatermark } from '../src/lib/watermark'
+import { presetPattern } from '../src/lib/patternPresets'
 import { setTilt, useTilt } from '../src/tilt/tilt'
 import { TooltipProvider } from '../src/components/ui/tooltip'
 
@@ -140,26 +141,26 @@ describe('username workspace editor', () => {
       fireEvent.pointerUp(target, { button: 0, pointerId: 1, clientX: 100, clientY: 100 })
     }
 
-    // The thread, then another banknote: that banknote itself, not its thread
+    // The thread (under the banknote's own settings, which always show), then another banknote: that banknote itself, not its thread
     click(body(0).querySelector('[data-thread]')!)
-    expect(shown()).toEqual(['Security thread'])
+    expect(shown()).toEqual(['Banknote', 'Security thread'])
     click(body(1))
     expect(shown()).toEqual(['Banknote'])
     expect(width()).toBe('100')
 
     // Tilting the selected banknote by dragging it leaves its layer showing; a click picks the banknote itself
     click(body(1).querySelector('[data-thread]')!)
-    expect(shown()).toEqual(['Security thread'])
+    expect(shown()).toEqual(['Banknote', 'Security thread'])
     fireEvent.pointerDown(body(1), { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
     fireEvent.pointerMove(body(1), { buttons: 1, pointerId: 1, clientX: 100, clientY: 60 })
     fireEvent.pointerUp(body(1), { button: 0, pointerId: 1, clientX: 100, clientY: 60 })
-    expect(shown()).toEqual(['Security thread'])
+    expect(shown()).toEqual(['Banknote', 'Security thread'])
     click(body(1))
     expect(shown()).toEqual(['Banknote'])
 
     // The watermark, then the banknote under it, then the other banknote: each time just what was clicked
     click(body(0).querySelector('[data-watermark]')!)
-    expect(shown()).toEqual(['Watermark'])
+    expect(shown()).toEqual(['Banknote', 'Watermark'])
     click(body(0))
     expect(shown()).toEqual(['Banknote'])
     expect(width()).toBe('150')
@@ -170,10 +171,36 @@ describe('username workspace editor', () => {
 
     // The same in the list: a layer row, then another banknote's row
     await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
-    expect(shown()).toEqual(['Security thread'])
+    expect(shown()).toEqual(['Banknote', 'Security thread'])
     await user.click(screen.getByRole('button', { name: 'Demo banknote', exact: true }))
     expect(shown()).toEqual(['Banknote'])
     expect(width()).toBe('150')
+    expect(saves).not.toHaveBeenCalled()
+  })
+  it('keeps the banknote’s settings above the thread, whose lens shows its basic controls and preview under Edit thread', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'panel-lens-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
+    const note = () => useProjects.getState().demoPreview!.notes[0]
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+    expect(headings).toEqual(['Banknote', 'Security thread'])
+    expect(screen.getByText('W', { exact: true })).toBeDefined()
+
+    // The lens's controls and its tilt map, edited for this banknote right here
+    expect(screen.getByRole('combobox', { name: 'Effect' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Tilt map' })).toBeDefined()
+    fireEvent.change(screen.getByText('Cycle', { exact: true }).closest('div')!.querySelector('input')!, { target: { value: '41' } })
+    expect(note().tilt.cycleDeg).toBe(41)
+
+    // With mixed angles there is no one lens: the whole print instead
+    const demo = useProjects.getState().demoPreview!
+    act(() => updateNote(demo.id, demo.notes[0].id, (n) => ({ ...n, pattern: { ...presetPattern(n, 'split'), mixed: true } })))
+    expect(screen.getByText('Mixed', { exact: true })).toBeDefined()
+    expect(screen.getByRole('img', { name: 'Print' })).toBeDefined()
+    expect(screen.queryByRole('combobox', { name: 'Effect' })).toBeNull()
     expect(saves).not.toHaveBeenCalled()
   })
   it('outlines what a click would pick under the pointer, and only what is picked', async () => {
@@ -281,7 +308,8 @@ describe('username workspace editor', () => {
     await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
     const before = useProjects.getState().demoPreview!.notes.map((n) => n.tilt.cycleDeg)
     // The lens is edited in the thread editor
-    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    // The lens shows in the panel too; the full one is in the thread editor
+    await user.click(screen.getAllByRole('button', { name: 'Edit thread', exact: true }).find((button) => !button.closest('[data-edit-thread]'))!)
     const cycle = screen.getByText('Cycle', { exact: true }).closest('label, div')!.querySelector('input')!
     fireEvent.change(cycle, { target: { value: '47' } })
     fireEvent.blur(cycle)
@@ -482,12 +510,12 @@ describe('username workspace editor', () => {
     const placing = () => screen.queryByRole('group', { name: 'Place watermark' })
     const watermark = () => useProjects.getState().demoPreview!.notes[0].watermark
 
-    // The banknote's own row shows only the banknote; each layer under it shows its own panel
+    // The banknote's own row shows only the banknote; a layer under it adds its own section below the banknote's settings
     expect(heading('Banknote')).not.toBeNull()
     expect(heading('Security thread')).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
     expect(heading('Security thread')).not.toBeNull()
-    expect(heading('Banknote')).toBeNull()
+    expect(heading('Banknote')).not.toBeNull()
 
     // Adding the watermark selects it and shows the banknote flat with it clear, with its box to place; the tilt pad steps aside
     await user.click(screen.getByRole('button', { name: 'Add layer' }))

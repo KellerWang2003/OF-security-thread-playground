@@ -13,9 +13,12 @@ import { cn } from '@/lib/utils'
 
 const round = (value: number) => Math.round(value * 100) / 100
 
-/** A floating panel over the canvas */
+/**
+ * A floating panel over the canvas. Opaque, so a banknote behind it never tints it and washes out the fields' fill
+ * (Keller noticed W and H turning almost white)
+ */
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('rounded-lg border border-border/70 bg-background/95 shadow-panel backdrop-blur', className)}>{children}</div>
+  return <div className={cn('rounded-lg border border-border/70 bg-background shadow-panel', className)}>{children}</div>
 }
 
 /**
@@ -108,12 +111,12 @@ export function ScrubField({
 
 const clampValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-/** A top-level part of the banknote in the side panel (the banknote itself, the thread, later others) */
-export function Group({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+/** A top-level part of the banknote in the side panel (the banknote itself, the thread, later others); a layer shows its list icon */
+export function Group({ title, icon, action, children }: { title: string; icon?: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex flex-col border-b border-border/60 pt-3">
       <div className="flex h-5 items-center justify-between pr-2.5 pl-4">
-        <h2 className="text-[13px] font-semibold">{title}</h2>
+        <h2 className="flex items-center gap-1.5 text-[13px] font-semibold [&_svg]:size-3.5 [&_svg]:text-muted-foreground">{icon}{title}</h2>
         {action}
       </div>
       <div className="flex flex-col divide-y divide-border/40">{children}</div>

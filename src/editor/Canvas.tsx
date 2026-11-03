@@ -51,6 +51,12 @@ type Gesture =
   /** The watermark moves only once the drag passes a few px, so a click just picks it */
   | { mode: 'watermark'; noteId: string; startX: number; startY: number; original: Watermark; moved: boolean }
 
+/** Where the Edit thread button hangs, px from the banknote's top-left: under the thread's middle, or under the banknote at the thread for a vertical one */
+const threadButtonAt = ({ thread, widthMm, heightMm }: Note, scale: number) =>
+  thread.direction === 'vertical'
+    ? { left: thread.positionMm * scale, top: heightMm * scale }
+    : { left: (widthMm / 2) * scale, top: (thread.positionMm + thread.widthMm / 2) * scale }
+
 function fitView(notes: Note[], size: { width: number; height: number }): View {
   // A widened right panel takes more room
   const FIT_INSETS = { ...FIT, right: Math.max(FIT.right, usePanelWidth.getState().width + 36) }
@@ -118,7 +124,7 @@ export function Canvas({
   onExport: () => void
   /** A click on a thread window opens it for editing */
   onEditWindow?: (noteId: string, windowId: string) => void
-  /** A double-click on a thread opens the thread editor */
+  /** A double-click on a thread, or the Edit thread button under the picked one, opens the thread editor; left out while it is open */
   onEditThread?: (noteId: string) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -189,7 +195,7 @@ export function Canvas({
     element.style.backgroundSize = `${g}px ${g}px`
     element.style.backgroundPosition = `${v.x}px ${v.y}px`
     // Labels and the zoom readout stay their usual size and current while the layer scales
-    for (const label of content.current.querySelectorAll<HTMLElement>('[data-note-label]')) label.style.transform = k === 1 ? '' : `scale(${1 / k})`
+    for (const label of content.current.querySelectorAll<HTMLElement>('[data-note-label], [data-keep-size]')) label.style.transform = k === 1 ? '' : `scale(${1 / k})`
     const readout = element.querySelector('[data-zoom-readout]')?.firstChild
     if (readout) readout.nodeValue = `${Math.round(v.zoom * 100)}%`
   }
@@ -214,7 +220,7 @@ export function Canvas({
     if (content.current) {
       content.current.style.transform = ''
       content.current.style.willChange = ''
-      for (const label of content.current.querySelectorAll<HTMLElement>('[data-note-label]')) label.style.transform = ''
+      for (const label of content.current.querySelectorAll<HTMLElement>('[data-note-label], [data-keep-size]')) label.style.transform = ''
     }
     if (ref.current && current) {
       const g = gridStep(current.zoom * PX_PER_MM)
@@ -540,6 +546,13 @@ export function Canvas({
                     onChange={(sections) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, windows: { ...n.thread.windows, sections } } }))} />
                 )}
               </div>
+              {picked === 'thread' && !quiet && onEditThread && (
+                // Just under the picked thread (under the banknote for a vertical one), the way into the thread editor. It
+                // keeps its size while a zoom is under way, as the labels do, and takes its own clicks
+                <div data-edit-thread="" data-keep-size="" className="absolute origin-top -translate-x-1/2 pt-2" style={threadButtonAt(note, scale)} onPointerDown={(e) => e.stopPropagation()}>
+                  <Button size="sm" className="shadow-panel" onClick={() => onEditThread(note.id)}>Edit thread</Button>
+                </div>
+              )}
             </div>
           )
         })}
