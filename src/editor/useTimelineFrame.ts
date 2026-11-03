@@ -19,7 +19,7 @@ export function useTimelineFrame(note: Note, sectionId?: string) {
     const before = lengths.slice(0, strip).reduce((sum, l) => sum + l, 0)
     const total = lengths.reduce((sum, l) => sum + l, 0)
     const at = tiltForPosition(followed.lens, (before + (lengths.at(strip) ?? 0) / 2) / total)
-    setTilt({ source: 'slider', target: at.y, targetX: at.x })
+    setTilt({ source: 'timeline', target: at.y, targetX: at.x })
   }
   return { frame, index: note.frames.indexOf(frame), show }
 }

@@ -216,6 +216,13 @@ describe('username workspace editor', () => {
     expect(saves).not.toHaveBeenCalled()
   })
   it('handles frames on the timeline: a click goes to one, a drag reorders, × deletes, the pencil edits its fill, the line scrubs', async () => {
+    // The canvas needs a size to draw the banknotes
+    vi.stubGlobal('ResizeObserver', class {
+      callback: ResizeObserverCallback
+      constructor(callback: ResizeObserverCallback) { this.callback = callback }
+      observe() { this.callback([{ contentRect: { width: 1280, height: 720 } } as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      unobserve() {} disconnect() {}
+    })
     for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
       Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
     }
@@ -240,6 +247,13 @@ describe('username workspace editor', () => {
       expect(clip(id).classList.contains('ring-1')).toBe(true)
     }
     expect(open()).toBe('Thread')
+    // While the timeline has the tilt, the banknote lies flat, as Thread Studio's thread does (Keller); a drag turns it
+    const turn = () => document.querySelector<HTMLElement>('[data-note-body] .shadow-note')!.style.transform
+    expect(useTilt.getState().source).toBe('timeline')
+    expect(useTilt.getState().angle).not.toBe(0)
+    expect(turn()).toBe('')
+    act(() => setTilt({ source: 'drag' }))
+    expect(turn()).toContain('rotateX(')
 
     // A drag along the track moves a frame in the order, the others sliding aside while it goes
     fireEvent.pointerDown(clip(a), { button: 0, buttons: 1, clientX: 0, pointerId: 1 })

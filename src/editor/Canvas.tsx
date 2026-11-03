@@ -138,6 +138,8 @@ export function Canvas({
   // Not the angles themselves: each NoteView follows the tilt on its own, so the canvas doesn't re-render
   // every animation frame while tilting or playing
   const source = useTilt((s) => s.source)
+  // Scrubbing the timeline shows the banknotes flat, as Thread Studio's thread lies flat (Keller); a drag, the pad or play turns them again
+  const scrubbing = source === 'timeline'
   const perspective = useTilt((s) => s.perspective)
   const sheen = useTilt((s) => s.sheen)
   const frameNumbers = useTilt((s) => s.frameNumbers)
@@ -548,7 +550,7 @@ export function Canvas({
                 )}
               >
                 {/* Editing windows shows the banknote flat with its watermark faint; placing a layer, flat (the watermark clear) */}
-                <NoteView note={note} scale={scale} live perspective={perspective && !editingThis && !placingThis} sheen={sheen}
+                <NoteView note={note} scale={scale} live perspective={perspective && !scrubbing && !editingThis && !placingThis} sheen={sheen}
                   reveal={editingThis ? 0 : placingThis === 'watermark' ? 1 : undefined} showWindowCuts={editingThis} showFrameNumber={frameNumbers} offsetMm={offsets[note.id]}
                   selected={picked === 'note' || editingThis || placingThis || quiet ? undefined : picked} hovered={hovered === 'note' ? undefined : hovered}
                   faceShiftMm={drift && (drift.x || drift.y) ? drift : undefined} />

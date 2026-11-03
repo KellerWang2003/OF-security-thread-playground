@@ -202,7 +202,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
     if (!rect) return
     const u = clamp((clientX - rect.left - PAD) / (totalLength * pxPerUnit), 0, 1)
     const at = tiltForPosition(lens, u)
-    setTilt({ source: 'slider', target: at.y, targetX: at.x })
+    setTilt({ source: 'timeline', target: at.y, targetX: at.x })
   }
   /** Goes to the middle of a frame, as a click on its clip does */
   const goTo = (i: number) => scrubTo((track.current?.getBoundingClientRect().left ?? 0) + x((starts.at(i) ?? 0) + (lengths.at(i) ?? 0) / 2))

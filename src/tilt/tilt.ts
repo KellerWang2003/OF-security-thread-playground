@@ -4,8 +4,12 @@ import { TILT_LIMIT, clamp } from '../lib/frames'
 import { LIGHT_RAMP_SECONDS } from '../lib/light'
 import { lightAt, tiltAt, type PlaybackPlan } from '../lib/moves'
 
-/** drag springs back on release, slider scrubs within one cycle, hold stays at a set angle */
-export type TiltSource = 'drag' | 'wobble' | 'slider' | 'hold'
+/**
+ * drag springs back on release, slider scrubs within one cycle, timeline is the timeline scrubbing or going to a frame
+ * (as slider, with the banknotes lying flat on the canvas meanwhile, as Thread Studio's thread does; Keller), hold stays
+ * at a set angle
+ */
+export type TiltSource = 'drag' | 'wobble' | 'slider' | 'timeline' | 'hold'
 
 interface TiltState {
   source: TiltSource
@@ -144,7 +148,7 @@ export function useTiltLoop(plan: PlaybackPlan, limit = TILT_LIMIT) {
       } else {
         const light = approach(s.light, lightTarget(s), fade)
         ramp = light
-        const range = s.source === 'slider' ? Math.max(limit, Math.abs(s.target), Math.abs(s.targetX)) : limit
+        const range = s.source === 'slider' || s.source === 'timeline' ? Math.max(limit, Math.abs(s.target), Math.abs(s.targetX)) : limit
         const target = clamp(s.target, -range, range)
         const targetX = clamp(s.targetX, -range, range)
         velocity += ((target - s.angle) * stiffness - velocity * damping) * dt
