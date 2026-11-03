@@ -1,4 +1,4 @@
-project_id = "of-security-thread-playground"
+project_id = "banknote-playground"
 # Username workspaces use the publishable client without Supabase Auth.
 # This app does not manage project-wide Auth settings.
 

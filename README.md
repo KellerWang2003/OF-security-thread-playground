@@ -31,6 +31,8 @@ The backend is deployed to **General playground** (`swovjhbaoxlxodakauxo`). No e
 
 For Vercel, import this repo, keep the Vite preset, and add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from `.env.local`. Build with `npm run build`; output is `dist`. Set the variables for each Vercel environment you intend to use and redeploy after changing them. No database password or service-role key belongs in Vercel or the browser.
 
+Production is the Vercel project `banknote-playground`, deployed from `main`, at https://banknote-playground.vercel.app. The older https://of-playground.vercel.app serves the same deployment, with no redirect: a browser keeps its username, settings and offline copies per address, so anyone who started there keeps them.
+
 Existing browser projects appear under **Import browser projects** in the workspace's project list. Import them from the same browser and origin where they were created; the original copies are retained.
 
 See [backend and save behavior](docs/SUPABASE.md) for schema, deployment, recovery, and verification details.

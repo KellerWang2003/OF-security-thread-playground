@@ -2,7 +2,7 @@
 
 Banknote Playground: a design tool for previewing lenticular security threads on banknotes (Oberthur Fiduciaire x ArtCenter studio). See README.md for what it does and the code layout.
 
-The app is called Banknote Playground wherever a user sees it (page title, sign-in page, project list). Only those changed in the rename: the folder, repo, package, Vercel project and URL (of-playground.vercel.app), Supabase ids and the `of-playground.*` browser storage keys keep their older names. Don't rename the storage keys, since that would reset what users' browsers remember.
+The app is called Banknote Playground (renamed from Security thread playground on 3 November): page title, sign-in page, project list, package name. Production is the Vercel project `banknote-playground` at banknote-playground.vercel.app. Keep of-playground.vercel.app: it serves the same deployment with no redirect, since a browser keeps its username, settings and offline copies per address and the old link has been shared. Older names stay on purpose where renaming would risk users' data for nothing they see: the Supabase table, bucket and function (`thread_playground_projects`, `thread-playground-artwork`, `thread-workspace`) and the `of-playground.*` browser storage keys (renaming those resets what users' browsers remember). The app folder and the `thread-playground` launch config keep the old name too, for now.
 
 ## Commands
 
