@@ -565,7 +565,7 @@ describe('thread editor', () => {
     expect(field(TILE).value).toBe('4')
     // On Fit, as new banknotes start, the tile follows the width: a square, with no image yet
     expect(fit().hasAttribute('disabled')).toBe(true)
-    type('Thread width vertically, or height horizontally', '5')
+    type('Thread width', '5')
     expect(note().thread.widthMm).toBe(5)
     expect(note().pattern!.repeatMm).toBe(5)
     // Changing the width or the tile keeps the zoom, so the thread itself grows, over three repeats however long
@@ -573,7 +573,7 @@ describe('thread editor', () => {
     // A length typed turns Fit off, and the tile then keeps it whatever the width; ↺ fits it again
     type(TILE, '40')
     expect(note().pattern).toMatchObject({ repeatMm: 40, fit: false })
-    type('Thread width vertically, or height horizontally', '4.5')
+    type('Thread width', '4.5')
     expect(note().pattern!.repeatMm).toBe(40)
     await user.click(fit())
     expect(note().pattern).toMatchObject({ repeatMm: 4.5, fit: true })
@@ -586,7 +586,7 @@ describe('thread editor', () => {
     expect(field(TILE).value).toBe('1.575')
     type(TILE, '1')
     expect(note().pattern!.repeatMm).toBe(25.4)
-    type('Thread width vertically, or height horizontally', '4mm')
+    type('Thread width', '4mm')
     expect(note().thread.widthMm).toBe(4)
     act(() => setLengthUnit('mm'))
     // Nothing is selected: only the thread's own measurements show

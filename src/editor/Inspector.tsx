@@ -1,11 +1,9 @@
-import { reportError } from '../cloud/notices'
-import { Banknote, Columns2, Droplet, ImageUp, Magnet, RectangleHorizontal, RectangleVertical, Rows2, Shuffle, Trash2, TriangleAlert, X } from 'lucide-react'
+import { Banknote, Columns2, Droplet, Magnet, RectangleHorizontal, RectangleVertical, Rows2, Shuffle, Trash2, TriangleAlert } from 'lucide-react'
 import { create } from 'zustand'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
-import { ColorField, Drawer, Group, IconButton, Labeled, LengthField, Panel, PartTab, Section, Segmented, TabStrip } from '../components/controls'
+import { Drawer, Group, IconButton, Labeled, LengthField, Panel, PartTab, Section, Segmented, TabStrip } from '../components/controls'
 import { clamp } from '../lib/frames'
-import { pickFiles, useImageUrl } from '../lib/images'
 import { LAYER_NAMES, fitLayers, isPlaced, moveLayersTo, type PlacedLayer } from '../lib/layers'
 import { NOTE_SIZE } from '../lib/notes'
 import { mod, patternOf } from '../lib/pattern'
@@ -16,13 +14,14 @@ import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
 import { ChecksDrawer, ContinuousSection } from './DesignChecks'
 import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
+import { BackgroundFillRow } from './FillPicker'
 import { FramePanel } from './FramePanel'
 import { MagneticInkPanel } from './MagneticInkPanel'
 import { PanelResizer } from './PanelResizer'
 import { FitTileButton, ThreadWidthField, TileLengthField } from './ThreadSizeFields'
 import { WatermarkPanel } from './WatermarkPanel'
 import { WindowsCard } from './WindowsCard'
-import { setFaceImage, type NoteRef } from './frameActions'
+import type { NoteRef } from './frameActions'
 import { useTimelineFrame } from './useTimelineFrame'
 import type { Layer } from './layerActions'
 
@@ -84,7 +83,6 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
       return moveLayersTo({ ...n, ...flipped, thread: { ...n.thread, positionMm, windows: { ...n.thread.windows, sections: fitSections(n.thread.windows.sections, n.thread.direction === 'vertical' ? flipped.heightMm : flipped.widthMm) } } }, n)
     })
   const portrait = note.heightMm >= note.widthMm
-  const background = useImageUrl(note.faceImageId)
   // An uploaded design can be checked: whether it joins up at its edges, and is light where the brief asks
   const hasDesign = note.background === 'image' && note.faceImageId !== undefined
 
@@ -134,48 +132,9 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
       </Section>
 
       <Section nested>
+        {/* Chosen as a frame's fill is, in a panel of its own (Keller: the same everywhere) */}
         <Labeled label="Background">
-        <div className="flex flex-col gap-2">
-        <Segmented
-          value={note.background}
-          options={[
-            { value: 'solid', label: 'Solid' },
-            { value: 'image', label: 'Image' },
-          ]}
-          onChange={(mode) => update((n) => ({ ...n, background: mode }))}
-        />
-        {note.background === 'solid' ? (
-          <ColorField value={note.color} onChange={(color) => update((n) => ({ ...n, color }))} />
-        ) : (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-[58px] flex-1 justify-start gap-2 overflow-hidden rounded-[calc(var(--radius-sm)+7px)] p-1.5"
-              onClick={async () => {
-                try {
-                  const [file] = await pickFiles()
-                  if (file) await setFaceImage(noteRef, file)
-                } catch (error) { reportError(error) }
-              }}
-            >
-              {background ? (
-                <img src={background} alt="" className="h-11 w-11 shrink-0 rounded object-cover" />
-              ) : (
-                <span className="flex size-11 shrink-0 items-center justify-center rounded bg-muted">
-                  <ImageUp />
-                </span>
-              )}
-              {background ? 'Replace' : 'Upload design'}
-            </Button>
-            {note.faceImageId && (
-              <IconButton label="Remove image" onClick={() => void setFaceImage(noteRef, undefined)}>
-                <X />
-              </IconButton>
-            )}
-          </div>
-        )}
-        </div>
+          <BackgroundFillRow note={note} noteRef={noteRef} />
         </Labeled>
       </Section>
       {hasDesign && <ContinuousSection note={note} noteRef={noteRef} />}
@@ -197,7 +156,8 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
         </Labeled>
         <div className="grid grid-cols-2 gap-2">
           {/* How big the thread is: its width, and the tile its artwork repeats in, as beside it in Thread Studio (Keller) */}
-          <Labeled label="Width">
+          {/* Across the thread: its width when it runs down the banknote, its height when it runs across (Keller) */}
+          <Labeled label={thread.direction === 'vertical' ? 'Width' : 'Height'}>
             <ThreadWidthField note={note} noteRef={noteRef} />
           </Labeled>
           <Labeled label="Tile length" action={<FitTileButton note={note} noteRef={noteRef} />}>
@@ -243,13 +203,14 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
 }
 
 /**
- * The frame the timeline is on, its place and its fill, as in Thread Studio's Frames tab: Keller wants them here too,
- * since they are normal controls, but not its frame numbers, as the timeline picks the frame here. Its own component,
- * so only it follows the tilt
+ * The frame the timeline is on and its fill, as in Thread Studio's Frames tab: Keller wants it here too, as a normal
+ * control, but not the frame numbers (the timeline picks the frame here) or where an image sits in the tile (here it
+ * fits the width, the tile following it; Thread Studio places it by hand). Its own component, so only it follows the
+ * tilt
  */
 function TimelineFrame({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
   const { frame, index, show } = useTimelineFrame(note)
-  return <FramePanel note={note} noteRef={noteRef} frame={frame} index={index} onShow={show} picker={false} />
+  return <FramePanel note={note} noteRef={noteRef} frame={frame} index={index} onShow={show} picker={false} place={false} />
 }
 
 /**

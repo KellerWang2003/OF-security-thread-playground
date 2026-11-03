@@ -21,7 +21,7 @@ import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/note
 import { framesMissed, playbackLens, playbackTilt, sectionMix, timelineSection } from '../lib/pattern'
 import type { Note } from '../lib/types'
 import { setRecording, setTilt, togglePlayback, useTilt } from '../tilt/tilt'
-import { FillPopover } from './FillPicker'
+import { FrameFillPanel } from './FillPicker'
 import { PlaybackPanel } from './PlaybackPanel'
 import { TILT_PANEL_PX } from './TiltRail'
 import { addEmptyFrame, addImageFrames, deleteFrame, moveFrameTo, updateFrame, type NoteRef } from './frameActions'
@@ -323,7 +323,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
                   </Button>
                 )}
                 {/* The pencil at the top right edits its fill, in the same panel as the right panel's, going to the frame */}
-                <FillPopover noteRef={noteRef} frame={frame} side="top" align="center"
+                <FrameFillPanel noteRef={noteRef} frame={frame} side="top" align="center"
                   onOpenChange={(open) => {
                     if (!open) return
                     goTo(i)

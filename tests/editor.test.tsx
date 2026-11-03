@@ -280,6 +280,39 @@ describe('username workspace editor', () => {
     fireEvent.pointerUp(line, { button: 0, clientX: 190, pointerId: 1 })
     expect([useTilt.getState().target, useTilt.getState().targetX]).not.toEqual([0, 0])
   })
+  it('names the thread’s size by its direction, leaves an image’s place to Thread Studio, and fills the background as a frame', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'thread-size-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const note = () => useProjects.getState().demoPreview!.notes[0]
+
+    // The banknote's background is chosen as a frame's fill is (Keller: the same everywhere), and Image starts empty
+    const background = () => screen.getByRole('button', { name: /^Background: / })
+    await user.click(background())
+    await user.click(await screen.findByRole('button', { name: 'Image', exact: true }))
+    expect(note().background).toBe('image')
+    expect(screen.getByRole('button', { name: 'Upload design' })).toBeDefined()
+    await user.click(screen.getByRole('button', { name: 'Colour', exact: true }))
+    expect(note().background).toBe('solid')
+    await user.click(background())
+
+    // Across the thread: its Width when it runs down the banknote, its Height when it runs across
+    await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
+    expect(screen.getByText('Width', { exact: true })).toBeDefined()
+    await user.click(screen.getByRole('button', { name: 'Horizontal', exact: true }))
+    expect(screen.getByText('Height', { exact: true })).toBeDefined()
+    expect(screen.queryByText('Width', { exact: true })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Fit to the height' })).toBeDefined()
+
+    // An image fits the width here, the tile following it; where it sits in the tile is set in Thread Studio
+    act(() => updateNote(useProjects.getState().demoPreview!.id, note().id, (n) => ({
+      ...n, frames: n.frames.map((f) => ({ ...f, kind: 'image' as const, imageId: 'art', aspect: 1 })),
+    })))
+    expect(screen.getByText('Fill', { exact: true })).toBeDefined()
+    expect(screen.queryByText('Place', { exact: true })).toBeNull()
+  })
   it('shows one tab per part, labels every control, and the thread’s lens with its preview in a drawer at the foot', async () => {
     const user = userEvent.setup()
     localStorage.setItem('of-thread-workspace', 'panel-lens-ui-test')

@@ -391,7 +391,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, onThreadCli
           action={<FitTileButton note={note} noteRef={noteRef} />}>
           <TileLengthField size="sm" className="w-[88px]" note={note} noteRef={noteRef} />
         </Measure>
-        <Measure side={vertical ? 'top' : 'left'} from={0} to={thickness} label="Width">
+        <Measure side={vertical ? 'top' : 'left'} from={0} to={thickness} label={vertical ? 'Width' : 'Height'}>
           <ThreadWidthField size="sm" className="w-[88px]" note={note} noteRef={noteRef} />
         </Measure>
       </div>

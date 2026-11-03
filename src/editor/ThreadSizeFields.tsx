@@ -9,12 +9,14 @@ import type { NoteRef } from './frameActions'
 type Field = { note: Note; noteRef: NoteRef; size?: 'default' | 'sm'; className?: string }
 
 /**
- * How wide the thread is across the banknote: Width, as thread makers say it (Keller found Thickness unclear). On the
- * canvas's Thread tab and beside the thread in Thread Studio; a tile on Fit follows it
+ * How wide the thread is across itself: its Width (W) when it runs down the banknote, its Height (H) when it runs across
+ * (Keller found Thickness unclear). On the canvas's Thread tab and beside the thread in Thread Studio; a tile on Fit
+ * follows it
  */
 export function ThreadWidthField({ note, noteRef, ...field }: Field) {
+  const vertical = note.thread.direction === 'vertical'
   return (
-    <LengthField {...field} label="W" title="Thread width vertically, or height horizontally" value={note.thread.widthMm}
+    <LengthField {...field} label={vertical ? 'W' : 'H'} title={vertical ? 'Thread width' : 'Thread height'} value={note.thread.widthMm}
       min={THREAD_WIDTH.min} max={THREAD_WIDTH.max} step={THREAD_WIDTH.step}
       onChange={(widthMm) => updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, thread: { ...n.thread, widthMm } }))} />
   )
@@ -37,10 +39,11 @@ export function TileLengthField({ note, noteRef, ...field }: Field) {
   )
 }
 
-/** ↺ Fit to the width: the tile follows the thread again; there is nothing to do while it already does */
+/** ↺ Fit to the width (the height across a horizontal thread): the tile follows the thread again; nothing to do while it already does */
 export function FitTileButton({ note, noteRef }: Pick<Field, 'note' | 'noteRef'>) {
   return (
-    <IconButton label="Fit to the width" size="icon-xs" className="-mr-1 size-5" disabled={!!patternOf(note).fit}
+    <IconButton label={note.thread.direction === 'vertical' ? 'Fit to the width' : 'Fit to the height'} size="icon-xs" className="-mr-1 size-5"
+      disabled={!!patternOf(note).fit}
       onClick={() => setPattern(noteRef, (p) => ({ ...p, fit: true }))}>
       <RotateCcw />
     </IconButton>

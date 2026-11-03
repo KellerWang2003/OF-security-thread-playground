@@ -1,14 +1,33 @@
-import { ImageUp } from 'lucide-react'
+import { ImageUp, X } from 'lucide-react'
 import type { ReactElement } from 'react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { reportError } from '../cloud/notices'
-import { ColorField, Segmented } from '../components/controls'
-import { FrameThumb } from '../components/NoteView'
+import { ColorField, IconButton, Segmented } from '../components/controls'
 import { pickFiles, useImageUrl } from '../lib/images'
-import type { Frame } from '../lib/types'
-import { replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
+import { updateNote } from '../lib/store'
+import type { Frame, Note } from '../lib/types'
+import { replaceFrameImage, setFaceImage, updateFrame, type NoteRef } from './frameActions'
+
+/** A fill as its picker shows it: a colour, an image (with its picture once there is one), or nothing */
+interface Fill {
+  kind: 'none' | 'color' | 'image'
+  color: string
+  url?: string
+}
+
+/** What it takes to change a fill */
+interface FillEdits {
+  setKind: (kind: 'color' | 'image') => void
+  setColor: (color: string) => void
+  /** Makes a file the image */
+  addImage: (file: File) => Promise<unknown>
+  /** Drops the image, where it can go (the banknote's design) */
+  removeImage?: () => void
+  /** The image button before there is an image */
+  uploadLabel?: string
+}
 
 /** No fill: a faint check, as empty thread shows in Thread Studio */
 const CHECK = {
@@ -16,87 +35,136 @@ const CHECK = {
   backgroundSize: '8px 8px',
 }
 
-/** A frame's fill as a small square, as Figma's fill swatch: its colour or its image, a check when it has none */
-export function FillSwatch({ frame, className }: { frame: Frame; className?: string }) {
+/** A fill as a small square, as Figma's fill swatch: its colour or its image, a check when it has neither */
+function FillSwatch({ fill }: { fill: Fill }) {
   return (
-    <span className={cn('relative block size-5 shrink-0 overflow-hidden rounded border border-foreground/15 bg-background', className)} style={CHECK}>
-      <FrameThumb frame={frame} />
+    <span className="relative block size-5 shrink-0 overflow-hidden rounded border border-foreground/15 bg-background" style={CHECK}>
+      {fill.kind === 'color' && <span className="absolute inset-0" style={{ backgroundColor: fill.color }} />}
+      {fill.kind === 'image' && fill.url && <img src={fill.url} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />}
     </span>
   )
 }
 
 /** What the fill row reads: the colour, or Image */
-const fillName = (frame: Frame) => (frame.kind === 'color' ? frame.color.toUpperCase() : 'Image')
+const fillName = (fill: Fill) => (fill.kind === 'color' ? fill.color.toUpperCase() : 'Image')
 
-/**
- * A frame's fill, chosen in a panel of its own as Figma does (Keller, rather than pills laid out flat): what it is at
- * the panel's top, a Colour or an Image, then that fill's own settings. There is no background under the frames any
- * more (Keller): an empty frame shows the banknote through. `trigger` opens it: the fill row in the right panel, or the
- * swatch on the frame's clip in the timeline, which also gives an empty frame its first fill
- */
-export function FillPopover({ noteRef, frame, trigger, side = 'left', align = 'start', onOpenChange }: {
-  noteRef: NoteRef
-  frame: Frame
+type PanelPlace = {
   trigger: ReactElement
   side?: 'top' | 'bottom' | 'left' | 'right'
   align?: 'start' | 'center' | 'end'
   onOpenChange?: (open: boolean) => void
-}) {
-  const set = (patch: Partial<Frame>) => updateFrame(noteRef, frame.id, patch)
-  const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
+}
+
+/**
+ * A fill, chosen in a panel of its own as Figma does (Keller, rather than pills laid out flat, and the same everywhere
+ * a fill is chosen): what it is at the panel's top, a Colour or an Image, then that fill's own settings. Image starts
+ * empty, its button adding one (Upload) and then changing it (Replace); it never asks for a file on its own (Keller).
+ * `trigger` opens it.
+ */
+function FillPanel({ fill, edits, trigger, side = 'left', align = 'start', onOpenChange }: { fill: Fill; edits: FillEdits } & PanelPlace) {
   const upload = async () => {
     try {
       const [file] = await pickFiles()
-      if (file) await replaceFrameImage(noteRef, frame.id, file)
+      if (file) await edits.addImage(file)
     } catch (error) { reportError(error) }
   }
-
   return (
     <Popover onOpenChange={onOpenChange}>
       <PopoverTrigger render={trigger} />
       <PopoverContent side={side} align={align} sideOffset={8} className="w-60">
         <Segmented
-          value={frame.kind}
+          value={fill.kind}
           options={[
             { value: 'color', label: 'Colour' },
             { value: 'image', label: 'Image' },
           ]}
-          // Image starts empty, to add one with the button under it, rather than asking for a file at once (Keller); a
-          // frame that had one gets it back
-          onChange={(kind) => set({ kind })}
+          onChange={(kind) => edits.setKind(kind === 'image' ? 'image' : 'color')}
         />
-        {frame.kind === 'color' && <ColorField value={frame.color} onChange={(color) => set({ color })} />}
-        {frame.kind === 'image' && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-[58px] justify-start gap-2 overflow-hidden rounded-[calc(var(--radius-sm)+7px)] p-1.5"
-            onClick={() => void upload()}
-          >
-            {url ? (
-              <img src={url} alt="" className="h-11 w-11 shrink-0 rounded object-contain" />
-            ) : (
-              <span className="flex size-11 shrink-0 items-center justify-center rounded bg-muted">
-                <ImageUp />
-              </span>
+        {fill.kind === 'color' && <ColorField value={fill.color} onChange={edits.setColor} />}
+        {fill.kind === 'image' && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-[58px] min-w-0 flex-1 justify-start gap-2 overflow-hidden rounded-[calc(var(--radius-sm)+7px)] p-1.5"
+              onClick={() => void upload()}
+            >
+              {fill.url ? (
+                <img src={fill.url} alt="" className="h-11 w-11 shrink-0 rounded object-contain" />
+              ) : (
+                <span className="flex size-11 shrink-0 items-center justify-center rounded bg-muted">
+                  <ImageUp />
+                </span>
+              )}
+              {fill.url ? 'Replace' : (edits.uploadLabel ?? 'Upload image')}
+            </Button>
+            {fill.url && edits.removeImage && (
+              <IconButton label="Remove image" onClick={edits.removeImage}>
+                <X />
+              </IconButton>
             )}
-            {url ? 'Replace' : 'Upload image'}
-          </Button>
+          </div>
         )}
       </PopoverContent>
     </Popover>
   )
 }
 
-/** The fill as one row, Figma's way: its swatch and what it is; a click opens `FillPopover` */
-export function FillRow({ noteRef, frame }: { noteRef: NoteRef; frame: Frame }) {
+/** A fill as one row, Figma's way: its swatch and what it is, `name` saying whose fill it is; a click opens its panel */
+function FillRow({ name, fill, edits }: { name: string; fill: Fill; edits: FillEdits }) {
   return (
-    <FillPopover noteRef={noteRef} frame={frame} trigger={
-      <Button variant="outline" size="sm" aria-label={`Fill: ${fillName(frame)}`}
+    <FillPanel fill={fill} edits={edits} trigger={
+      <Button variant="outline" size="sm" aria-label={`${name}: ${fillName(fill)}`}
         className="h-8 w-full justify-start gap-2 rounded-lg px-1.5 font-normal data-[popup-open]:border-ring">
-        <FillSwatch frame={frame} />
-        <span className={cn('truncate', frame.kind === 'color' && 'tabular-nums')}>{fillName(frame)}</span>
+        <FillSwatch fill={fill} />
+        <span className={cn('truncate', fill.kind === 'color' && 'tabular-nums')}>{fillName(fill)}</span>
       </Button>
     } />
+  )
+}
+
+/** A frame's fill and how to change it; an image it had comes back when Image is picked again */
+function frameFill(noteRef: NoteRef, frame: Frame, url: string | undefined): { fill: Fill; edits: FillEdits } {
+  return {
+    fill: { kind: frame.kind, color: frame.color, url },
+    edits: {
+      setKind: (kind) => updateFrame(noteRef, frame.id, { kind }),
+      setColor: (color) => updateFrame(noteRef, frame.id, { color }),
+      addImage: (file) => replaceFrameImage(noteRef, frame.id, file),
+    },
+  }
+}
+
+/** A frame's fill row, under Fill in the right panels */
+export function FrameFillRow({ noteRef, frame }: { noteRef: NoteRef; frame: Frame }) {
+  const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
+  return <FillRow name="Fill" {...frameFill(noteRef, frame, url)} />
+}
+
+/** A frame's fill panel, opened from somewhere else: the pencil on its clip in the timeline */
+export function FrameFillPanel({ noteRef, frame, ...place }: { noteRef: NoteRef; frame: Frame } & PanelPlace) {
+  const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined)
+  return <FillPanel {...frameFill(noteRef, frame, url)} {...place} />
+}
+
+/**
+ * The banknote's background, chosen as a frame's fill is (Keller: the same everywhere): its colour, or its design, an
+ * image that can be removed again, which falls back to the colour
+ */
+export function BackgroundFillRow({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
+  const url = useImageUrl(note.faceImageId)
+  const set = (patch: Partial<Note>) => updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, ...patch }))
+  return (
+    <FillRow
+      name="Background"
+      fill={{ kind: note.background === 'image' ? 'image' : 'color', color: note.color, url }}
+      edits={{
+        setKind: (kind) => set({ background: kind === 'image' ? 'image' : 'solid' }),
+        setColor: (color) => set({ color }),
+        addImage: (file) => setFaceImage(noteRef, file),
+        removeImage: () => void setFaceImage(noteRef, undefined).catch(reportError),
+        uploadLabel: 'Upload design',
+      }}
+    />
   )
 }

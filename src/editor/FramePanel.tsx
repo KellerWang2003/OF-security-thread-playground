@@ -5,18 +5,18 @@ import { IconButton, Labeled, LengthField, Section } from '../components/control
 import { IMAGE_STEP, imageBox, placeOf, uprightBox } from '../lib/artwork'
 import { patternOf } from '../lib/pattern'
 import type { Frame, Note } from '../lib/types'
-import { FillRow } from './FillPicker'
+import { FrameFillRow } from './FillPicker'
 import { updateFrame, type NoteRef } from './frameActions'
 import { swatch } from './LensVisuals'
 
 /**
- * The frame the timeline is on, in Thread Studio's Frames tab and the canvas's Thread tab (Keller): in Thread Studio a
- * row of frame numbers to go to another frame without the timeline (`picker`; the canvas has the timeline for that),
- * then, for an image, where it sits in the tile (X and Y of its top-left corner as drawn, and its width, its height
- * following), then its fill, one row that opens the fill's own panel (`FillRow`); + and − add and remove it, as in
- * Figma, an empty frame showing the banknote through.
+ * The frame the timeline is on, in Thread Studio's Frames tab and the canvas's Thread tab (Keller). In Thread Studio,
+ * for finer control, a row of frame numbers to go to another frame without the timeline (`picker`) and, for an image,
+ * where it sits in the tile (`place`: X and Y of its top-left corner as drawn, and its width, its height following);
+ * on the canvas an image simply fits the thread's width, the tile following it. Then its fill, one row that opens the
+ * fill's own panel (`FrameFillRow`); + and − add and remove it, as in Figma, an empty frame showing the banknote through.
  */
-export function FramePanel({ note, noteRef, frame, index, onShow, picker = true }: {
+export function FramePanel({ note, noteRef, frame, index, onShow, picker = true, place = true }: {
   note: Note
   noteRef: NoteRef
   frame: Frame
@@ -25,6 +25,8 @@ export function FramePanel({ note, noteRef, frame, index, onShow, picker = true 
   onShow: (index: number) => void
   /** The row of frame numbers */
   picker?: boolean
+  /** Where an image sits in the tile */
+  place?: boolean
 }) {
   const set = (patch: Partial<Frame>) => updateFrame(noteRef, frame.id, patch)
 
@@ -47,11 +49,11 @@ export function FramePanel({ note, noteRef, frame, index, onShow, picker = true 
           </Labeled>
         </Section>
       )}
-      {frame.kind === 'image' && frame.aspect && <ImagePlaceFields note={note} frame={frame} aspect={frame.aspect} set={set} />}
+      {place && frame.kind === 'image' && frame.aspect && <ImagePlaceFields note={note} frame={frame} aspect={frame.aspect} set={set} />}
       <Section nested title="Fill" action={frame.kind === 'none'
         ? <IconButton label="Add fill" size="icon-xs" onClick={() => set({ kind: 'color' })}><Plus /></IconButton>
         : <IconButton label="Remove fill" size="icon-xs" onClick={() => set({ kind: 'none' })}><Minus /></IconButton>}>
-        {frame.kind !== 'none' && <FillRow noteRef={noteRef} frame={frame} />}
+        {frame.kind !== 'none' && <FrameFillRow noteRef={noteRef} frame={frame} />}
       </Section>
     </>
   )
