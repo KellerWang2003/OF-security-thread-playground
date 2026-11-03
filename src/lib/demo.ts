@@ -54,8 +54,8 @@ export function demoProject(): Project {
     thread: { ...first.thread, widthMm: 4, positionMm: 100, windows: { enabled: true, sections: [windowAt(6, 19), windowAt(26, 35), windowAt(44, 67)] } },
     frames: BIRD_WORDS.map((word, i): Frame => ({ id: newId(), kind: 'image', color: '#ffffff', imageId: DEMO_ART.birds[i], aspect: 1.5, name: `${i + 1} ${word}`, length: 10 })),
     tilt,
-    // The bird is 6 mm long on a 4 mm thread, so they fly back to back
-    pattern: defaultPattern(6),
+    // On Fit: the bird is 6 mm long on a 4 mm thread, so they fly back to back
+    pattern: { ...defaultPattern(6), fit: true },
     watermark: { imageId: DEMO_ART.portrait, xMm: 10, yMm: 18.5, widthMm: 30, heightMm: 37.5, depth: 0.8 },
   }
 
@@ -72,7 +72,8 @@ export function demoProject(): Project {
       id: newId(), kind: 'image', color: '#ffffff', imageId, aspect: STAR_FRAME.height / STAR_FRAME.width, name: STAR_NAMES[i], length: 10,
     })),
     tilt: { ...tilt, effect: 'reveal', revealAxis: 'y' },
-    pattern: defaultPattern(16),
+    // On Fit, as the stars' frames are 16 mm long on the 6 mm thread
+    pattern: { ...defaultPattern(16), fit: true },
   }
 
   return { ...createProject('Silly bird demo'), notes: [watermark, stars] }

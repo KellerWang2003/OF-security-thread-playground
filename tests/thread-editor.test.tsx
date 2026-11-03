@@ -61,6 +61,8 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 const note = (): Note => useProjects.getState().demoPreview!.notes[0]
+/** The tile length field's tooltip, which finds it */
+const TILE = 'Length of one tile along the thread: the artwork and its sections repeat every tile'
 /** One of Thread Studio's right panel tabs: Thread or Frames */
 const tab = (editor: HTMLElement, name: 'Thread' | 'Frames') => within(editor).getByRole('tab', { name })
 /** Whether a section is the selected one, by its row in the list (its strips only show once there are two or more) */
@@ -285,7 +287,7 @@ describe('thread editor', () => {
     await user.keyboard('{Delete}')
     await open(user, editor, 'Checks')
     const gaps = () => editor.querySelector('[data-check="gaps"]')!
-    expect(gaps().textContent).toContain('25% of each repeat is empty')
+    expect(gaps().textContent).toContain('25% of each tile is empty')
 
     // Fill: the gap sits in line with the ↔ lane, so that lane runs on over it, as before, selected; no new section
     await user.click(within(gaps() as HTMLElement).getByRole('button', { name: 'Fill', exact: true }))
@@ -352,7 +354,7 @@ describe('thread editor', () => {
     const editor = screen.getByRole('region', { name: 'Thread editor' })
     await preset(user, editor, 'Alternating')
     // A repeat longer than the 8 mm windows, so a window can sit inside one block
-    const repeat = screen.getByTitle('Length of one repeat of the pattern along the thread').querySelector('input')!
+    const repeat = screen.getByTitle(TILE).querySelector('input')!
     fireEvent.change(repeat, { target: { value: '20' } })
     fireEvent.blur(repeat)
     expect(note().pattern!.sections.map((s) => [s.startMm, s.endMm])).toEqual([[0, 10], [10, 20]])
@@ -377,7 +379,7 @@ describe('thread editor', () => {
     expect(shuffled).toBeLessThan(20)
     expect(Number(offset().value)).toBe(shuffled)
     // A preview only: the project never holds it
-    expect(Object.keys(note().pattern!).toSorted()).toEqual(['mixed', 'repeatMm', 'sections'])
+    expect(Object.keys(note().pattern!).toSorted()).toEqual(['fit', 'mixed', 'repeatMm', 'sections'])
     expect(JSON.parse(localStorage.getItem('of-playground.pattern-offsets')!)[note().id]).toBe(shuffled)
   })
 
@@ -472,7 +474,7 @@ describe('thread editor', () => {
     expect(colour(1)).toBe(flat[1])
 
     // Clicking a section on the thread lets go of a field being typed in, so Delete removes the section
-    const repeat = screen.getByTitle('Length of one repeat of the pattern along the thread').querySelector('input')!
+    const repeat = screen.getByTitle(TILE).querySelector('input')!
     act(() => repeat.focus())
     const lane = strip().element.querySelector(`[data-section-id="${sections()[1].id}"][data-copy="1"]`)!
     fireEvent.pointerDown(lane, { button: 0, buttons: 1, ...at(1, 0.75) })
@@ -556,22 +558,33 @@ describe('thread editor', () => {
     await user.click(within(editor).getByRole('button', { name: 'Ridges', exact: true }))
     expect(editor.querySelector('[data-slot="slider"]')).toBeNull()
 
-    // Beside the thread: the repeat and the thickness, to type in
+    // Beside the thread: its width and its tile's length, to type in
     const field = (title: string) => within(strip().element).getByTitle(title).querySelector('input')!
     const type = (title: string, value: string) => { fireEvent.change(field(title), { target: { value } }); fireEvent.blur(field(title)) }
-    expect(field('Length of one repeat of the pattern along the thread').value).toBe('4')
+    const fit = () => within(strip().element).getByRole('button', { name: 'Fit to the width' })
+    expect(field(TILE).value).toBe('4')
+    // On Fit, as new banknotes start, the tile follows the width: a square, with no image yet
+    expect(fit().hasAttribute('disabled')).toBe(true)
     type('Thread width vertically, or height horizontally', '5')
     expect(note().thread.widthMm).toBe(5)
-    // Changing the thickness or the repeat keeps the zoom, so the thread itself grows, over three repeats however long
+    expect(note().pattern!.repeatMm).toBe(5)
+    // Changing the width or the tile keeps the zoom, so the thread itself grows, over three repeats however long
     expect(parseFloat(strip().element.style.width)).toBeCloseTo(5 * scale, 6)
-    type('Length of one repeat of the pattern along the thread', '40')
+    // A length typed turns Fit off, and the tile then keeps it whatever the width; ↺ fits it again
+    type(TILE, '40')
+    expect(note().pattern).toMatchObject({ repeatMm: 40, fit: false })
+    type('Thread width vertically, or height horizontally', '4.5')
+    expect(note().pattern!.repeatMm).toBe(40)
+    await user.click(fit())
+    expect(note().pattern).toMatchObject({ repeatMm: 4.5, fit: true })
+    type(TILE, '40')
     expect(note().pattern!.repeatMm).toBe(40)
     expect(parseFloat(strip().element.style.height)).toBeCloseTo(3 * 40 * scale, 6)
     expect(strip().element.querySelectorAll('[data-repeat-edge]')).toHaveLength(2)
     // They read and take the unit picked for every length, as the canvas's fields do
     act(() => setLengthUnit('in'))
-    expect(field('Length of one repeat of the pattern along the thread').value).toBe('1.575')
-    type('Length of one repeat of the pattern along the thread', '1')
+    expect(field(TILE).value).toBe('1.575')
+    type(TILE, '1')
     expect(note().pattern!.repeatMm).toBe(25.4)
     type('Thread width vertically, or height horizontally', '4mm')
     expect(note().thread.widthMm).toBe(4)
@@ -579,7 +592,7 @@ describe('thread editor', () => {
     // Nothing is selected: only the thread's own measurements show
     await user.keyboard('{Escape}')
     expect(within(strip().element).queryByTitle('The selected section\'s length along the thread')).toBeNull()
-    expect(within(strip().element).getByTitle('Length of one repeat of the pattern along the thread')).toBeDefined()
+    expect(within(strip().element).getByTitle(TILE)).toBeDefined()
 
     // Ridges only shows or hides the hatching
     await user.click(within(editor).getByRole('button', { name: 'Ridges', exact: true }))
@@ -630,25 +643,27 @@ describe('thread editor', () => {
     expect(note().frames[0].kind).toBe('color')
     expect(within(editor).queryByRole('switch', { name: 'Background colour' })).toBeNull()
 
-    // An image sits in the repeat; its Place comes before its Fill, fitted at first, then where its fields put it
+    // An image sits in the repeat; its Place comes before its Fill, fitted at first, then where its fields put it. The
+    // tile is set by hand here, so it stays 4 mm (on Fit it would take the image's length)
     act(() => updateNote(useProjects.getState().demoPreview!.id, note().id, (n) => ({
-      ...n, frames: n.frames.map((f, i) => (i === 0 ? { ...f, kind: 'image' as const, imageId: 'fixture-bird', aspect: 0.5 } : f)),
+      ...n, pattern: { ...n.pattern!, fit: false },
+      frames: n.frames.map((f, i) => (i === 0 ? { ...f, kind: 'image' as const, imageId: 'fixture-bird', aspect: 0.5 } : f)),
     })))
     const titles = within(editor).getAllByRole('heading').map((h) => h.textContent)
     expect(titles.indexOf('Place')).toBeLessThan(titles.indexOf('Fill'))
     const field = (title: string) => within(editor).getByTitle(title).querySelector('input')!
     // As wide as the 4 mm thread and half as tall: 2 mm of the 4 mm repeat, centred
-    expect(field('Image position from the start of the repeat').value).toBe('1')
-    fireEvent.change(field('Image position from the start of the repeat'), { target: { value: '0.5' } })
+    expect(field('Image position from the start of the tile').value).toBe('1')
+    fireEvent.change(field('Image position from the start of the tile'), { target: { value: '0.5' } })
     expect(note().frames[0].place).toEqual({ alongMm: 0.5, across: 0, size: 1 })
     // Left, it reads in the unit picked for every length
-    fireEvent.blur(field('Image position from the start of the repeat'))
+    fireEvent.blur(field('Image position from the start of the tile'))
     act(() => setLengthUnit('cm'))
-    expect(field('Image position from the start of the repeat').value).toBe('0.05')
+    expect(field('Image position from the start of the tile').value).toBe('0.05')
     act(() => setLengthUnit('mm'))
     fireEvent.change(field('Image width; its height follows the image'), { target: { value: '2' } })
     expect(note().frames[0].place).toEqual({ alongMm: 0.5, across: 0, size: 0.5 })
-    await user.click(within(editor).getByRole('button', { name: 'Fit to the repeat' }))
+    await user.click(within(editor).getByRole('button', { name: 'Fit to the tile' }))
     expect(note().frames[0].place).toBeUndefined()
 
     // On the thread it drags straight away, in the middle repeat; once picked its corners resize it

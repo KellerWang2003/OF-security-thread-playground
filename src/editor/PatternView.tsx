@@ -1,15 +1,12 @@
 import { Maximize, Minus, Plus } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import { IconButton, Labeled, LengthField, Panel } from '../components/controls'
+import { IconButton, Labeled, Panel } from '../components/controls'
 import { ThreadArt } from '../components/NoteView'
 import { imageBox, placeOf, uprightBox, type UprightBox } from '../lib/artwork'
 import { clamp } from '../lib/frames'
 import { lensMix } from '../lib/lens'
-import { THREAD_WIDTH } from '../lib/notes'
 import {
-  ALONG_STEP,
-  REPEAT_LIMITS,
   fillGaps,
   mod,
   patternMix,
@@ -17,7 +14,6 @@ import {
   preparePattern,
   resizeEdge,
   sectionAt,
-  setRepeat,
   type Edge,
   type PatternPoint,
 } from '../lib/pattern'
@@ -25,6 +21,7 @@ import { updateNote } from '../lib/store'
 import type { Note, ThreadPattern, ThreadSection } from '../lib/types'
 import { setTilt, springToFlat, useTilt } from '../tilt/tilt'
 import { ImagePlacer } from './ImagePlacer'
+import { FitTileButton, ThreadWidthField, TileLengthField } from './ThreadSizeFields'
 import { useElementSize } from './useElementSize'
 
 /** Px per mm the view never goes past, so a short repeat doesn't blow up into a blur */
@@ -183,6 +180,7 @@ export function PatternView({ note, projectId, selectedId, onSelect, onThreadCli
     return { along: (vertical ? py : px) / scale, across: (vertical ? px : py) / thickness }
   }
   const write = (next: ThreadPattern) => updateNote(projectId, note.id, (n) => ({ ...n, pattern: next }))
+  const noteRef = { projectId, noteId: note.id }
   const sameRect = (a: Rect, b: Rect) => a.startMm === b.startMm && a.endMm === b.endMm && a.acrossStart === b.acrossStart && a.acrossEnd === b.acrossEnd
   const alongCursor = vertical ? 'cursor-ns-resize' : 'cursor-ew-resize'
   const acrossCursor = vertical ? 'cursor-ew-resize' : 'cursor-ns-resize'
@@ -388,15 +386,13 @@ export function PatternView({ note, projectId, selectedId, onSelect, onThreadCli
             others={[-1, 1].map((k) => (vertical ? { x: 0, y: k * repeat } : { x: k * repeat, y: 0 }))} />
         )}
 
-        {/* Measurements on the middle repeat, turning with the thread: the repeat along it, the thickness across it */}
-        <Measure side={vertical ? 'left' : 'top'} from={MIDDLE * repeat * scale} to={(MIDDLE + 1) * repeat * scale} label="Repeat every">
-          <LengthField size="sm" className="w-[88px]" label="R" title="Length of one repeat of the pattern along the thread" value={repeat}
-            min={REPEAT_LIMITS.min} max={REPEAT_LIMITS.max} step={ALONG_STEP} onChange={(v) => write(setRepeat(pattern, v))} />
+        {/* Measurements on the middle repeat, turning with the thread: the tile's length along it, the width across it */}
+        <Measure side={vertical ? 'left' : 'top'} from={MIDDLE * repeat * scale} to={(MIDDLE + 1) * repeat * scale} label="Tile length"
+          action={<FitTileButton note={note} noteRef={noteRef} />}>
+          <TileLengthField size="sm" className="w-[88px]" note={note} noteRef={noteRef} />
         </Measure>
-        <Measure side={vertical ? 'top' : 'left'} from={0} to={thickness} label="Thickness">
-          <LengthField size="sm" className="w-[88px]" label="T" title="Thread width vertically, or height horizontally" value={thread.widthMm}
-            min={THREAD_WIDTH.min} max={THREAD_WIDTH.max} step={THREAD_WIDTH.step}
-            onChange={(widthMm) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, widthMm } }))} />
+        <Measure side={vertical ? 'top' : 'left'} from={0} to={thickness} label="Width">
+          <ThreadWidthField size="sm" className="w-[88px]" note={note} noteRef={noteRef} />
         </Measure>
       </div>
       </div>
@@ -425,12 +421,14 @@ function zoomAround(v: View, factor: number, cx: number, cy: number, fit: number
  * A measurement beside the thread: a bracket over `from` to `to` (px along that side of the strip) and its labelled
  * field beyond it. Presses on it never reach the thread, so scrubbing or typing doesn't tilt it.
  */
-function Measure({ side, from, to, label, children }: {
+function Measure({ side, from, to, label, action, children }: {
   side: 'left' | 'right' | 'top' | 'bottom'
   from: number
   to: number
   /** The small label over the field, as over every control in the panels */
   label: string
+  /** A small control at the label's end */
+  action?: ReactNode
   children: ReactNode
 }) {
   const gap = 10
@@ -444,7 +442,7 @@ function Measure({ side, from, to, label, children }: {
     <div className={cn('absolute flex items-center gap-1.5', { left: 'flex-row-reverse', right: 'flex-row', top: 'flex-col-reverse', bottom: 'flex-col' }[side])}
       style={place} data-measure="" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
       <div className={cn('shrink-0 border-foreground/40', bracket)} />
-      <Labeled label={label} className="shrink-0 rounded-md bg-background p-1.5 shadow-xs">{children}</Labeled>
+      <Labeled label={label} action={action} className="shrink-0 rounded-md bg-background p-1.5 shadow-xs">{children}</Labeled>
     </div>
   )
 }

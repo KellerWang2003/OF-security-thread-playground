@@ -1,3 +1,4 @@
+import { fitTiles } from './artwork'
 import { canStepNote, recordEdit, historyStep, reconcileHistory, resetHistory } from './history'
 import { useWorkspace, putProject, editorProject } from '../cloud/workspace'
 import { copyImage, removeImage } from './images'
@@ -32,7 +33,8 @@ const actions = {
   update: (id: string, change: (project: Project) => Project) => {
     const project = editorProject(id)
     if (!project) return
-    const next = change(project)
+    // A tile on Fit follows its thread, whatever changed it
+    const next = fitTiles(change(project))
     if (recordEdit(project, next)) putProject({ ...next, updatedAt: Date.now() })
   },
   duplicate: async (id: string) => {
@@ -99,7 +101,7 @@ export const updateNote = (projectId: string, noteId: string, change: (note: Not
 export function settleNote(projectId: string, noteId: string, change: (note: Note) => Note) {
   const project = editorProject(projectId)
   if (!project?.notes.some((n) => n.id === noteId)) return
-  putProject({ ...project, notes: project.notes.map((n) => (n.id === noteId ? change(n) : n)) })
+  putProject(fitTiles({ ...project, notes: project.notes.map((n) => (n.id === noteId ? change(n) : n)) }))
 }
 
 export const addNote = (projectId: string, note: Note) =>

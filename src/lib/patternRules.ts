@@ -194,7 +194,7 @@ export function checkPattern(note: RuleNote, unit: LengthUnit = lengthUnit()): P
 
   checks.push({
     id: 'windows', title: 'Every window shows each tilt', level: 'warn',
-    explain: 'The print lands anywhere along the thread, so every window needs a section for each tilt, and for frames only one tilt shows, wherever it lands: keep the repeat at most half the shortest window.',
+    explain: 'The print lands anywhere along the thread, so every window needs a section for each tilt, and for frames only one tilt shows, wherever it lands: keep the tile at most half the shortest window.',
     issues: windowReports(note).flatMap((w) => w.misses.length ? [{
       text: `${w.label} can miss ${w.misses.map((m) => m.label).join(' · ')}`,
       title: `At ${Math.round(Math.max(...w.misses.map((m) => m.share)) * 100)}% of print offsets`,
@@ -282,7 +282,7 @@ export function checkPattern(note: RuleNote, unit: LengthUnit = lengthUnit()): P
   checks.push({
     id: 'gaps', title: 'No gaps', level: 'warn',
     explain: 'Areas with no section print no frames.',
-    issues: gap > 1e-3 ? [{ text: `${round(gap * 100, 0)}% of each repeat is empty` }] : [],
+    issues: gap > 1e-3 ? [{ text: `${round(gap * 100, 0)}% of each tile is empty` }] : [],
   })
   return checks
 }

@@ -249,12 +249,23 @@ export function Section({ title, action, nested = false, children }: { title?: s
 
 /**
  * A control in a side panel with a small label over it saying what it is, always shown, like Figma's property labels
- * (Keller), so nobody has to guess what T or a picture strip means
+ * (Keller), so nobody has to guess what T or a picture strip means. A small `action` (an `IconButton` at `size-5`) can
+ * sit at the label's end, as Tile length's Fit does, keeping the field itself clear
  */
-export function Labeled({ label, title, className, children }: { label: string; title?: string; className?: string; children: ReactNode }) {
+export function Labeled({ label, title, action, className, children }: {
+  label: string
+  title?: string
+  action?: ReactNode
+  className?: string
+  children: ReactNode
+}) {
+  const text = <span className="text-[11px] leading-none text-muted-foreground">{label}</span>
   return (
     <div className={cn('flex min-w-0 flex-col gap-1.5', className)} title={title}>
-      <span className="text-[11px] leading-none text-muted-foreground">{label}</span>
+      {action ? (
+        // As tall as the label alone, so fields side by side stay level; the action reaches past it
+        <div className="flex h-[11px] items-center justify-between gap-1">{text}{action}</div>
+      ) : text}
       {children}
     </div>
   )

@@ -1,5 +1,5 @@
 import { REPEAT_LIMITS, isFull, patternOf, setRepeat } from './pattern'
-import type { Frame, ImagePlace, Note, ThreadPattern, ThreadSettings } from './types'
+import type { Frame, ImagePlace, Note, Project, ThreadPattern, ThreadSettings } from './types'
 
 /** How long an image is along the thread when it spans `acrossMm` of the thread's thickness, upright on the banknote */
 export const alongOf = (acrossMm: number, aspect: number, direction: ThreadSettings['direction']) =>
@@ -100,8 +100,34 @@ export function patternForFrames(note: Pick<Note, 'pattern' | 'frames' | 'thread
   const pattern = patternOf(note)
   const first = frames.find((f) => f.kind === 'image' && f.aspect)
   const hadImage = note.frames.some((f) => f.kind === 'image')
-  if (!first?.aspect || hadImage || !untouched(pattern)) return note.pattern
+  // A tile set by hand stays as it was
+  if (!first?.aspect || hadImage || !untouched(pattern) || pattern.fit === false) return note.pattern
   return setRepeat(pattern, repeatFor(first.aspect, note.thread))
+}
+
+/** The tile Fit gives: as long as the first image is when it fills the thread's width, so it repeats back to back; a square without one */
+export function fitRepeat(note: Pick<Note, 'frames' | 'thread'>): number {
+  const first = note.frames.find((f) => f.kind === 'image' && f.aspect)
+  return repeatFor(first?.aspect ?? 1, note.thread)
+}
+
+/** The banknote with its tile refitted, when it is on Fit and the thread or its first image has changed (itself otherwise) */
+export function keepFitted(note: Note): Note {
+  const pattern = note.pattern
+  if (!pattern?.fit) return note
+  const repeat = fitRepeat(note)
+  return Math.abs(repeat - pattern.repeatMm) < 1e-9 ? note : { ...note, pattern: setRepeat(pattern, repeat) }
+}
+
+/** Every banknote on Fit refitted after a change, so its tile follows its thread wherever that was edited (the same project when none moved) */
+export function fitTiles(project: Project): Project {
+  let moved = false
+  const notes = project.notes.map((n) => {
+    const fitted = keepFitted(n)
+    moved ||= fitted !== n
+    return fitted
+  })
+  return moved ? { ...project, notes } : project
 }
 
 /** Images added before frames recorded their proportions: they are read once, then the banknote is settled */

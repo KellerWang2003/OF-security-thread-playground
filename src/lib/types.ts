@@ -233,8 +233,14 @@ export interface ThreadSection {
 
 /** The thread as sections that repeat along it */
 export interface ThreadPattern {
-  /** Length of one repeat along the thread, mm */
+  /** Length of one repeat along the thread, mm: the tile the artwork and the sections repeat in (Tile length) */
   repeatMm: number
+  /**
+   * The tile follows the thread (Fit, which new banknotes start on, Keller): as long as the first image is when it fills
+   * the thread's width, so it repeats back to back, or as long as the thread is wide without one. Typing a length turns
+   * it off; absent, as on banknotes from before it, the tile keeps its length
+   */
+  fit?: boolean
   /** Off: one ridge angle for the whole thread (the banknote's lens). On: each section has its own lens */
   mixed: boolean
   sections: ThreadSection[]

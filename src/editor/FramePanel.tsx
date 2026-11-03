@@ -113,15 +113,15 @@ function ImagePlaceFields({ note, frame, aspect, set }: { note: Note; frame: Fra
 
   return (
     <Section nested title="Place" action={
-      <IconButton label="Fit to the repeat" size="icon-xs" disabled={!frame.place} onClick={() => set({ place: undefined })}><RotateCcw /></IconButton>
+      <IconButton label="Fit to the tile" size="icon-xs" disabled={!frame.place} onClick={() => set({ place: undefined })}><RotateCcw /></IconButton>
     }>
       <div className="grid grid-cols-2 gap-2">
         <Labeled label="From left">
-          <LengthField label="X" title={vertical ? "Image position from the thread's left edge" : "Image position from the start of the repeat"} value={box.x}
+          <LengthField label="X" title={vertical ? "Image position from the thread's left edge" : "Image position from the start of the tile"} value={box.x}
             min={-box.width} max={room.x} step={IMAGE_STEP} onChange={(x) => move({ x })} />
         </Labeled>
         <Labeled label="From top">
-          <LengthField label="Y" title={vertical ? 'Image position from the start of the repeat' : "Image position from the thread's top edge"} value={box.y}
+          <LengthField label="Y" title={vertical ? 'Image position from the start of the tile' : "Image position from the thread's top edge"} value={box.y}
             min={-box.height} max={room.y} step={IMAGE_STEP} onChange={(y) => move({ y })} />
         </Labeled>
         <Labeled label="Width">

@@ -63,7 +63,8 @@ export function createNote({
     thread: { widthMm: 4, direction: 'vertical', positionMm: widthMm / 2, windows: migrateWindows(undefined, heightMm) },
     frames: [colorFrame(0), colorFrame(1)],
     tilt: DEFAULT_TILT,
-    pattern: defaultPattern(),
+    // On Fit: the tile follows the thread, a square until the first image sets its length
+    pattern: { ...defaultPattern(), fit: true },
   }
 }
 

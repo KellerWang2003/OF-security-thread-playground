@@ -4,8 +4,9 @@ import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { migrateWindows, windowEdges } from '../src/lib/thread'
 import { FrameFill, NoteView } from '../src/components/NoteView'
-import { copyStarts, imageBox, settleArtwork } from '../src/lib/artwork'
+import { copyStarts, fitRepeat, fitTiles, imageBox, keepFitted, settleArtwork } from '../src/lib/artwork'
 import { createNote, createProject, migrateProject } from '../src/lib/notes'
+import { defaultPattern } from '../src/lib/pattern'
 import { presetPattern } from '../src/lib/patternPresets'
 import type { Frame } from '../src/lib/types'
 
@@ -112,6 +113,40 @@ describe('an image in the repeat', () => {
     expect(migrateProject(JSON.parse(JSON.stringify(migrated))).notes[0].thread).toEqual(migrated.notes[0].thread)
     // A banknote made now loads without one
     expect(migrateProject(JSON.parse(JSON.stringify({ ...createProject('New'), notes: [note] }))).notes[0].thread).not.toHaveProperty('imageGapMm')
+  })
+})
+
+describe('a tile on Fit', () => {
+  const bird = { ...image, aspect: 1.5 }
+
+  it('starts new banknotes on Fit, a square tile as long as the thread is wide', () => {
+    const note = makeNote()
+    expect(note.pattern).toMatchObject({ fit: true, repeatMm: 4 })
+    expect(fitRepeat(note)).toBe(4)
+    expect(keepFitted(note)).toBe(note)
+  })
+
+  it('follows the width and the first image, so the image fills the thread back to back, and stretches the sections', () => {
+    const note = makeNote()
+    const wider = keepFitted({ ...note, thread: { ...note.thread, widthMm: 5 } })
+    expect(wider.pattern).toMatchObject({ repeatMm: 5, sections: [{ startMm: 0, endMm: 5 }] })
+    const withBird = keepFitted({ ...wider, frames: [bird, ...wider.frames] })
+    expect(withBird.pattern!.repeatMm).toBe(7.5)
+    // Across a horizontal thread the image's width runs along it
+    const across = keepFitted({ ...withBird, thread: { ...withBird.thread, direction: 'horizontal' } })
+    expect(across.pattern!.repeatMm).toBeCloseTo(5 / 1.5, 9)
+  })
+
+  it('leaves a tile set by hand, and banknotes from before Fit, as they are', () => {
+    const note = makeNote()
+    const thicker = (n: typeof note) => keepFitted({ ...n, thread: { ...n.thread, widthMm: 5 }, frames: [bird] })
+    expect(thicker({ ...note, pattern: { ...defaultPattern(9), fit: false } }).pattern!.repeatMm).toBe(9)
+    expect(thicker({ ...note, pattern: defaultPattern(9) }).pattern!.repeatMm).toBe(9)
+    // A project with nothing to refit is the same project, so an edit elsewhere costs nothing
+    const project = { ...createProject('Fit'), notes: [note] }
+    expect(fitTiles(project)).toBe(project)
+    const moved = fitTiles({ ...project, notes: [{ ...note, thread: { ...note.thread, widthMm: 6 } }] })
+    expect(moved.notes[0].pattern!.repeatMm).toBe(6)
   })
 })
 

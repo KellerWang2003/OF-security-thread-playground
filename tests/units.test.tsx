@@ -179,7 +179,8 @@ describe('the unit menu', () => {
 
     // The thread's lengths and its windows follow
     await user.click(screen.getByRole('tab', { name: 'Thread' }))
-    expect(field('T').value).toBe(String(lengthIn(note().thread.widthMm, 'in')))
+    expect(field('W').value).toBe(String(lengthIn(note().thread.widthMm, 'in')))
+    expect(field('L').value).toBe(String(lengthIn(note().pattern!.repeatMm, 'in')))
     // The first window runs 0 to 8 mm
     expect(note().thread.windows.sections[0]).toMatchObject({ startMm: 0, endMm: 8 })
     await user.click(screen.getByRole('button', { name: 'Window 1, 0–0.315 in' }))

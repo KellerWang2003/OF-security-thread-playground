@@ -7,7 +7,7 @@ import { ColorField, Drawer, Group, IconButton, Labeled, LengthField, Panel, Par
 import { clamp } from '../lib/frames'
 import { pickFiles, useImageUrl } from '../lib/images'
 import { LAYER_NAMES, fitLayers, isPlaced, moveLayersTo, type PlacedLayer } from '../lib/layers'
-import { NOTE_SIZE, THREAD_WIDTH } from '../lib/notes'
+import { NOTE_SIZE } from '../lib/notes'
 import { mod, patternOf } from '../lib/pattern'
 import { setPatternOffset, shufflePatternOffset, usePatternOffsets } from '../lib/patternOffset'
 import { windowReports } from '../lib/patternRules'
@@ -18,6 +18,7 @@ import { ChecksDrawer, ContinuousSection } from './DesignChecks'
 import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
 import { MagneticInkPanel } from './MagneticInkPanel'
 import { PanelResizer } from './PanelResizer'
+import { FitTileButton, ThreadWidthField, TileLengthField } from './ThreadSizeFields'
 import { WatermarkPanel } from './WatermarkPanel'
 import { WindowsCard } from './WindowsCard'
 import { setFaceImage, type NoteRef } from './frameActions'
@@ -193,16 +194,12 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
           />
         </Labeled>
         <div className="grid grid-cols-2 gap-2">
-          <Labeled label="Thickness">
-          <LengthField
-            label="T"
-            title="Thread width vertically, or height horizontally"
-            value={thread.widthMm}
-            min={THREAD_WIDTH.min}
-            max={THREAD_WIDTH.max}
-            step={THREAD_WIDTH.step}
-            onChange={(widthMm) => setThread({ widthMm })}
-          />
+          {/* How big the thread is: its width, and the tile its artwork repeats in, as beside it in Thread Studio (Keller) */}
+          <Labeled label="Width">
+            <ThreadWidthField note={note} noteRef={noteRef} />
+          </Labeled>
+          <Labeled label="Tile length" action={<FitTileButton note={note} noteRef={noteRef} />}>
+            <TileLengthField note={note} noteRef={noteRef} />
           </Labeled>
           <Labeled label="Position">
           <LengthField

@@ -364,7 +364,7 @@ describe('rules', () => {
   it('flags gaps', () => {
     const note = withPreset('split')
     const gappy = { ...note, pattern: removeSection(note.pattern!, note.pattern!.sections[1].id) }
-    expect(issues(gappy, 'gaps').map((i) => i.text)).toEqual(['50% of each repeat is empty'])
+    expect(issues(gappy, 'gaps').map((i) => i.text)).toEqual(['50% of each tile is empty'])
   })
 })
 

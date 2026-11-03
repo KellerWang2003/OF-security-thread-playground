@@ -226,13 +226,13 @@ describe('username workspace editor', () => {
     // A tab per part, as the list has them (Watermark only once added); the banknote's own settings are a tab away
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Banknote', 'Thread'])
     expect(tab()).toBe('Thread')
-    expect(screen.queryByText('W', { exact: true })).toBeNull()
+    expect(screen.queryByText('H', { exact: true })).toBeNull()
     await user.click(screen.getByRole('tab', { name: 'Banknote' }))
-    expect(screen.getByText('W', { exact: true })).toBeDefined()
+    expect(screen.getByText('H', { exact: true })).toBeDefined()
     await user.click(screen.getByRole('tab', { name: 'Thread' }))
 
     // Small labels say what each control is
-    for (const label of ['Direction', 'Thickness', 'Position', 'Effect', 'Seen flat']) expect(screen.getByText(label, { exact: true })).toBeDefined()
+    for (const label of ['Direction', 'Width', 'Tile length', 'Position', 'Effect', 'Seen flat']) expect(screen.getByText(label, { exact: true })).toBeDefined()
     // The artwork printed on the thread is set in Thread Studio, not here
     expect(screen.queryByRole('switch', { name: 'Background' })).toBeNull()
     expect(screen.queryByTitle('Space between complete image copies along the thread')).toBeNull()
