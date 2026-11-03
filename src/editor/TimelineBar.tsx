@@ -1,12 +1,11 @@
 import { reportError } from '../cloud/notices'
-import { ArrowLeft, Circle, Square, ArrowRight, EyeOff, Hash, ImagePlus, MoreHorizontal, Pause, Play, Plus, SlidersHorizontal, SquareDashed, Trash2 } from 'lucide-react'
+import { Circle, EyeOff, Hash, ImagePlus, Pause, Pencil, Play, Plus, SlidersHorizontal, Square, SquareDashed, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover'
@@ -20,12 +19,12 @@ import { cyclePosition, flatLabel, flatStep, lensState, reachSpans, respondsTo, 
 import { pickFiles } from '../lib/images'
 import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
 import { framesMissed, playbackLens, playbackTilt, sectionMix, timelineSection } from '../lib/pattern'
-import type { Frame, Note } from '../lib/types'
+import type { Note } from '../lib/types'
 import { setRecording, setTilt, togglePlayback, useTilt } from '../tilt/tilt'
-import { FillPopover, FillSwatch } from './FillPicker'
+import { FillPopover } from './FillPicker'
 import { PlaybackPanel } from './PlaybackPanel'
 import { TILT_PANEL_PX } from './TiltRail'
-import { addEmptyFrame, addImageFrames, deleteFrame, moveFrame, updateFrame, type NoteRef } from './frameActions'
+import { addEmptyFrame, addImageFrames, deleteFrame, moveFrameTo, updateFrame, type NoteRef } from './frameActions'
 
 const PAD = 12
 /** Height of one tilt-reach lane above the frames, in px */
@@ -137,16 +136,27 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
   )
 }
 
+/** A clip being dragged along the track: how far, and where in the order it would land */
+type ClipDrag = { frameId: string; from: number; dx: number; to: number }
+
 /**
- * The selected banknote's frames as one cycle of clips on a track, plus its frame settings. A frame's
- * width is its share of the cycle; drag its right edge to change that. The playhead shows where in the
- * cycle the current tilt is, wrapping around as the frames loop. Drag to scrub, scroll to move along,
+ * The selected banknote's frames as one cycle of clips on a track, plus its frame settings. A frame's width is its
+ * share of the cycle; drag its right edge to change that. Each clip handles itself, as Keller laid out: drag it along
+ * to change the order (the others slide aside), a click goes to it, the pencil at its top right edits its fill, and
+ * the × at its top left, on hover, deletes it. The playhead shows where in the cycle the current tilt is, wrapping
+ * around as the frames loop; drag the line itself, by a wide grab area round it, to scrub. Scroll to move along,
  * ⌘-scroll to zoom.
  */
 function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef: NoteRef; sectionId?: string; onScrub?: () => void }) {
   const scroller = useRef<HTMLDivElement>(null)
   const track = useRef<HTMLDivElement>(null)
-  const gesture = useRef<{ mode: 'scrub' } | { mode: 'resize'; frameId: string; startX: number; startLength: number } | null>(null)
+  const gesture = useRef<
+    | { mode: 'scrub' }
+    | { mode: 'resize'; frameId: string; startX: number; startLength: number }
+    | { mode: 'drag'; frameId: string; from: number; startX: number; moved: boolean }
+    | null
+  >(null)
+  const [drag, setDrag] = useState<ClipDrag>()
   const [pxPerUnit, setPxPerUnit] = useState(ZOOM.initial)
   const { frames } = note
   // One section's lens (the first, or the one picked in the thread editor); a plain thread's is the banknote's
@@ -190,6 +200,22 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
     const at = tiltForPosition(lens, u)
     setTilt({ source: 'slider', target: at.y, targetX: at.x })
   }
+  /** Goes to the middle of a frame, as a click on its clip does */
+  const goTo = (i: number) => scrubTo((track.current?.getBoundingClientRect().left ?? 0) + x((starts.at(i) ?? 0) + (lengths.at(i) ?? 0) / 2))
+  /** Where in the order a clip dragged `dx` px from frame `from` lands: past every other clip whose middle it has passed */
+  const landing = (from: number, dx: number) => {
+    const middle = x((starts.at(from) ?? 0) + (lengths.at(from) ?? 0) / 2) + dx
+    return frames.filter((_, k) => k !== from && x((starts.at(k) ?? 0) + (lengths.at(k) ?? 0) / 2) < middle).length
+  }
+  /** How far each clip slides while another is dragged, px: the dragged one with the pointer, those it passes aside */
+  const slide = (k: number) => {
+    if (!drag) return 0
+    if (k === drag.from) return drag.dx
+    const gap = (lengths.at(drag.from) ?? 0) * pxPerUnit
+    if (drag.from < k && k <= drag.to) return -gap
+    if (drag.to <= k && k < drag.from) return gap
+    return 0
+  }
 
   return (
     <>
@@ -202,16 +228,21 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
           onPointerDown={(e) => {
             const el = e.target as HTMLElement
             if (e.button !== 0 || el.closest('button') || el.closest('[role=menu]')) return
-            e.currentTarget.setPointerCapture(e.pointerId)
             const handle = el.closest<HTMLElement>('[data-resize]')
-            const frame = frames.find((f) => f.id === handle?.dataset.resize)
-            if (frame && noteRef) {
-              gesture.current = { mode: 'resize', frameId: frame.id, startX: e.clientX, startLength: frame.length }
-            } else {
+            const resized = frames.find((f) => f.id === handle?.dataset.resize)
+            const clip = el.closest<HTMLElement>('[data-frame-clip]')
+            const from = frames.findIndex((f) => f.id === clip?.dataset.frameClip)
+            if (resized) {
+              gesture.current = { mode: 'resize', frameId: resized.id, startX: e.clientX, startLength: resized.length }
+            } else if (el.closest('[data-playhead]')) {
+              // Only the line itself scrubs (Keller)
               gesture.current = { mode: 'scrub' }
               scrubTo(e.clientX)
               onScrub?.()
-            }
+            } else if (from >= 0) {
+              gesture.current = { mode: 'drag', frameId: frames[from].id, from, startX: e.clientX, moved: false }
+            } else return
+            e.currentTarget.setPointerCapture(e.pointerId)
           }}
           onPointerMove={(e) => {
             const g = gesture.current
@@ -221,19 +252,35 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
               return
             }
             if (g?.mode === 'scrub') scrubTo(e.clientX)
+            if (g?.mode === 'drag') {
+              const dx = e.clientX - g.startX
+              // Past a few px a press becomes a drag, so a click still goes to the frame
+              if (!g.moved && Math.abs(dx) < 4) return
+              g.moved = true
+              setDrag({ frameId: g.frameId, from: g.from, dx, to: landing(g.from, dx) })
+            }
             if (g?.mode === 'resize' && noteRef) {
               const length = clamp(Math.round(g.startLength + (e.clientX - g.startX) / pxPerUnit), LENGTH_LIMITS.min, LENGTH_LIMITS.max)
               updateFrame(noteRef, g.frameId, { length })
             }
           }}
-          onPointerUp={() => {
+          onPointerUp={(e) => {
+            const g = gesture.current
             gesture.current = null
+            if (g?.mode !== 'drag') return
+            setDrag(undefined)
+            // A click goes to the frame; a drag puts it where it was let go
+            if (!g.moved) goTo(g.from)
+            else moveFrameTo(noteRef, g.frameId, landing(g.from, e.clientX - g.startX))
+            onScrub?.()
           }}
           onPointerCancel={() => {
             gesture.current = null
+            setDrag(undefined)
           }}
           onLostPointerCapture={() => {
             gesture.current = null
+            setDrag(undefined)
           }}
         >
           {frames.map((frame, i) => {
@@ -244,14 +291,17 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
                 key={frame.id}
                 data-frame-clip={frame.id}
                 className={cn(
-                  'group absolute bottom-1 overflow-hidden rounded-sm border bg-background',
+                  'group absolute bottom-1 cursor-grab overflow-hidden rounded-sm border bg-background',
                   i === current && 'ring-1 ring-primary/30',
+                  // The dragged clip follows the pointer above the others, which slide aside
+                  drag?.from === i ? 'z-10 cursor-grabbing shadow-md' : drag && 'transition-transform duration-150',
                 )}
-                style={{ top: framesTop, left: left + 1, width: Math.max(width - 2, 4) }}
+                style={{ top: framesTop, left: left + 1, width: Math.max(width - 2, 4), transform: drag ? `translateX(${slide(i)}px)` : undefined }}
               >
                 <FrameThumb frame={frame} />
                 {width > 28 && (
-                  <span className="absolute top-0.5 left-1 rounded bg-background/80 px-1 text-[10px] font-medium tabular-nums">
+                  <span className={cn('absolute top-0.5 left-1 rounded bg-background/80 px-1 text-[10px] font-medium tabular-nums',
+                    frames.length > MIN_FRAMES && !drag && 'group-hover:opacity-0')}>
                     {i + 1}
                   </span>
                 )}
@@ -264,29 +314,33 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
                     {missed(i).map((a) => (a === 'y' ? '↕' : '↔')).join('')}
                   </span>
                 )}
-                {(
-                  <>
-                    <FrameMenu frame={frame} index={i} count={frames.length} noteRef={noteRef} />
-                    {/* Its fill, in the same panel as the right panel's, opened from its swatch; it goes to the frame, as a click on it does */}
-                    <FillPopover noteRef={noteRef} frame={frame} side="top" align="center"
-                      onOpenChange={(open) => {
-                        if (!open) return
-                        scrubTo((track.current?.getBoundingClientRect().left ?? 0) + left + width / 2)
-                        onScrub?.()
-                      }}
-                      trigger={
-                        <Button variant="secondary" size="icon-xs" aria-label={`Frame ${i + 1} fill`}
-                          className="absolute right-2 bottom-0.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[popup-open]:opacity-100">
-                          <FillSwatch frame={frame} className="size-3.5" />
-                        </Button>
-                      } />
-                    <div
-                      data-resize={frame.id}
-                      aria-label={`Change frame ${i + 1} length`}
-                      className="absolute inset-y-0 right-0 w-1.5 cursor-col-resize bg-foreground/0 transition-colors hover:bg-primary/40"
-                    />
-                  </>
+                {/* On hover: × at the top left deletes it (while more than the fewest frames are left) */}
+                {frames.length > MIN_FRAMES && !drag && (
+                  <Button variant="secondary" size="icon-xs" aria-label={`Delete frame ${i + 1}`}
+                    className="absolute top-0.5 left-0.5 size-5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                    onClick={() => void deleteFrame(noteRef, frame.id)}>
+                    <X className="size-3" />
+                  </Button>
                 )}
+                {/* The pencil at the top right edits its fill, in the same panel as the right panel's, going to the frame */}
+                <FillPopover noteRef={noteRef} frame={frame} side="top" align="center"
+                  onOpenChange={(open) => {
+                    if (!open) return
+                    goTo(i)
+                    onScrub?.()
+                  }}
+                  trigger={
+                    <Button variant="secondary" size="icon-xs" aria-label={`Edit frame ${i + 1}`}
+                      className={cn('absolute top-0.5 right-2 size-5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[popup-open]:opacity-100',
+                        drag && 'hidden')}>
+                      <Pencil className="size-3" />
+                    </Button>
+                  } />
+                <div
+                  data-resize={frame.id}
+                  aria-label={`Change frame ${i + 1} length`}
+                  className="absolute inset-y-0 right-0 w-1.5 cursor-col-resize bg-foreground/0 transition-colors hover:bg-primary/40"
+                />
               </div>
             )
           })}
@@ -357,47 +411,16 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
   )
 }
 
-/** Where in the cycle the current tilt is; on its own so it alone re-renders as the tilt moves */
+/**
+ * Where in the cycle the current tilt is; on its own so it alone re-renders as the tilt moves. Dragging the line
+ * scrubs, from anywhere in a wide grab area round it (Keller)
+ */
 function Playhead({ lens, left, width }: { lens: LensState; left: number; width: number }) {
   const phase = useTilt((s) => cyclePhase(cyclePosition(lens, { x: s.angleX, y: s.angle }), 1))
   return (
-    <div className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: left + phase * width }}>
-      <div className="absolute -top-0.5 left-1/2 size-2 -translate-x-1/2 rotate-45 bg-primary" />
+    <div data-playhead="" aria-label="Playhead" className="absolute inset-y-0 z-20 w-4 -translate-x-1/2 cursor-ew-resize" style={{ left: left + phase * width }}>
+      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary" />
+      <div className="pointer-events-none absolute -top-0.5 left-1/2 size-2 -translate-x-1/2 rotate-45 bg-primary" />
     </div>
-  )
-}
-
-/** A clip's menu: move it along the timeline or delete it; what the frame shows is set in Thread Studio */
-function FrameMenu({ frame, index, count, noteRef }: { frame: Frame; index: number; count: number; noteRef: NoteRef }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="secondary"
-            size="icon-xs"
-            aria-label={`Frame ${index + 1} options`}
-            className="absolute top-0.5 right-2 opacity-0 group-hover:opacity-100 data-[popup-open]:opacity-100"
-          />
-        }
-      >
-        <MoreHorizontal />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-44" side="top">
-        <DropdownMenuItem disabled={index === 0} onClick={() => moveFrame(noteRef, frame.id, -1)}>
-          <ArrowLeft />
-          Move earlier
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={index === count - 1} onClick={() => moveFrame(noteRef, frame.id, 1)}>
-          <ArrowRight />
-          Move later
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" disabled={count <= MIN_FRAMES} onClick={() => void deleteFrame(noteRef, frame.id)}>
-          <Trash2 />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   )
 }

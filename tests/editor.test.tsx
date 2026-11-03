@@ -215,7 +215,7 @@ describe('username workspace editor', () => {
     expect(body(0).classList.contains('outline-2')).toBe(true)
     expect(saves).not.toHaveBeenCalled()
   })
-  it('turns to the thread when its frames are scrubbed, and fills a frame from its clip', async () => {
+  it('handles frames on the timeline: a click goes to one, a drag reorders, × deletes, the pencil edits its fill, the line scrubs', async () => {
     for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
       Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
     }
@@ -226,20 +226,59 @@ describe('username workspace editor', () => {
     await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
     const note = () => useProjects.getState().demoPreview!.notes[0]
     const open = () => screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent
+    const clip = (id: string) => document.querySelector<HTMLElement>(`[data-frame-clip="${id}"]`)!
+    // The tilt arriving where the timeline sent it (the spring that gets it there doesn't run here)
+    const arrive = () => act(() => { const s = useTilt.getState(); setTilt({ angle: s.target, angleX: s.targetX }) })
+    const [a, b] = note().frames.map((f) => f.id)
     expect(open()).toBe('Banknote')
-    // Scrubbing the frames is working on the thread (Keller): the panel turns to it
-    const clip = document.querySelector<HTMLElement>(`[data-frame-clip="${note().frames[1].id}"]`)!
-    fireEvent.pointerDown(clip, { button: 0, buttons: 1, clientX: 50, pointerId: 1 })
-    fireEvent.pointerUp(clip, { button: 0, clientX: 50, pointerId: 1 })
+
+    // A click on a clip goes to that frame, and working on the frames turns the panel to the thread (Keller)
+    for (const id of [a, b]) {
+      fireEvent.pointerDown(clip(id), { button: 0, buttons: 1, clientX: 50, pointerId: 1 })
+      fireEvent.pointerUp(clip(id), { button: 0, clientX: 50, pointerId: 1 })
+      arrive()
+      expect(clip(id).classList.contains('ring-1')).toBe(true)
+    }
     expect(open()).toBe('Thread')
-    // Each clip opens its frame's fill, in the same panel as the right panel's, and turns to the thread too
+
+    // A drag along the track moves a frame in the order, the others sliding aside while it goes
+    fireEvent.pointerDown(clip(a), { button: 0, buttons: 1, clientX: 0, pointerId: 1 })
+    fireEvent.pointerMove(clip(a), { buttons: 1, clientX: 120, pointerId: 1 })
+    expect(clip(a).style.transform).toBe('translateX(120px)')
+    expect(clip(b).style.transform).toBe('translateX(-100px)')
+    fireEvent.pointerUp(clip(a), { button: 0, clientX: 120, pointerId: 1 })
+    expect(note().frames.map((f) => f.id)).toEqual([b, a])
+    expect(clip(a).style.transform).toBe('')
+
+    // × deletes a frame, shown only while there are more than the fewest
+    expect(screen.queryByRole('button', { name: 'Delete frame 1' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Add frame' }))
+    await user.click(await screen.findByRole('menuitem', { name: /Empty frame/ }))
+    expect(note().frames).toHaveLength(3)
+    await user.click(screen.getByRole('button', { name: 'Delete frame 3' }))
+    expect(note().frames.map((f) => f.id)).toEqual([b, a])
+
+    // The pencil edits a frame's fill, in the same panel as the right panel's, and turns to the thread too
     await user.click(screen.getByRole('tab', { name: 'Banknote' }))
-    await user.click(screen.getByRole('button', { name: 'Frame 2 fill' }))
+    await user.click(screen.getByRole('button', { name: 'Edit frame 2' }))
     expect(open()).toBe('Thread')
     const hex = document.querySelector<HTMLInputElement>('[data-slot="popover-content"] input:not([type="color"])')!
     fireEvent.change(hex, { target: { value: '#123456' } })
     expect(note().frames[1].color).toBe('#123456')
     expect(note().frames[0].color).not.toBe('#123456')
+    await user.click(screen.getByRole('button', { name: 'Edit frame 2' }))
+
+    // Only the line itself scrubs: a press on the empty track does nothing, a drag on the line tilts
+    act(() => setTilt({ source: 'slider', angle: 0, target: 0, angleX: 0, targetX: 0 }))
+    const track = clip(a).parentElement!
+    fireEvent.pointerDown(track, { button: 0, buttons: 1, clientX: 30, pointerId: 1 })
+    fireEvent.pointerUp(track, { button: 0, clientX: 30, pointerId: 1 })
+    expect([useTilt.getState().target, useTilt.getState().targetX]).toEqual([0, 0])
+    const line = document.querySelector<HTMLElement>('[data-playhead]')!
+    fireEvent.pointerDown(line, { button: 0, buttons: 1, clientX: 30, pointerId: 1 })
+    fireEvent.pointerMove(line, { buttons: 1, clientX: 190, pointerId: 1 })
+    fireEvent.pointerUp(line, { button: 0, clientX: 190, pointerId: 1 })
+    expect([useTilt.getState().target, useTilt.getState().targetX]).not.toEqual([0, 0])
   })
   it('shows one tab per part, labels every control, and the thread’s lens with its preview in a drawer at the foot', async () => {
     const user = userEvent.setup()

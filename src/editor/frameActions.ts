@@ -71,11 +71,11 @@ export async function replaceFrameImage(ref: NoteRef, frameId: string, file: Fil
 /** Empties a frame: it shows the thread's background */
 export const clearFrame = (ref: NoteRef, frameId: string) => updateFrame(ref, frameId, { kind: 'none' })
 
-export function moveFrame({ projectId, noteId }: NoteRef, frameId: string, by: -1 | 1) {
+/** Moves a frame to another place in the order, as dragging its clip along the timeline does */
+export function moveFrameTo({ projectId, noteId }: NoteRef, frameId: string, to: number) {
   updateNote(projectId, noteId, (n) => {
     const from = n.frames.findIndex((f) => f.id === frameId)
-    const to = from + by
-    if (from < 0 || to < 0 || to >= n.frames.length) return n
+    if (from < 0 || from === to || to < 0 || to >= n.frames.length) return n
     const frames = [...n.frames]
     const [moved] = frames.splice(from, 1)
     frames.splice(to, 0, moved)
