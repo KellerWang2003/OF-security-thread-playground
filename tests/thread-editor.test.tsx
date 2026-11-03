@@ -6,7 +6,8 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import App from '../src/App'
 import { usePatternOffsets } from '../src/lib/patternOffset'
-import { useProjects } from '../src/lib/store'
+import { addNote, updateNote, useProjects } from '../src/lib/store'
+import { createNote } from '../src/lib/notes'
 import { setTilt } from '../src/tilt/tilt'
 import { TooltipProvider } from '../src/components/ui/tooltip'
 import type { Note } from '../src/lib/types'
@@ -211,6 +212,45 @@ describe('thread editor', () => {
     // A preview only: the project never holds it
     expect(Object.keys(note().pattern!).toSorted()).toEqual(['mixed', 'repeatMm', 'sections'])
     expect(JSON.parse(localStorage.getItem('of-playground.pattern-offsets')!)[note().id]).toBe(shuffled)
+  })
+
+  it('undoes only this banknote’s steps, by button and keyboard, while the canvas still undoes the rest', async () => {
+    const user = await openDemo('thread-undo-ui-test')
+    const project = () => useProjects.getState().demoPreview!
+    // Another banknote, then a rename of it: steps the thread editor of the first must never take back
+    act(() => addNote(project().id, createNote({ name: 'Other', x: 200, y: 0, widthMm: 150, heightMm: 70, color: '#654321' })))
+    const other = project().notes[1].id
+    act(() => updateNote(project().id, other, (n) => ({ ...n, name: 'Other renamed' })))
+    await user.click(screen.getByRole('button', { name: 'Edit thread', exact: true }))
+    const editor = screen.getByRole('region', { name: 'Thread editor' })
+    const undo = () => within(editor).getByRole('button', { name: 'Undo', exact: true }) as HTMLButtonElement
+    const redo = () => within(editor).getByRole('button', { name: 'Redo', exact: true }) as HTMLButtonElement
+    expect(undo().disabled).toBe(true)
+
+    await user.click(within(editor).getByRole('button', { name: /^Split band/ }))
+    expect(sections()).toHaveLength(2)
+    expect(undo().disabled).toBe(false)
+    await user.keyboard('{Meta>}z{/Meta}')
+    expect(sections()).toHaveLength(1)
+    expect(undo().disabled).toBe(true)
+    // Nothing more of this banknote's to undo: ⌘Z leaves the other banknote alone
+    await user.keyboard('{Meta>}z{/Meta}')
+    expect(project().notes[1].name).toBe('Other renamed')
+    expect(redo().disabled).toBe(false)
+    await user.keyboard('{Meta>}{Shift>}z{/Shift}{/Meta}')
+    expect(sections()).toHaveLength(2)
+    await user.click(undo())
+    expect(sections()).toHaveLength(1)
+    await user.keyboard('{Control>}y{/Control}')
+    expect(sections()).toHaveLength(2)
+
+    // Back on the canvas, undo covers the whole project again, one step at a time
+    await user.click(within(editor).getByRole('button', { name: 'Back to the canvas', exact: true }))
+    await user.keyboard('{Meta>}z{/Meta}')
+    expect(sections()).toHaveLength(1)
+    expect(project().notes[1].name).toBe('Other renamed')
+    await user.keyboard('{Meta>}z{/Meta}')
+    expect(project().notes[1].name).toBe('Other')
   })
 
   it('applies each preset, and the magnified thread follows the tilt section by section', async () => {

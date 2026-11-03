@@ -65,7 +65,7 @@ src/
 
 ## Undo and redo
 
-Undo/redo buttons sit beside Projects in the editor, and in the thread editor's top bar. Use ⌘/Ctrl+Z to undo, ⌘/Ctrl+Shift+Z to redo, or Ctrl+Y to redo. History covers project names, banknotes, artwork, thread settings and patterns, lens and timeline edits; the print offset is a preview and isn't undone. Continuous drags and scrubs are grouped into one step; text fields retain native text undo while focused. Restored edits autosave normally. Each project keeps up to 100 steps for the current session, including temporary demos.
+Undo/redo buttons sit beside Projects in the editor, and in the thread editor's top bar. Use ⌘/Ctrl+Z to undo, ⌘/Ctrl+Shift+Z to redo, or Ctrl+Y to redo. In the thread editor they take back only that banknote's steps and the playback every banknote shares; a step on another banknote stops them there, and the canvas's undo still reaches it. History covers project names, banknotes, artwork, thread settings and patterns, lens and timeline edits; the print offset is a preview and isn't undone. Continuous drags and scrubs are grouped into one step; text fields retain native text undo while focused. Restored edits autosave normally. Each project keeps up to 100 steps for the current session, including temporary demos.
 
 ## Checks
 

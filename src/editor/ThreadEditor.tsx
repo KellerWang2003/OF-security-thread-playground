@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator'
 import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
 import { Group, IconButton, Panel, ScrubField, Section, SwitchField } from '../components/controls'
-import { useHistory } from '../lib/history'
+import { canStepNote, useHistory } from '../lib/history'
 import {
   ALONG_STEP,
   REPEAT_LIMITS,
@@ -36,7 +36,7 @@ import {
 } from '../lib/pattern'
 import { PATTERN_PRESETS, presetPattern } from '../lib/patternPresets'
 import { checkPattern, warningCount, type PatternCheck } from '../lib/patternRules'
-import { redoProject, undoProject, updateNote } from '../lib/store'
+import { stepNote, updateNote } from '../lib/store'
 import type { Note, Project, ThreadPattern, ThreadSection } from '../lib/types'
 import { EffectSection, LensMenu, type SetLens } from './EffectSection'
 import { Explain, RidgeIcon, swatch } from './LensVisuals'
@@ -58,6 +58,9 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
   const [ridges, setRidges] = useState(false)
   const checksRef = useRef<HTMLDivElement>(null)
   const history = useHistory((s) => s.entries[project.id])
+  // Undo here only takes back this banknote's steps; the canvas's undo still covers the whole project
+  const canUndo = canStepNote(project, note.id, 'undo', history)
+  const canRedo = canStepNote(project, note.id, 'redo', history)
   // A section undone away, or removed, is simply no longer selected
   const selected = pattern.sections.find((s) => s.id === selectedId)
   const selectedSectionId = selected?.id
@@ -102,6 +105,23 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
     return () => window.removeEventListener('keydown', onKey, { capture: true })
   }, [selectedSectionId, canRemove, onClose, project.id, note.id])
 
+  // ⌘Z and ⇧⌘Z (or Ctrl+Y) undo and redo this banknote's steps only, caught before the canvas's project-wide undo
+  useEffect(() => {
+    const onHistory = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !(e.metaKey || e.ctrlKey) || e.altKey || e.isComposing) return
+      const key = e.key.toLowerCase()
+      if (key !== 'z' && key !== 'y') return
+      const element = e.target instanceof Element ? e.target : null
+      // Text fields keep native text undo while they are being edited
+      if (element?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return
+      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return
+      e.preventDefault()
+      stepNote(project.id, note.id, key === 'y' || e.shiftKey ? 'redo' : 'undo')
+    }
+    window.addEventListener('keydown', onHistory, { capture: true })
+    return () => window.removeEventListener('keydown', onHistory, { capture: true })
+  }, [project.id, note.id])
+
   // The lens the right panel edits: the selected section as the lens sees it (its strips as frames, its own lens
   // with mixed angles), or the banknote's own; with mixed angles every change lands on that section only
   const lensNote = selected ? sectionView(note, selected) : pattern.mixed ? undefined : note
@@ -136,8 +156,8 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
             min={REPEAT_LIMITS.min} max={REPEAT_LIMITS.max} step={ALONG_STEP} unit="mm" onChange={(v) => edit((n) => setRepeat(patternOf(n), v))} />
           <Toggle size="sm" aria-label="Ridges" title="Hatch each section at its ridge angle" pressed={ridges} onPressedChange={setRidges}>Ridges</Toggle>
           <div className="flex items-center gap-0.5">
-            <IconButton className="rounded-lg" label="Undo" title="Undo (⌘/Ctrl+Z)" disabled={!history?.past.length} onClick={() => undoProject(project.id)}><Undo2 /></IconButton>
-            <IconButton className="rounded-lg" label="Redo" title="Redo (⌘/Ctrl+Shift+Z)" disabled={!history?.future.length} onClick={() => redoProject(project.id)}><Redo2 /></IconButton>
+            <IconButton className="rounded-lg" label="Undo" title="Undo (⌘/Ctrl+Z)" disabled={!canUndo} onClick={() => stepNote(project.id, note.id, 'undo')}><Undo2 /></IconButton>
+            <IconButton className="rounded-lg" label="Redo" title="Redo (⌘/Ctrl+Shift+Z)" disabled={!canRedo} onClick={() => stepNote(project.id, note.id, 'redo')}><Redo2 /></IconButton>
           </div>
         </div>
       </Panel>

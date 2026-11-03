@@ -1,4 +1,4 @@
-import { recordEdit, historyStep, reconcileHistory, resetHistory } from './history'
+import { canStepNote, recordEdit, historyStep, reconcileHistory, resetHistory } from './history'
 import { useWorkspace, putProject, editorProject } from '../cloud/workspace'
 import { copyImage, removeImage } from './images'
 import { nextNotePosition } from './notes'
@@ -72,6 +72,13 @@ export function undoProject(id: string) {
 export function redoProject(id: string) {
   const project = editorProject(id)
   const restored = project && historyStep(project, 'redo')
+  if (restored) putProject(restored)
+}
+
+/** Undo or redo from one banknote's thread editor: only a step that is that banknote's (`canStepNote`) */
+export function stepNote(projectId: string, noteId: string, direction: 'undo' | 'redo') {
+  const project = editorProject(projectId)
+  const restored = project && canStepNote(project, noteId, direction) && historyStep(project, direction)
   if (restored) putProject(restored)
 }
 
