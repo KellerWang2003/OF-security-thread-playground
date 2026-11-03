@@ -510,7 +510,8 @@ export function Canvas({
           const hovered = hover?.noteId === note.id && hover.part !== picked ? hover.part : undefined
           const ref: NoteRef = { projectId, noteId: note.id }
           // The continuous check shows around an uploaded design while the banknote itself is picked, with the drift it
-          // previews. Meanwhile the banknote has no outline or label, so nothing comes between it and its neighbours (Keller)
+          // previews. Meanwhile the banknote has no outline, label or shadow, so nothing comes between it and its
+          // neighbours (Keller)
           const check = picked === 'note' && note.background === 'image' && note.faceImageId ? note.continuous : undefined
           const drift = check ? driftWithin(drifts[note.id], check.cutMm) : undefined
           return (
@@ -542,6 +543,8 @@ export function Canvas({
                   'outline-offset-4 transition-[outline-color] duration-150 cursor-ns-resize',
                   drift ? 'outline-0' : picked === 'note' ? 'outline-2' : hovered === 'note' ? 'outline-1' : 'outline-0',
                   quiet ? 'outline-primary/5' : 'outline-primary/25',
+                  // NoteView's own shadow would darken the seam
+                  drift && '[&>div:first-child]:shadow-none',
                 )}
               >
                 {/* Editing windows shows the banknote flat with its watermark faint; placing a layer, flat (the watermark clear) */}

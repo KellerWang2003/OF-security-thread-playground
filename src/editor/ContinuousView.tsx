@@ -14,8 +14,11 @@ import { useTilt } from '../tilt/tilt'
 /** How far out from the banknote its neighbours show, mm, and at most on screen, px, so they never cover the canvas */
 const NEIGHBOURS_MM = 10
 const NEIGHBOURS_MAX_PX = 120
-/** How strongly the neighbours show by the banknote: faint, so the banknote still reads as the one */
-const NEIGHBOURS_OPACITY = 0.5
+/**
+ * How much of that, from the banknote out, they show at full strength before fading away: at the seam they are as
+ * printed, so you see whether the colour carries across (Keller: faint copies only ever showed a step)
+ */
+const NEIGHBOURS_FULL = 0.5
 /** Tilt either way under which the banknote counts as flat: turned this little, it is out by a pixel at most */
 const FLAT_DEG = 2
 /** Break marks: how thick, how far out from the edge and at least how long, px */
@@ -30,8 +33,8 @@ function useShown(quiet: boolean) {
 }
 
 /**
- * Behind the banknote: copies of its design where its neighbours sit on the print sheet, edge to edge with it, faint and
- * fading out to a margin. Where an edge doesn't carry on into its copy, the seam shows.
+ * Behind the banknote: copies of its design where its neighbours sit on the print sheet, edge to edge with it, as strong
+ * as the banknote by it and fading out further away. Where an edge doesn't carry on into its copy, the seam shows.
  */
 export function NeighbourRing({ note, scale, drift, quiet }: { note: Note; scale: number; drift: CutDrift; quiet: boolean }) {
   const url = useImageUrl(note.faceImageId)
@@ -40,12 +43,13 @@ export function NeighbourRing({ note, scale, drift, quiet }: { note: Note; scale
   const width = note.widthMm * scale
   const height = note.heightMm * scale
   const margin = Math.min(NEIGHBOURS_MM * scale, NEIGHBOURS_MAX_PX)
-  // As strong as they get by the banknote, fading out over the outer part of the margin
-  const fade = (to: string) => `linear-gradient(${to}, transparent, black ${margin * 0.7}px, black calc(100% - ${margin * 0.7}px), transparent)`
+  // Full strength by the banknote, fading out over the outer part of the margin
+  const fading = margin * (1 - NEIGHBOURS_FULL)
+  const fade = (to: string) => `linear-gradient(${to}, transparent, black ${fading}px, black calc(100% - ${fading}px), transparent)`
   const mask = `${fade('to right')}, ${fade('to bottom')}`
   return (
     <div aria-hidden="true" data-neighbours="" className="pointer-events-none absolute overflow-hidden transition-opacity duration-150"
-      style={{ left: -margin, top: -margin, width: width + 2 * margin, height: height + 2 * margin, opacity: shown ? NEIGHBOURS_OPACITY : 0,
+      style={{ left: -margin, top: -margin, width: width + 2 * margin, height: height + 2 * margin, opacity: shown ? 1 : 0,
         maskImage: mask, WebkitMaskImage: mask, maskComposite: 'intersect', WebkitMaskComposite: 'source-in' }}>
       <div className="absolute" style={{ left: margin, top: margin }}>
         <DesignTiles url={url} width={width} height={height} color={note.color} shift={{ x: drift.x * scale, y: drift.y * scale }} />
