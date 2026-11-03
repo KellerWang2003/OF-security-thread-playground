@@ -401,18 +401,28 @@ describe('editing sections', () => {
     // An L-shaped gap: the bigger of its two rectangles
     const corner = { repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 1, acrossEnd: 0.5 })] }
     expect(freeRect(corner)).toEqual({ startMm: 1, endMm: 4, acrossStart: 0, acrossEnd: 1 })
+    // Sections a new repeat left off the grid still count wherever they reach into a cell, so nothing added overlaps them
+    const scaled = setRepeat({ repeatMm: 4, mixed: false, sections: [section({ id: 'a', endMm: 1 }), section({ id: 'b', startMm: 3, endMm: 4 })] }, 5)
+    expect(scaled.sections.map((s) => [s.startMm, s.endMm])).toEqual([[0, 1.25], [3.75, 5]])
+    expect(freeRect(scaled)).toEqual({ startMm: 1.5, endMm: 3.5, acrossStart: 0, acrossEnd: 1 })
+    const typed = resizeEdge({ repeatMm: 4, mixed: false, sections: [section({ id: 'a' })] }, 'a', 'endMm', 1.2, false)
+    expect(freeRect(typed)).toEqual({ startMm: 1.5, endMm: 4, acrossStart: 0, acrossEnd: 1 })
   })
 
-  it('adds a plain section in the largest gap, or cut from the selected section when there is none', () => {
+  it('adds a plain section in the largest gap, or cuts the selected section in two, keeping its look, when there is none', () => {
     const covered = lanes()
     const [side, updown] = covered.sections
     const filled = addBlankSection(removeSection(covered, updown.id), 4)!
     expect(filled.pattern.sections[1]).toEqual({ id: filled.id, name: 'Section 2', startMm: 0, endMm: 4, acrossStart: 0.5, acrossEnd: 1 })
-    // No gap: the selected lane is cut along its longer side, and the new half plays the banknote's lens and every frame
+    // No gap: the selected lane is cut along its longer side, and the new half keeps its lens and track, so the
+    // thread looks the same until it's changed
     const cut = addBlankSection(covered, 4, side.id)!
     expect(cut.pattern.sections.map((s) => s.name)).toEqual(['Lane ↔', 'Section 3', 'Lane ↕'])
     expect(cut.pattern.sections[0]).toMatchObject({ lens: side.lens, track: side.track, startMm: 0, endMm: 2 })
-    expect(cut.pattern.sections[1]).toEqual({ id: cut.id, name: 'Section 3', startMm: 2, endMm: 4, acrossStart: 0, acrossEnd: 0.5 })
+    expect(cut.pattern.sections[1]).toEqual({ ...side, id: cut.id, name: 'Section 3', startMm: 2, endMm: 4 })
+    const before = { ...banknote(), pattern: covered }
+    const after = { ...before, pattern: cut.pattern }
+    expect(shown(after, sweep('x'))).toEqual([...shown(before, sweep('x')).slice(0, 1), ...shown(before, sweep('x'))])
     // Nothing selected: the largest section is cut
     expect(addBlankSection(covered, 4)!.pattern.sections).toHaveLength(3)
   })

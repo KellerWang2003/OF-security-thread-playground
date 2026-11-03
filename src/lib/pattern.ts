@@ -456,9 +456,10 @@ export function duplicateSection(pattern: ThreadPattern, id: string, widthMm: nu
 /** The largest empty area of the repeat, on the snapping grid; undefined when the sections cover it */
 export function freeRect(pattern: ThreadPattern): Rect | undefined {
   const cols = Math.floor(pattern.repeatMm / ALONG_STEP + EPS), rows = Math.round(1 / ACROSS_STEP)
+  // A cell any section reaches into at all, so a section left off the grid (by a new repeat, or a typed edge) still counts
   const covered = (c: number, r: number) => {
-    const along = (c + 0.5) * ALONG_STEP, across = (r + 0.5) / rows
-    return pattern.sections.some((s) => along > s.startMm && along < s.endMm && across > s.acrossStart && across < s.acrossEnd)
+    const start = c * ALONG_STEP, end = start + ALONG_STEP, top = r / rows, bottom = (r + 1) / rows
+    return pattern.sections.some((s) => Math.min(end, s.endMm) - Math.max(start, s.startMm) > EPS && Math.min(bottom, s.acrossEnd) - Math.max(top, s.acrossStart) > EPS)
   }
   // Each column's run of free cells ending at this row, then the widest stretch of columns at least as tall
   const heights = new Array<number>(cols).fill(0)
@@ -482,24 +483,16 @@ export function freeRect(pattern: ThreadPattern): Rect | undefined {
 }
 
 /**
- * A new plain section (the banknote's lens, every frame): over the largest empty area, or else cut from `fromId`
- * (or the largest section) along its longer side. Undefined when there's no room.
+ * A new section: a plain one (the banknote's lens, every frame) over the largest empty area, or else cut from
+ * `fromId` (or the largest section) along its longer side, keeping that section's lens and track so the thread still
+ * looks the same. Undefined when there's no room.
  */
 export function addBlankSection(pattern: ThreadPattern, widthMm: number, fromId?: string): { pattern: ThreadPattern; id: string } | undefined {
   const free = freeRect(pattern)
   if (free) return addSection(pattern, free)
   const largest = pattern.sections.reduce((a, b) => (area(b) > area(a) ? b : a))
   const from = pattern.sections.find((s) => s.id === fromId) ?? largest
-  const split = splitLonger(pattern, from.id, widthMm, nextName(pattern)) ?? (from === largest ? undefined : splitLonger(pattern, largest.id, widthMm, nextName(pattern)))
-  if (!split) return undefined
-  return {
-    id: split.id,
-    pattern: { ...split.pattern, sections: split.pattern.sections.map((s) => {
-      if (s.id !== split.id) return s
-      const { lens: _lens, track: _track, ...plain } = s
-      return plain
-    }) },
-  }
+  return splitLonger(pattern, from.id, widthMm, nextName(pattern)) ?? (from === largest ? undefined : splitLonger(pattern, largest.id, widthMm, nextName(pattern)))
 }
 
 export const removeSection = (pattern: ThreadPattern, id: string): ThreadPattern =>
