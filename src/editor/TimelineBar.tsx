@@ -29,6 +29,8 @@ import { addEmptyFrame, addImageFrames, deleteFrame, moveFrameTo, updateFrame, t
 const PAD = 12
 /** Height of one tilt-reach lane above the frames, in px */
 const LANE = 9
+/** Height of the band above the frames to scrub on when there are no lanes there, px */
+const SCRUB_BAND = 14
 /** Pixels per unit of frame length; a new frame (10 units) starts 100 px wide */
 const ZOOM = { min: 3, max: 40, initial: 10 }
 
@@ -144,7 +146,8 @@ type ClipDrag = { frameId: string; from: number; dx: number; to: number }
  * share of the cycle; drag its right edge to change that. Each clip handles itself, as Keller laid out: drag it along
  * to change the order (the others slide aside), a click goes to it, the pencil at its top right edits its fill, and
  * the × at its top left, on hover, deletes it. The playhead shows where in the cycle the current tilt is, wrapping
- * around as the frames loop; drag the line itself, by a wide grab area round it, to scrub. Scroll to move along,
+ * around as the frames loop; drag the line itself, by a wide grab area round it, or press on the track round the
+ * frames (a band above them is kept for it), to scrub. Scroll to move along,
  * ⌘-scroll to zoom.
  */
 function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef: NoteRef; sectionId?: string; onScrub?: () => void }) {
@@ -172,9 +175,10 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
   const starts = lengths.map((_, i) => lengths.slice(0, i).reduce((sum, l) => sum + l, 0))
   const x = (units: number) => PAD + units * pxPerUnit
   const bars = (['y', 'x'] as const).filter((a) => respondsTo(lens, a)).map((a) => ({ axis: a, spans: reachSpans(lens.offset, tiltReach(lens, a)) }))
-  // With both tilts live, each tilt's reach gets its own lane above the frames instead of sitting on them
+  // With both tilts live, each tilt's reach gets its own lane above the frames instead of sitting on them; either way
+  // a band above the frames is there to scrub on
   const lanes = bars.length > 1 ? bars.length : 0
-  const framesTop = lanes ? 4 + lanes * LANE : 4
+  const framesTop = lanes ? 4 + lanes * LANE : SCRUB_BAND
 
   // Wheel: ⌘/Ctrl zooms the timeline, a plain vertical wheel scrolls it sideways
   useEffect(() => {
@@ -234,14 +238,15 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
             const from = frames.findIndex((f) => f.id === clip?.dataset.frameClip)
             if (resized) {
               gesture.current = { mode: 'resize', frameId: resized.id, startX: e.clientX, startLength: resized.length }
-            } else if (el.closest('[data-playhead]')) {
-              // Only the line itself scrubs (Keller)
+            } else if (from >= 0 && !el.closest('[data-playhead]')) {
+              gesture.current = { mode: 'drag', frameId: frames[from].id, from, startX: e.clientX, moved: false }
+            } else {
+              // The line itself (Keller), or the track round the frames, the band above them included, scrubs: a moving
+              // line during playback is hard to catch, and a press there stops it
               gesture.current = { mode: 'scrub' }
               scrubTo(e.clientX)
               onScrub?.()
-            } else if (from >= 0) {
-              gesture.current = { mode: 'drag', frameId: frames[from].id, from, startX: e.clientX, moved: false }
-            } else return
+            }
             e.currentTarget.setPointerCapture(e.pointerId)
           }}
           onPointerMove={(e) => {

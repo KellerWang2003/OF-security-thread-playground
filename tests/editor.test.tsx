@@ -268,12 +268,15 @@ describe('username workspace editor', () => {
     expect(note().frames[0].color).not.toBe('#123456')
     await user.click(screen.getByRole('button', { name: 'Edit frame 2' }))
 
-    // Only the line itself scrubs: a press on the empty track does nothing, a drag on the line tilts
+    // The line scrubs, and so does the track round the frames (the band above them), where a press is easy to land
+    // while the line runs during playback
     act(() => setTilt({ source: 'slider', angle: 0, target: 0, angleX: 0, targetX: 0 }))
     const track = clip(a).parentElement!
     fireEvent.pointerDown(track, { button: 0, buttons: 1, clientX: 30, pointerId: 1 })
     fireEvent.pointerUp(track, { button: 0, clientX: 30, pointerId: 1 })
-    expect([useTilt.getState().target, useTilt.getState().targetX]).toEqual([0, 0])
+    expect([useTilt.getState().target, useTilt.getState().targetX]).not.toEqual([0, 0])
+    expect(note().frames.map((f) => f.id)).toEqual([b, a])
+    act(() => setTilt({ source: 'slider', angle: 0, target: 0, angleX: 0, targetX: 0 }))
     const line = document.querySelector<HTMLElement>('[data-playhead]')!
     fireEvent.pointerDown(line, { button: 0, buttons: 1, clientX: 30, pointerId: 1 })
     fireEvent.pointerMove(line, { buttons: 1, clientX: 190, pointerId: 1 })
