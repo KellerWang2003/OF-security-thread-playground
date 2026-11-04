@@ -11,7 +11,7 @@ import { createDemoProject } from '../src/lib/demo'
 import { newWatermark } from '../src/lib/watermark'
 import { presetPattern } from '../src/lib/patternPresets'
 import { setTiltPadOpen } from '../src/lib/tiltPad'
-import { setTilt, useTilt } from '../src/tilt/tilt'
+import { setTilt, togglePlayback, useTilt } from '../src/tilt/tilt'
 import { TooltipProvider } from '../src/components/ui/tooltip'
 
 const saves = vi.hoisted(() => vi.fn())
@@ -594,14 +594,23 @@ describe('username workspace editor', () => {
     await waitFor(() => expect(parseFloat(note().style.left)).toBeCloseTo(left - 100))
     expect(layer().style.transform).toBe('')
 
+    // The zoom shows in the corner bar, kept current while it changes
+    const readout = () => document.querySelector('[data-zoom-readout]')!.textContent
+    const fitted = readout()
+    expect(fitted).toMatch(/^\d+%$/)
     const before = drawn()
     fireEvent.wheel(canvas, { deltaY: -40, ctrlKey: true, clientX: 0, clientY: 0 })
     await waitFor(() => expect(layer().style.transform).toContain('scale('))
     expect(drawn()).toBe(before)
+    const zoomed = readout()
+    expect(zoomed).not.toBe(fitted)
     await waitFor(() => expect(layer().style.transform).toBe(''))
     expect(drawn()).toBeGreaterThan(before)
-    // No zoom percentage: nothing says what 100% is
-    expect(screen.queryByText(/^\d+%$/)).toBeNull()
+    expect(readout()).toBe(zoomed)
+    // A click on it goes to 100%, about true size: the 150 mm banknote drawn 150 mm wide at 96 px an inch
+    await user.click(screen.getByTitle('Zoom to 100% (about true size)'))
+    expect(readout()).toBe('100%')
+    expect(drawn()).toBeCloseTo((150 * 96) / 25.4, 1)
   })
 
   it('edits the lens effect, Cycle included, for the selected banknote only', async () => {
@@ -725,20 +734,23 @@ describe('username workspace editor', () => {
     expect(useTilt.getState()).toMatchObject({ source: 'slider', target: 0, targetX: 0 })
   })
 
-  it('toggles playback immediately with Space, ignores repeats and typing, and respects dialogs', async () => {
+  it('toggles playback with a tap of Space as it comes up, ignores repeats and typing, and respects dialogs', async () => {
     const user = userEvent.setup()
     localStorage.setItem('of-thread-workspace', 'keyboard-ui-test')
     render(<TooltipProvider><App /></TooltipProvider>)
     await screen.findByRole('button', { name: 'New project', exact: true })
     await user.click(screen.getByRole('button', { name: 'Demo', exact: true }))
     await screen.findByRole('button', { name: 'Exit demo' })
+    // Held down, Space is the hand that pans: playback waits for it to come up
     fireEvent.keyDown(window, { code: 'Space', key: ' ' })
+    fireEvent.keyDown(window, { code: 'Space', key: ' ', repeat: true })
+    expect(useTilt.getState().source).toBe('drag')
+    fireEvent.keyUp(window, { code: 'Space', key: ' ' })
     expect(useTilt.getState().source).toBe('wobble')
     expect(screen.getByRole('button', { name: 'Pause', exact: true })).toBeDefined()
-    fireEvent.keyDown(window, { code: 'Space', key: ' ', repeat: true })
-    expect(useTilt.getState().source).toBe('wobble')
     act(() => setTilt({ angle: 17, target: 17 }))
     fireEvent.keyDown(window, { code: 'Space', key: ' ' })
+    fireEvent.keyUp(window, { code: 'Space', key: ' ' })
     expect(useTilt.getState().source).toBe('slider')
     expect(useTilt.getState().target).toBe(17)
 
@@ -753,6 +765,7 @@ describe('username workspace editor', () => {
     await user.click(screen.getByRole('button', { name: 'Add banknote', exact: true }))
     await screen.findByRole('dialog')
     fireEvent.keyDown(window, { code: 'Space', key: ' ' })
+    fireEvent.keyUp(window, { code: 'Space', key: ' ' })
     expect(useTilt.getState().source).toBe('slider')
   })
 
@@ -829,7 +842,7 @@ describe('username workspace editor', () => {
     expect(target()).toEqual({ y: 0, x: side })
     unlock()
 
-    // A right-click doesn't tilt
+    // A right drag pans instead of tilting
     drag(2)
     expect(target()).toEqual({ y: 0, x: 0 })
     fireEvent.pointerUp(body(), { button: 2, pointerId: 1 })
@@ -840,6 +853,81 @@ describe('username workspace editor', () => {
     fireEvent.pointerMove(body(), { buttons: 1, pointerId: 1, clientX: 101, clientY: 101 })
     fireEvent.pointerUp(body(), { button: 0, pointerId: 1, clientX: 101, clientY: 101 })
     expect(target()).toEqual({ y: 12, x: -5 })
+  })
+
+  it('tilts from a drag on a banknote or the empty canvas, and pans with the middle or right button or with Space held', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      callback: ResizeObserverCallback
+      constructor(callback: ResizeObserverCallback) { this.callback = callback }
+      observe() { this.callback([{ contentRect: { width: 1280, height: 720 } } as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      unobserve() {} disconnect() {}
+    })
+    for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
+    }
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'canvas-navigation-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const body = () => document.querySelector('[data-note-body]')!
+    const note = () => body().parentElement as HTMLElement
+    const canvas = () => note().parentElement!.parentElement as HTMLElement
+    const left = () => parseFloat(note().style.left)
+    const target = () => ({ y: useTilt.getState().target, x: useTilt.getState().targetX })
+    const BUTTONS = [1, 4, 2]
+    const drag = (on: Element, button = 0, by = { x: 40, y: 0 }) => {
+      fireEvent.pointerDown(on, { button, buttons: BUTTONS[button], pointerId: 1, clientX: 100, clientY: 100 })
+      fireEvent.pointerMove(on, { buttons: BUTTONS[button], pointerId: 1, clientX: 100 + by.x, clientY: 100 + by.y })
+      fireEvent.pointerUp(on, { button, pointerId: 1, clientX: 100 + by.x, clientY: 100 + by.y })
+    }
+
+    // A drag on the empty canvas tilts every banknote, as one on a banknote does, springing back on release; the
+    // banknote stays picked
+    fireEvent.pointerDown(canvas(), { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(canvas(), { buttons: 1, pointerId: 1, clientX: 100, clientY: 60 })
+    expect(target().y).toBeGreaterThan(0)
+    expect(useTilt.getState().source).toBe('drag')
+    fireEvent.pointerUp(canvas(), { button: 0, pointerId: 1, clientX: 100, clientY: 60 })
+    expect(target()).toEqual({ y: 0, x: 0 })
+    expect(tab()).toBe('Banknote')
+
+    // A middle or right drag pans, on the banknote too, without tilting it; the right button opens no browser menu
+    for (const button of [1, 2]) {
+      const before = left()
+      drag(body(), button)
+      expect(left()).toBeCloseTo(before + 40)
+      expect(target()).toEqual({ y: 0, x: 0 })
+    }
+    expect(fireEvent.contextMenu(body())).toBe(false)
+    expect(tab()).toBe('Banknote')
+
+    // Held down, Space is the hand: a drag anywhere on the canvas pans, and letting go of Space then doesn't play
+    fireEvent.keyDown(window, { code: 'Space', key: ' ' })
+    expect(canvas().className).toContain('cursor-grab')
+    for (const on of [body(), body().querySelector('[data-thread]')!, canvas()]) {
+      const before = left()
+      drag(on)
+      expect(left()).toBeCloseTo(before + 40)
+    }
+    fireEvent.keyUp(window, { code: 'Space', key: ' ' })
+    expect(canvas().className).not.toContain('cursor-grab')
+    expect(target()).toEqual({ y: 0, x: 0 })
+    expect(useTilt.getState().source).not.toBe('wobble')
+    expect(tab()).toBe('Banknote')
+
+    // A click on the empty canvas clears the selection and leaves playback playing
+    act(() => togglePlayback())
+    fireEvent.pointerDown(canvas(), { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerUp(canvas(), { button: 0, pointerId: 1, clientX: 100, clientY: 100 })
+    expect(tab()).toBeUndefined()
+    expect(useTilt.getState().source).toBe('wobble')
+    act(() => togglePlayback())
+
+    // The banknote's label still moves the banknote
+    const { x } = useProjects.getState().demoPreview!.notes[0]
+    drag(document.querySelector('[data-note-label]')!)
+    expect(useProjects.getState().demoPreview!.notes[0].x).not.toBe(x)
   })
 
   it('adds a watermark as a layer, places it on the canvas flat and clear, and holds every banknote to the light with L', async () => {

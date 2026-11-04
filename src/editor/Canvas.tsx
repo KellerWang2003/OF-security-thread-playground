@@ -24,6 +24,7 @@ import { EdgeMarks, NeighbourRing } from './ContinuousView'
 import { addImageFrames, type NoteRef } from './frameActions'
 import { placeLayer, type Layer } from './layerActions'
 import { PlacingBox } from './PlacingBox'
+import { spacePanned, useSpaceHand } from './spaceHand'
 import { UploadDesignButton } from './UploadDesignButton'
 import { WindowEditor } from './WindowEditor'
 import { useElementSize } from './useElementSize'
@@ -41,6 +42,8 @@ const SNAP_PX = 6
 const COMMIT_MS = 120
 /** Background dot spacing at `scale` px per mm: every 10 mm, else 50 mm, else 500 mm, at least 12 px apart */
 const gridStep = (scale: number) => scale * (scale * 10 >= 12 ? 10 : scale * 50 >= 12 ? 50 : 500)
+/** The dots, in a little of the text colour so they show (Keller: in the border colour they were all but invisible) */
+const DOTS = 'radial-gradient(circle, color-mix(in oklab, var(--foreground) 18%, transparent) 1px, transparent 1.2px)'
 
 /** Zoom level and where the canvas origin (0, 0 mm) sits on screen, in px */
 interface View {
@@ -50,10 +53,13 @@ interface View {
 }
 
 type Gesture =
-  | { mode: 'pan'; startX: number; startY: number; view: View; onBackground: boolean }
+  | { mode: 'pan'; startX: number; startY: number; view: View }
   | { mode: 'move'; noteId: string; startX: number; startY: number; noteX: number; noteY: number }
-  /** `moved` once the drag passes a few px: a plain click leaves the tilt where it is, and picks the banknote */
-  | { mode: 'tilt'; noteId: string; startX: number; startY: number; start: number; startSide: number; moved: boolean }
+  /**
+   * Pressed on a banknote, or on the empty canvas (no `noteId`). `moved` once the drag passes a few px: a plain click
+   * leaves the tilt where it is, and picks the banknote, or clears the selection
+   */
+  | { mode: 'tilt'; noteId?: string; startX: number; startY: number; start: number; startSide: number; moved: boolean }
   | { mode: 'thread'; noteId: string; startX: number; startY: number; startPosition: number; alongMm: number }
   /**
    * A placed layer (the watermark, magnetic ink) moves only once the drag passes a few px, so a click just picks it;
@@ -85,9 +91,9 @@ function fitView(notes: Note[], size: { width: number; height: number }): View {
 }
 
 /**
- * Every note of the project on one zoomable canvas. Scroll or drag the background to pan, pinch or
- * ⌘/Ctrl-scroll to zoom, drag a note's label to move it, its thread, watermark or magnetic ink to move that across
- * it, and the note itself to tilt.
+ * Every note of the project on one zoomable canvas, handled as Figma's (Keller): scroll, middle or right drag, or drag
+ * with Space held to pan, pinch or ⌘/Ctrl-scroll to zoom, drag a note's label to move it, its thread, watermark or
+ * magnetic ink to move that across it, and the note itself or the empty canvas to tilt every note.
  */
 export function Canvas({
   projectId,
@@ -149,6 +155,8 @@ export function Canvas({
   const frameNumbers = useTilt((s) => s.frameNumbers)
   // Turned over, the banknotes show their backs (from halfway round, as NoteView does)
   const back = useTilt(showsBack)
+  // Space held: a press pans, whatever it lands on
+  const hand = useSpaceHand((s) => s.held)
 
   const selected = notes.find((n) => n.id === selectedId)
   const reference = selected ?? notes.at(0)
@@ -203,8 +211,10 @@ export function Canvas({
     const g = gridStep(s)
     element.style.backgroundSize = `${g}px ${g}px`
     element.style.backgroundPosition = `${v.x}px ${v.y}px`
-    // Labels stay their usual size while the layer scales
+    // Labels stay their usual size, and the zoom readout current, while the layer scales
     for (const label of content.current.querySelectorAll<HTMLElement>('[data-note-label], [data-keep-size]')) label.style.transform = k === 1 ? '' : `scale(${1 / k})`
+    const readout = element.querySelector('[data-zoom-readout]')?.firstChild
+    if (readout) readout.nodeValue = `${Math.round(v.zoom * 100)}%`
   }
   /** Ends a live pan or zoom: React draws the view for real */
   const commitView = () => {
@@ -334,9 +344,21 @@ export function Canvas({
     setHover((h) => (!noteId ? undefined : h?.noteId === noteId && h.part === part ? h : { noteId, part }))
   }
 
+  /** A gesture takes the pointer, the view staying where it is on screen */
+  const startGesture = (e: React.PointerEvent<HTMLDivElement>, v: View) => {
+    setHover(undefined)
+    // Freeze the fitted view, or moving a note would refit the canvas under the pointer. A live pan or
+    // zoom is committed first, so drags measure in the scale on screen.
+    if (live.current) commitView()
+    else if (!view) setView(v)
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
   const grid = gridStep(scale)
   // Selection outlines step back while banknotes play or are dragged, so they never get in the way of the motion
   const quiet = source === 'wobble' || activeMode === 'tilt' || activeMode === 'move'
+  // The hand shows over everything a press would pan from, the notes' own cursors included
+  const grab = activeMode === 'pan' ? 'grabbing' : hand ? 'grab' : undefined
 
   return (
     <div
@@ -344,40 +366,47 @@ export function Canvas({
       className={cn(
         'relative flex-1 touch-none overflow-hidden select-none',
         dropping ? 'bg-muted' : 'bg-muted/40',
-        activeMode === 'pan' && 'cursor-grabbing',
-        activeMode === 'placed' && 'cursor-move',
+        grab === 'grabbing' ? 'cursor-grabbing' : grab === 'grab' ? 'cursor-grab' : activeMode === 'placed' && 'cursor-move',
       )}
       style={
         current
           ? {
-              backgroundImage: 'radial-gradient(circle, color-mix(in oklab, var(--border) 55%, transparent) 1px, transparent 1.2px)',
+              backgroundImage: DOTS,
               backgroundSize: `${grid}px ${grid}px`,
               backgroundPosition: `${current.x}px ${current.y}px`,
             }
           : undefined
       }
+      // A middle or right drag, or any press while Space is held, pans, whatever it lands on: a banknote, its thread, a
+      // window or a placed layer's box take no part. The corner bar keeps its clicks
+      onPointerDownCapture={(e) => {
+        const v = viewRef.current
+        const pans = e.button === 1 || e.button === 2 || (e.button === 0 && useSpaceHand.getState().held)
+        if (!v || !pans || (e.target as HTMLElement).closest('[data-corner-bar]')) return
+        e.stopPropagation()
+        startGesture(e, v)
+        gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, view: v }
+        spacePanned()
+        setActiveMode('pan')
+      }}
+      // No browser menu on the canvas: the right button pans
+      onContextMenu={(e) => e.preventDefault()}
       onPointerDown={(e) => {
         const v = viewRef.current
-        // Only the left and middle buttons drag; a right-click's menu would swallow the release
-        if (!v || e.button > 1) return
-        setHover(undefined)
-        // A click on the banknote outside the thread's windows (or the placed layer's box) ends editing and tilts as usual
-        if (editingWindows && noteAt(e.target, 'data-note-body') === selectedId) onExitWindows?.()
-        if (placing && noteAt(e.target, 'data-note-body') === selectedId) onExitPlacing?.()
-        // Freeze the fitted view, or moving a note would refit the canvas under the pointer. A live pan or
-        // zoom is committed first, so drags measure in the scale on screen.
-        if (live.current) commitView()
-        else if (!view) setView(v)
-        e.currentTarget.setPointerCapture(e.pointerId)
+        // Only the left button gets here: the others pan (above)
+        if (!v || e.button !== 0) return
         const labelId = noteAt(e.target, 'data-note-label')
         const bodyId = noteAt(e.target, 'data-note-body')
         const note = notes.find((n) => n.id === (labelId ?? bodyId))
+        // A click on the banknote outside the thread's windows (or the placed layer's box), or on the empty canvas, ends
+        // editing; a drag from there tilts as usual
+        if (editingWindows && (!note || bodyId === selectedId)) onExitWindows?.()
+        if (placing && (!note || bodyId === selectedId)) onExitPlacing?.()
+        startGesture(e, v)
         const onThread = !labelId && (e.target as HTMLElement).closest('[data-thread]') !== null
         const onPlaced = labelId ? undefined : placedAt(e.target)
         const placed = onPlaced && note?.[onPlaced]
-        if (e.button === 1 || !note) {
-          gesture.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, view: v, onBackground: !note }
-        } else if (onThread && e.button === 0) {
+        if (onThread && note) {
           // The thread moves across the banknote, along the axis its position is measured on
           onSelectLayer(note.id, 'thread')
           const rect = (e.target as HTMLElement).closest('[data-note-body]')?.firstElementChild?.getBoundingClientRect()
@@ -388,23 +417,24 @@ export function Canvas({
               : ((e.clientY - rect.top) / rect.height) * note.heightMm
             : -1
           gesture.current = { mode: 'thread', noteId: note.id, startX: e.clientX, startY: e.clientY, startPosition: note.thread.positionMm, alongMm }
-        } else if (onPlaced && placed && e.button === 0) {
+        } else if (onPlaced && placed && note) {
           // The watermark or magnetic ink moves around the banknote, as the thread moves across it. Picking it shows its
           // box, whose corners resize it.
           onSelectLayer(note.id, onPlaced)
           gesture.current = { mode: 'placed', layer: onPlaced, noteId: note.id, startX: e.clientX, startY: e.clientY, original: placed, moved: false, mirror: back }
-        } else if (labelId) {
+        } else if (labelId && note) {
           onSelect(note.id)
           gesture.current = { mode: 'move', noteId: note.id, startX: e.clientX, startY: e.clientY, noteX: note.x, noteY: note.y }
         } else {
-          // A press picks another banknote itself; on the selected one only a click does (on release), so tilting it
-          // by dragging keeps its layer in the panel
-          if (note.id !== selectedId) onSelect(note.id)
+          // A drag on a banknote or the empty canvas tilts every banknote, as the tilt pad does. A press picks another
+          // banknote itself; on the selected one only a click does (on release), so tilting it by dragging keeps its layer
+          // in the panel. On the empty canvas a click clears the selection, and playback goes on until a drag starts
+          if (note && note.id !== selectedId) onSelect(note.id)
           const s = useTilt.getState()
           const start = s.source === 'drag' ? s.target : s.angle
           const startSide = s.source === 'drag' ? s.targetX : s.angleX
-          gesture.current = { mode: 'tilt', noteId: note.id, startX: e.clientX, startY: e.clientY, start, startSide, moved: false }
-          setTilt({ source: 'drag', target: start, targetX: startSide })
+          gesture.current = { mode: 'tilt', noteId: note?.id, startX: e.clientX, startY: e.clientY, start, startSide, moved: false }
+          if (note) setTilt({ source: 'drag', target: start, targetX: startSide })
         }
         setActiveMode(gesture.current.mode)
       }}
@@ -462,6 +492,7 @@ export function Canvas({
           const limit = loopLens.viewDeg
           const { lockX, lockY } = useTilt.getState()
           setTilt({
+            source: 'drag',
             target: lockY ? g.start : clamp(g.start - (dy * 30) / 160, -limit, limit),
             targetX: lockX ? g.startSide : clamp(g.startSide + (dx * 30) / 160, -limit, limit),
           })
@@ -477,10 +508,9 @@ export function Canvas({
             : undefined
           if (note && section) onEditWindow?.(note.id, section.id)
         }
-        // A click on a banknote, away from its thread and placed layers and without tilting it, picks the banknote itself
+        // A click without tilting picks the banknote itself, away from its thread and placed layers, or on the empty
+        // canvas clears the selection
         if (g?.mode === 'tilt' && !g.moved) onSelect(g.noteId)
-        // A click on empty canvas, without dragging, clears the selection
-        if (g?.mode === 'pan' && g.onBackground && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < 3) onSelect(undefined)
         endGesture()
       }}
       onPointerCancel={endGesture}
@@ -507,15 +537,16 @@ export function Canvas({
       }}
     >
       {/* Everything drawn in canvas space, so a live pan or zoom can move it as one layer */}
-      <div ref={content} className="absolute top-0 left-0 origin-top-left">
+      <div ref={content} className={cn('absolute top-0 left-0 origin-top-left', grab === 'grabbing' ? '**:cursor-grabbing!' : grab === 'grab' && '**:cursor-grab!')}>
       {current &&
         notes.map((note) => {
           const isSelected = note.id === selectedId
           const editingThis = isSelected && editingWindows
           const placingThis = isSelected && placing && note[placing] ? placing : undefined
-          // Only what is picked is outlined, the banknote itself or one of its parts; what a click would pick is outlined lightly
+          // Only what is picked is outlined, the banknote itself or one of its parts; what a click would pick is outlined
+          // lightly, but not while Space is held, as a press then only pans
           const picked = isSelected ? layer : undefined
-          const hovered = hover?.noteId === note.id && hover.part !== picked ? hover.part : undefined
+          const hovered = !hand && hover?.noteId === note.id && hover.part !== picked ? hover.part : undefined
           const ref: NoteRef = { projectId, noteId: note.id }
           // The continuous check shows around an uploaded design while the banknote itself is picked, with the drift it
           // previews. Meanwhile the banknote has no outline, label or shadow, so nothing comes between it and its
@@ -602,11 +633,21 @@ export function Canvas({
         // The corner bar, built like Thread Studio's top bar: fixed top right, as wide as the properties panel that
         // opens under it, with the zoom controls, then Export, in the same place whatever is selected.
         // Its own pointer events, or the canvas captures the pointer and the buttons never get a click
-        <div className="absolute top-3 right-3 w-(--panel-w)" onPointerDown={(e) => e.stopPropagation()}>
+        <div data-corner-bar="" className="absolute top-3 right-3 w-(--panel-w)" onPointerDown={(e) => e.stopPropagation()}>
           <Panel className="flex h-11 items-center gap-0.5 pr-1.5 pl-1.5">
             <IconButton className="rounded-lg" label="Zoom out" onClick={() => zoomAround(1 / 1.25, size.width / 2, size.height / 2)}>
               <Minus />
             </IconButton>
+            {/* 100% is about true size, at the screen's 96 px an inch (Keller wanted the readout back on 4 November) */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-14 rounded-lg tabular-nums"
+              title="Zoom to 100% (about true size)"
+              onClick={() => zoomAround(1 / (viewRef.current?.zoom ?? 1), size.width / 2, size.height / 2)}
+            >
+              <span data-zoom-readout="">{`${Math.round(current.zoom * 100)}%`}</span>
+            </Button>
             <IconButton className="rounded-lg" label="Zoom in" onClick={() => zoomAround(1.25, size.width / 2, size.height / 2)}>
               <Plus />
             </IconButton>

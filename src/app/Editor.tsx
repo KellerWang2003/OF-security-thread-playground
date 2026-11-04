@@ -16,6 +16,7 @@ import { TimelineBar } from '../editor/TimelineBar'
 import { TiltRail } from '../editor/TiltRail'
 import { useSettleArtwork } from '../editor/useSettleArtwork'
 import { addFeature, layerOf, removeFeature, removeLayer, type Layer } from '../editor/layerActions'
+import { pressSpace, releaseSpace, useSpaceHand } from '../editor/spaceHand'
 import { hasThread, isPlaced, type Feature, type PlacedLayer } from '../lib/layers'
 
 /** Keys typed into these, or pressed while a dialog or menu is open, are not shortcuts */
@@ -213,19 +214,40 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     return () => window.removeEventListener('keydown', onDown)
   }, [inStudio])
 
+  // Space: a tap plays or pauses, and held down it is the hand, a press on the canvas panning (Figma's). So playback
+  // toggles when Space comes up, and only if no pan started meanwhile; never while editing windows or placing a layer,
+  // which pause playback, though the hand still pans then
   useEffect(() => {
-    const onSpace = (event: KeyboardEvent) => {
-      if (editingWindows || placing) return
+    const onDown = (event: KeyboardEvent) => {
       if (event.code !== 'Space' || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return
       const element = event.target instanceof Element ? event.target : null
       if (element?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="spinbutton"], [role="switch"], [role="checkbox"], [role="radio"], [role="slider"]')) return
       if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return
       event.preventDefault()
-      if (!event.repeat) togglePlayback()
+      if (!event.repeat) pressSpace()
     }
-    window.addEventListener('keydown', onSpace, { capture: true })
-    return () => window.removeEventListener('keydown', onSpace, { capture: true })
+    const onUp = (event: KeyboardEvent) => {
+      if (event.code !== 'Space' || !useSpaceHand.getState().held) return
+      // Or a focused button would take the release as a click
+      event.preventDefault()
+      if (releaseSpace() && !editingWindows && !placing) togglePlayback()
+    }
+    window.addEventListener('keydown', onDown, { capture: true })
+    window.addEventListener('keyup', onUp, { capture: true })
+    return () => {
+      window.removeEventListener('keydown', onDown, { capture: true })
+      window.removeEventListener('keyup', onUp, { capture: true })
+    }
   }, [editingWindows, placing])
+  // A release in another window never arrives: the hand goes away without playing, as it does when the project closes
+  useEffect(() => {
+    const onBlur = () => releaseSpace(false)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('blur', onBlur)
+      onBlur()
+    }
+  }, [])
 
   useEffect(() => {
     const onHistory = (event: KeyboardEvent) => {
