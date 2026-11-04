@@ -27,8 +27,10 @@ const round = (value: number) => Math.round(value * 100) / 100
 const twoDecimals = (value: number) => String(round(value))
 
 /**
- * A floating panel over the canvas, see-through enough to show the banknotes under it (Keller); fields inside have solid
- * fills instead. Every floating panel has the same corners (Keller): `rounded-lg` controls inset 6 px, plus the border
+ * A floating panel over the canvas, see-through enough to show the banknotes under it (Keller); every control with a box
+ * inside (fields, selectors, dropdowns, outline buttons) has a 90% fill instead, in its own colour, so a banknote behind
+ * doesn't show through it (Keller). Every floating panel has the same corners (Keller): `rounded-lg` controls inset 6 px,
+ * plus the border
  */
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
   return <div className={cn('rounded-[calc(var(--radius)+0.375rem+1px)] border border-border/70 bg-background/85 shadow-panel backdrop-blur', className)}>{children}</div>
@@ -129,9 +131,9 @@ function FieldError({ id, children }: { id: string; children: ReactNode }) {
 
 /**
  * A Figma-style number field: a short label inside the field that you can drag sideways to scrub the
- * value, and a number you can type. Commits while typing only when the value is in range. Its fill is all but solid
- * (98%): a banknote seen through the panel tints the panel, and a see-through fill all but vanished (Keller noticed W
- * and H), while a hint of it still shows (Keller). A length is a `LengthField`.
+ * value, and a number you can type. Commits while typing only when the value is in range. Its fill is 90%, as every
+ * boxed control's is: a banknote seen through the panel tints the panel, and a see-through fill all but vanished (Keller
+ * noticed W and H). A length is a `LengthField`.
  */
 export function ScrubField({
   label,
@@ -170,7 +172,7 @@ export function ScrubField({
     <div
       title={title}
       className={cn(
-        'flex min-w-0 items-center rounded-md border border-transparent bg-muted/98 focus-within:border-ring hover:border-border',
+        'flex min-w-0 items-center rounded-md border border-transparent bg-muted/90 focus-within:border-ring hover:border-border',
         error && 'border-destructive focus-within:border-destructive hover:border-destructive',
         sm ? 'h-7' : 'h-8',
         className,
@@ -454,7 +456,7 @@ export function NumberField({
       <Input
         {...input}
         aria-describedby={error ? errorId : undefined}
-        className={cn('h-8 text-right tabular-nums [&::-webkit-inner-spin-button]:appearance-none', unit && (typeof unit === 'string' ? 'pr-7' : 'pr-8'))}
+        className={cn('h-8 bg-background/90 text-right tabular-nums [&::-webkit-inner-spin-button]:appearance-none', unit && (typeof unit === 'string' ? 'pr-7' : 'pr-8'))}
       />
       {typeof unit === 'string' ? (
         <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-muted-foreground">
@@ -514,7 +516,11 @@ export function RangeField({
   )
 }
 
-/** A single-choice toggle group that always keeps one option selected */
+/**
+ * A single-choice toggle group that always keeps one option selected, drawn as Figma's selectors are (Keller): a grey
+ * track, as a field's fill, with the picked option a white raised pill in dark text and the others grey text. As tall
+ * as a field, its pills inset 2 px and rounded to match
+ */
 export function Segmented<T extends string>({
   value,
   options,
@@ -526,10 +532,10 @@ export function Segmented<T extends string>({
 }) {
   return (
     <ToggleGroup
-      variant="outline"
       size="sm"
-      spacing={0}
-      className="w-full"
+      // Pills of their own with a 2 px gap, not buttons joined into one bar
+      spacing={0.5}
+      className="w-full rounded-md bg-muted/90 p-0.5"
       value={[value]}
       onValueChange={(next) => {
         const picked = next.at(0)
@@ -537,7 +543,8 @@ export function Segmented<T extends string>({
       }}
     >
       {options.map((o) => (
-        <ToggleGroupItem key={o.value} value={o.value} className="flex-1 text-xs">
+        <ToggleGroupItem key={o.value} value={o.value}
+          className="flex-1 rounded-sm text-xs text-muted-foreground hover:bg-transparent aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm">
           {o.label}
         </ToggleGroupItem>
       ))}
@@ -579,10 +586,11 @@ export function ColorField({ value, onChange }: { value: string; onChange: (valu
         aria-label="Pick colour"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="absolute top-1/2 left-1.5 size-5 -translate-y-1/2 cursor-pointer rounded-[max(0px,calc(var(--radius)-6px))] border-0 bg-transparent p-0 [&::-webkit-color-swatch]:rounded-[inherit] [&::-webkit-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0"
+        // Outlined faintly, so a white colour still shows on the field's white fill
+        className="absolute top-1/2 left-1.5 size-5 -translate-y-1/2 cursor-pointer rounded-[max(0px,calc(var(--radius)-6px))] border-0 bg-transparent p-0 ring-1 ring-foreground/10 [&::-webkit-color-swatch]:rounded-[inherit] [&::-webkit-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0"
       />
       <Input
-        className="h-8 pl-8 uppercase tabular-nums"
+        className="h-8 bg-background/90 pl-8 uppercase tabular-nums"
         value={draft ?? value}
         onChange={(e) => {
           setDraft(e.target.value)
