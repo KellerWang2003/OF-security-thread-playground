@@ -15,8 +15,8 @@ import { ThreadEditor } from '../editor/ThreadEditor'
 import { TimelineBar } from '../editor/TimelineBar'
 import { TiltRail } from '../editor/TiltRail'
 import { useSettleArtwork } from '../editor/useSettleArtwork'
-import { addLayer, layerOf, removeLayer, type Layer } from '../editor/layerActions'
-import { isPlaced, type PlacedLayer } from '../lib/layers'
+import { addFeature, layerOf, removeFeature, removeLayer, type Layer } from '../editor/layerActions'
+import { hasThread, isPlaced, type Feature, type PlacedLayer } from '../lib/layers'
 
 /** Keys typed into these, or pressed while a dialog or menu is open, are not shortcuts */
 const TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="spinbutton"]'
@@ -78,9 +78,11 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
   }
   const closeThread = () => setThreadNoteId(undefined)
   const [adding, setAdding] = useState(false)
-  // A new project's first banknote opens on its thread, with a tip by Windows saying they can be added there, since
-  // banknotes start without them (Keller); it goes at the next click or key
+  // A new project's first thread opens on its tab, with a tip by Windows saying they can be added there, since threads
+  // start without them (Keller); it goes at the next click or key. Banknotes come without a thread (Keller, 4
+  // November), so the tip waits for the first one added in a project that opened empty
   const [windowsTip, setWindowsTip] = useState<string>()
+  const [openedEmpty] = useState(() => project.notes.length === 0)
   const [exporting, setExporting] = useState(false)
   const [focus, setFocus] = useState<{ noteId: string; token: number }>()
   const isEmpty = project.notes.length === 0
@@ -263,24 +265,27 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     selectNote(noteId)
     setFocus({ noteId, token: Date.now() })
   }
-  /** A new banknote shows itself, brought into view; a new project's first shows its thread, with the windows tip */
-  const added = (noteId: string) => {
-    if (!isEmpty) return selectAndFocus(noteId)
-    selectLayer(noteId, 'thread')
-    setFocus({ noteId, token: Date.now() })
-    setWindowsTip(noteId)
-  }
+  /** A new banknote shows itself, brought into view */
+  const added = (noteId: string) => selectAndFocus(noteId)
   /** From the Banknotes list: a banknote row (or a new copy) shows the banknote itself, a layer row that layer; a new banknote is brought into view */
   const selectFromList = (noteId: string, next: Layer = 'note') => {
     const elsewhere = noteId !== selectedId
     selectLayer(noteId, next)
     if (elsewhere || next === 'note') setFocus({ noteId, token: Date.now() })
   }
-  // Removing the layer it shows leaves the banknote itself selected
-  const dropLayer = (noteId: string, removed: PlacedLayer) => {
-    void removeLayer({ projectId: project.id, noteId }, removed)
+  /** Adds a security feature from the Add menu and shows it; the first thread in a project that opened empty comes with the windows tip */
+  const addFrom = (noteId: string, added: Feature) => {
+    const firstThread = added === 'thread' && openedEmpty && !project.notes.some(hasThread)
+    addFeature({ projectId: project.id, noteId }, added)
+    selectFromList(noteId, added)
+    if (firstThread) setWindowsTip(noteId)
+  }
+  // Removing the feature it shows leaves the banknote itself selected
+  const dropLayer = (noteId: string, removed: Feature) => {
+    void removeFeature({ projectId: project.id, noteId }, removed)
     if (noteId === selectedId && shownLayer === removed) setLayer('note')
     if (noteId === placingNoteId && placing === removed) exitPlacing()
+    if (removed === 'thread' && noteId === editingNoteId) exitWindows()
   }
 
   return (
@@ -315,13 +320,11 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
         <>
           {tiltPad && <TiltRail limit={lens?.viewDeg} playback={reference && lens ? { projectId: project.id, tilt: playbackTilt(reference), lens } : undefined} flip />}
           <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} layer={shownLayer} onSelect={selectFromList} onAdd={() => setAdding(true)} aboveTilt={tiltPad}
-            onAddLayer={(noteId, added) => {
-              addLayer({ projectId: project.id, noteId }, added)
-              selectFromList(noteId, added)
-            }}
-            onRemoveLayer={dropLayer} />
+            onAddLayer={addFrom} onRemoveLayer={dropLayer} />
           {!isEmpty && (
-            <TimelineBar projectId={project.id} notes={project.notes} note={note} noteRef={noteRef} besidePanel={note !== undefined}
+            // A banknote without a thread has no frames to show, so the bar stays as it is with nothing selected
+            <TimelineBar projectId={project.id} notes={project.notes} note={note && hasThread(note) ? note : undefined}
+              noteRef={note && hasThread(note) ? noteRef : undefined} besidePanel={note !== undefined}
               // Scrubbing the frames is working on the thread, so the panel turns to it (Keller)
               onScrub={() => note && shownLayer !== 'thread' && selectLayer(note.id, 'thread')} />
           )}
@@ -339,6 +342,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
               setSelectedWindowId(windowId)
             }}
             onPlace={() => setPlacingNoteId(note.id)}
+            onAdd={(added) => addFrom(note.id, added)}
             onRemove={(removed) => dropLayer(note.id, removed)}
             windowsTip={windowsTip === note.id} onWindowsTipDone={() => setWindowsTip(undefined)} />}
         </>

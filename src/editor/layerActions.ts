@@ -1,6 +1,7 @@
 import { beginHistoryGroup, endHistoryGroup } from '../lib/history'
 import { imageAspect, removeImage, storeImage } from '../lib/images'
-import { type PlacedLayer, fitPlaced, isPlaced, newPlaced, withPlaced } from '../lib/layers'
+import { type Feature, type PlacedLayer, fitPlaced, hasThread, isPlaced, newPlaced, withPlaced } from '../lib/layers'
+import { withNewThread } from '../lib/notes'
 import { withInkImage } from '../lib/magneticInk'
 import type { PlacedBox } from '../lib/placed'
 import { findNote, updateNote } from '../lib/store'
@@ -12,9 +13,21 @@ import type { NoteRef } from './frameActions'
 /** A banknote's parts, listed under it in the Banknotes list; the right panel shows one at a time */
 export type Layer = 'note' | 'thread' | PlacedLayer
 
-/** The layer a banknote can show: a placed layer it no longer has (undone, say) falls back to the banknote itself */
-export const layerOf = (note: Pick<Note, PlacedLayer> | undefined, layer: Layer): Layer =>
-  isPlaced(layer) && !note?.[layer] ? 'note' : layer
+/** The layer a banknote can show: a feature it doesn't have (removed or undone, say) falls back to the banknote itself */
+export const layerOf = (note: Pick<Note, PlacedLayer | 'noThread'> | undefined, layer: Layer): Layer =>
+  (isPlaced(layer) && !note?.[layer]) || (layer === 'thread' && (!note || !hasThread(note))) ? 'note' : layer
+
+/** Adds a security feature from the Add menu: the thread, as a new banknote's would be, or a placed layer */
+export function addFeature(ref: NoteRef, feature: Feature) {
+  if (feature !== 'thread') return addLayer(ref, feature)
+  updateNote(ref.projectId, ref.noteId, (n) => (hasThread(n) ? n : withNewThread(n)))
+}
+
+/** Removes a security feature, the thread as the others: one undo step, nothing of it kept */
+export async function removeFeature(ref: NoteRef, feature: Feature) {
+  if (feature !== 'thread') return removeLayer(ref, feature)
+  updateNote(ref.projectId, ref.noteId, (n) => (hasThread(n) ? withNewThread(n, true) : n))
+}
 
 /**
  * Adds a layer in its own place on the banknote (a banknote has at most one of each), with a stand-in image so it shows

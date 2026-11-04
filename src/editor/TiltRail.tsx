@@ -267,6 +267,7 @@ function Pad({ limit, playback, recording, onRecorded }: {
       ref={pad}
       role="group"
       aria-label="Tilt pad"
+      title={recording ? 'Drag to record a move; Escape cancels' : undefined}
       tabIndex={0}
       className={cn(
         'relative touch-none overflow-hidden rounded-md bg-muted outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50',

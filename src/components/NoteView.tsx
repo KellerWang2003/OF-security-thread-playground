@@ -12,7 +12,7 @@ import type { Frame, MagneticInk, Note } from '../lib/types'
 import { paintRelief, reliefPixels, useRelief } from '../lib/relief'
 import { useInkMask } from '../lib/inkMask'
 import { INK_BAR_LIGHT, barShift, inkRoll, inkShift } from '../lib/magneticInk'
-import type { PlacedLayer } from '../lib/layers'
+import { hasThread, type PlacedLayer } from '../lib/layers'
 import { framesTiltOf, showsBack, turnDeg, useTilt } from '../tilt/tilt'
 import { DesignTiles } from './DesignTiles'
 
@@ -352,9 +352,12 @@ export function NoteView({
   // Seen from the back, the watermark lies the other way round, at the other side
   const watermarkBox = watermark && placed(back ? mirrored(watermark, note) : watermark)
   const inkBox = magneticInk && placed(magneticInk)
+  // The thread shows only on the front (Keller), and only once the banknote has one (Keller, 4 November: it is added
+  // like any other feature)
+  const threadShown = !back && hasThread(note)
   // The back has only the watermark to outline
   const boxOf = (target: 'thread' | PlacedLayer | undefined) =>
-    target === 'watermark' ? watermarkBox : back ? undefined : target === 'thread' ? strip : target === 'magneticInk' ? inkBox : undefined
+    target === 'watermark' ? watermarkBox : back ? undefined : target === 'thread' ? (threadShown ? strip : undefined) : target === 'magneticInk' ? inkBox : undefined
   const inkShape = inkMask && `url(${inkMask.url})`
   const art = <ThreadArt note={note} shown={shown} blends={blends} fill={fill} />
 
@@ -400,14 +403,13 @@ export function NoteView({
         </div>
       )}
 
-      {!back && showWindowCuts && thread.windows.enabled && (
+      {threadShown && showWindowCuts && thread.windows.enabled && (
         <div aria-hidden="true" data-window-ghost className="pointer-events-none absolute overflow-hidden" style={{ ...strip, opacity: 0.2, backgroundColor: thread.backgroundColor }}>
           {art}
         </div>
       )}
 
-      {/* The thread shows only on the front (Keller) */}
-      {!back && (
+      {threadShown && (
         <div
           data-thread=""
           className={cn('absolute overflow-hidden', horizontal ? 'cursor-ns-resize' : 'cursor-ew-resize')}
@@ -427,7 +429,7 @@ export function NoteView({
         </div>
       )}
 
-      {!back && showWindowCuts && thread.windows.enabled && (
+      {threadShown && showWindowCuts && thread.windows.enabled && (
         <div aria-hidden="true" data-window-cuts className="pointer-events-none absolute" style={strip}>
           {windowEdges(thread, lengthMm).map((edge) => (
             <div key={edge} className="absolute border-dashed border-fuchsia-500" style={horizontal
@@ -437,7 +439,7 @@ export function NoteView({
         </div>
       )}
 
-      {!back && showFrameNumber && frames.length > 0 && (
+      {threadShown && showFrameNumber && frames.length > 0 && (
         <div aria-hidden="true" data-frame-number className="pointer-events-none absolute flex items-center justify-center" style={strip}>
           <span
             className="rounded-full bg-foreground/85 px-1.5 font-semibold leading-none text-background tabular-nums shadow-sm"

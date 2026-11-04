@@ -1,5 +1,5 @@
 import { reportError } from '../cloud/notices'
-import { Circle, EyeOff, Hash, ImagePlus, Pause, Pencil, Play, Plus, SlidersHorizontal, Square, SquareDashed, X } from 'lucide-react'
+import { EyeOff, Hash, ImagePlus, Pause, Pencil, Play, Plus, SlidersHorizontal, SquareDashed, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,6 +18,7 @@ import { clamp, cyclePhase } from '../lib/frames'
 import { cyclePosition, flatLabel, flatStep, lensState, reachSpans, respondsTo, tiltForPosition, tiltReach, type LensState } from '../lib/lens'
 import { pickFiles } from '../lib/images'
 import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
+import { setTiltPadOpen } from '../lib/tiltPad'
 import { framesMissed, playbackLens, playbackTilt, sectionMix, timelineSection } from '../lib/pattern'
 import type { Note } from '../lib/types'
 import { framesTiltOf, scrubFrames, setRecording, setTilt, togglePlayback, useTilt } from '../tilt/tilt'
@@ -87,24 +88,40 @@ export function TimelineBar({
 /** One of the small buttons stacked beside Play, sharing the column's height (each with the same border, so the shares match) */
 const STACKED = 'min-h-0 flex-1 rounded-md border border-transparent'
 
-/** Project-wide playback controls, shared by every banknote, stacked in a column beside Play. */
+/**
+ * Project-wide playback controls, shared by every banknote, stacked in a column beside Play: Playback settings on top,
+ * the # frame-number toggle under it. A move is recorded from the settings' list of moves (Record a move), which closes
+ * them, opens the tilt pad to drag on and arms recording; Escape cancels it (`TiltRail`).
+ */
 function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) {
   // A thread mixing ridge angles plays each tilt at its fastest section's cycle
   const tilt = note ? playbackTilt(note) : DEFAULT_TILT
   const lens = note ? playbackLens(note) : lensState(tilt)
-  const recording = useTilt((s) => s.recording)
   const frameNumbers = useTilt((s) => s.frameNumbers)
+  // Held here so Record a move can close it, leaving the pad free to drag on
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   return (
     <div className="flex w-8 shrink-0 flex-col gap-0.5">
-      <IconButton
-        label={recording ? 'Drag on the tilt pad to record; click to cancel' : 'Record movement'}
-        variant={recording ? 'destructive' : 'ghost'}
-        className={cn(STACKED, 'size-auto')}
-        onClick={() => setRecording(!recording)}
-      >
-        {recording ? <Square className="size-2.5 fill-current" /> : <Circle className="size-2.5 fill-destructive text-destructive" />}
-      </IconButton>
+      <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <Tooltip>
+          <TooltipTrigger
+            render={<PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Playback settings" className={cn(STACKED, 'size-auto')} />} />}
+          >
+            <SlidersHorizontal className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipContent>Playback settings</TooltipContent>
+        </Tooltip>
+        <PopoverContent side="top" align="start" sideOffset={12} className="w-[580px] gap-0 overflow-hidden p-0">
+          <PopoverTitle className="border-b px-3 py-2.5 text-sm">Playback settings</PopoverTitle>
+          <PlaybackPanel projectId={projectId} tilt={tilt} lens={lens}
+            onRecord={() => {
+              setSettingsOpen(false)
+              setTiltPadOpen(true)
+              setRecording(true)
+            }} />
+        </PopoverContent>
+      </Popover>
       <Tooltip>
         <TooltipTrigger
           render={
@@ -120,20 +137,6 @@ function FrameSettings({ projectId, note }: { projectId: string; note?: Note }) 
         </TooltipTrigger>
         <TooltipContent>{frameNumbers ? 'Hide frame numbers on threads' : 'Show frame numbers on threads'}</TooltipContent>
       </Tooltip>
-      <Popover>
-        <Tooltip>
-          <TooltipTrigger
-            render={<PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Playback settings" className={cn(STACKED, 'size-auto')} />} />}
-          >
-            <SlidersHorizontal className="size-3.5" />
-          </TooltipTrigger>
-          <TooltipContent>Playback settings</TooltipContent>
-        </Tooltip>
-        <PopoverContent side="top" align="start" sideOffset={12} className="w-[580px] gap-0 overflow-hidden p-0">
-          <PopoverTitle className="border-b px-3 py-2.5 text-sm">Playback settings</PopoverTitle>
-          <PlaybackPanel projectId={projectId} tilt={tilt} lens={lens} />
-        </PopoverContent>
-      </Popover>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { Plus, Trash2, X } from 'lucide-react'
+import { Plus, SplinePointer, Trash2, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { IconButton, ScrubField } from '../components/controls'
@@ -28,10 +28,16 @@ import { saveTilt } from './playbackActions'
 const presetName = (kind: PlaybackMove['kind']) => MOVE_KINDS.find((k) => k.value === kind)?.label.slice(2) ?? 'Move'
 
 /**
- * Playback settings: one list of moves (presets, then saved recordings) on the left, added to the playlist on the right, which
- * plays in order and loops; the motion and frame settings sit under the playlist.
+ * Playback settings: one list of moves (presets, then saved recordings, then Record a move) on the left, added to the
+ * playlist on the right, which plays in order and loops; the motion and frame settings sit under the playlist.
  */
-export function PlaybackPanel({ projectId, tilt, lens }: { projectId: string; tilt: TiltSettings; lens: LensState }) {
+export function PlaybackPanel({ projectId, tilt, lens, onRecord }: {
+  projectId: string
+  tilt: TiltSettings
+  lens: LensState
+  /** Record a move: the next drag on the tilt pad becomes a recording that plays on its own */
+  onRecord?: () => void
+}) {
   const moves = movesOf(tilt, lens)
   const recordings = tilt.recordings ?? []
   const full = moves.length >= MOVES_MAX
@@ -58,7 +64,7 @@ export function PlaybackPanel({ projectId, tilt, lens }: { projectId: string; ti
     <div className="flex h-[400px]">
       <aside className="flex w-[184px] shrink-0 flex-col border-r bg-muted/40 p-3">
         <Section title="Moves" className="min-h-0 flex-1">
-          <ul className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+          <ul className="-mx-1 flex min-h-0 flex-col gap-0.5 overflow-y-auto">
             {MOVE_KINDS.map((k) => (
               <LibraryRow key={k.value} name={presetName(k.value)} disabled={full} onAdd={() => add(newMove(k.value))} />
             ))}
@@ -66,6 +72,14 @@ export function PlaybackPanel({ projectId, tilt, lens }: { projectId: string; ti
               <LibraryRow key={r.id} name={r.name} seconds={gestureSeconds(r)} disabled={full} onAdd={() => add(moveFromRecording(r))} onDelete={() => removeRecording(r.id)} />
             ))}
           </ul>
+          {/* The list's last row, kept in view once the list scrolls; never full, as a recording plays on its own */}
+          {onRecord && (
+            <button type="button" onClick={onRecord} title="Drag on the tilt pad to record a move; Escape cancels"
+              className="-mx-1 -mt-1.5 flex h-8 shrink-0 items-center gap-1 rounded-md pr-0.5 pl-2 text-left text-xs outline-none hover:bg-background focus-visible:ring-2 focus-visible:ring-ring/50">
+              <span className="min-w-0 flex-1 truncate">Record a move</span>
+              <span className="flex size-6 shrink-0 items-center justify-center text-muted-foreground"><SplinePointer className="size-3.5" /></span>
+            </button>
+          )}
         </Section>
       </aside>
 

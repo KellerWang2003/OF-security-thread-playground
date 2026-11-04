@@ -21,6 +21,28 @@ export const isPlaced = (layer: string | undefined): layer is PlacedLayer => (PL
 /** Each one's name in the UI */
 export const LAYER_NAMES: Record<PlacedLayer, string> = { watermark: 'Watermark', magneticInk: 'Magnetic ink' }
 
+/**
+ * Every security feature a banknote can have, at most one of each, all added from one Add menu and removed the same
+ * way (Keller, 4 November: a new banknote coming with a thread made no sense): its thread, then the placed layers, the
+ * order the menu and the Banknotes list show them in
+ */
+export const FEATURES = ['thread', ...PLACED_LAYERS] as const
+export type Feature = (typeof FEATURES)[number]
+
+export const FEATURE_NAMES: Record<Feature, string> = { thread: 'Security thread', ...LAYER_NAMES }
+
+/** What each one is, in a line under its name in the Add menu */
+export const FEATURE_LINES: Record<Feature, string> = {
+  thread: 'A lenticular thread whose frames change as you tilt',
+  watermark: 'In the paper, clear when tilted or held to the light',
+  magneticInk: 'Ink that shifts colour as a bright bar rolls across it',
+}
+
+/** Whether the banknote has its thread: banknotes from before the Add menu all do, new ones not until it is added */
+export const hasThread = (note: Pick<Note, 'noThread'>) => !note.noThread
+
+export const hasFeature = (note: Note, feature: Feature) => (feature === 'thread' ? hasThread(note) : !!note[feature])
+
 /** A layer kept on its banknote, a damaged save repaired */
 export function fitPlaced<K extends PlacedLayer>(layer: K, box: Placed[K], note: Size): Placed[K] {
   return (layer === 'watermark' ? fitWatermark(box as Watermark, note) : fitMagneticInk(box as MagneticInk, note)) as Placed[K]

@@ -76,6 +76,17 @@ export function createNote({
   }
 }
 
+/**
+ * The banknote with a new security thread, as a new banknote's is (two colour frames, no windows, its tile on Fit), its
+ * lens and playback kept: adding the thread from the Add menu, or removing it, which leaves this one waiting unused
+ * (`noThread`) so nothing of the old one is kept or saved
+ */
+export function withNewThread(note: Note, noThread?: true): Note {
+  const fresh = createNote({ name: note.name, x: note.x, y: note.y, widthMm: note.widthMm, heightMm: note.heightMm, color: note.color })
+  const { noThread: _was, ...rest } = note
+  return { ...rest, ...(noThread ? { noThread } : {}), thread: fresh.thread, frames: fresh.frames, pattern: fresh.pattern }
+}
+
 export function createProject(name: string): Project {
   const now = Date.now()
   return { id: crypto.randomUUID(), name, createdAt: now, updatedAt: now, notes: [] }
@@ -124,12 +135,14 @@ export function migrateProject(raw: unknown): Project {
       : []
   // Notes saved before the canvas had no position: lay them out in a row
   const placed: Note[] = []
-  for (const { watermark, continuous, magneticInk, back: savedBack, ...raw } of notes) {
+  for (const { watermark, continuous, magneticInk, back: savedBack, noThread, ...raw } of notes) {
     const check = fitContinuous(continuous)
     const back = fitBack(savedBack)
     // Older notes had no background mode; an uploaded face meant an image background
     const n: Note = {
       ...raw,
+      // Without a thread only when saved so; every banknote from before has its thread
+      ...(noThread === true ? { noThread } : {}),
       // Only notes with a watermark or magnetic ink have one; a damaged one is put back on its banknote
       ...(watermark && typeof watermark === 'object' ? { watermark: fitWatermark(watermark, raw) } : {}),
       ...(magneticInk && typeof magneticInk === 'object' ? { magneticInk: fitMagneticInk(magneticInk, raw) } : {}),

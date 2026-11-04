@@ -52,8 +52,9 @@ export function AddNoteDialog({
               ...size,
               color: DEFAULT_NOTE.color,
             })
-            // Cycle and fade are shared by every banknote in the project
-            const note = last ? { ...created, tilt: last.tilt } : created
+            // Cycle and fade are shared by every banknote in the project. It comes with no security feature, not even a
+            // thread: each is added from the Add menu (Keller, 4 November)
+            const note: Note = { ...created, noThread: true, ...(last ? { tilt: last.tilt } : {}) }
             addNote(projectId, note)
             onAdded(note.id)
             onOpenChange(false)

@@ -50,7 +50,8 @@ function everything(): Note {
 describe('saving to the cloud', () => {
   it('brings every setting back as it was saved, after uploading every image the project uses', async () => {
     const note = everything()
-    const plain = createNote({ name: 'Plain', x: 154, y: 0, widthMm: 68, heightMm: 120, color: '#5B6B8C' })
+    // A new banknote comes without a thread, which saves too (Keller, 4 November)
+    const plain = { ...createNote({ name: 'Plain', x: 154, y: 0, widthMm: 68, heightMm: 120, color: '#5B6B8C' }), noThread: true as const }
     const project = { ...createProject('Everything'), notes: [note, plain] }
     for (const id of projectImageIds(project)) await writeArtwork('save-test', id, new Blob(['art'], { type: 'image/png' }))
     const saved = await createRepository('save-test').save({ project, revision: crypto.randomUUID(), baseRevision: null, deleted: false, dirty: true })

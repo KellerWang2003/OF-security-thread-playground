@@ -22,7 +22,8 @@ function withFrames(note: Note, frames: Frame[]): Note {
 /**
  * Adds uploaded images as frames, up to the 5-frame limit. Uploading two or more images while the thread
  * still holds only colour frames replaces those placeholders, each image taking one's place (and id, so
- * section tracks keep their story). Returns how many files did not fit.
+ * section tracks keep their story). Returns how many files did not fit. Images dropped on a banknote without a thread
+ * give it its thread, as the Add menu would, with them as its frames.
  */
 export async function addImageFrames({ projectId, noteId }: NoteRef, files: File[]) {
   const note = findNote(projectId, noteId)
@@ -31,6 +32,7 @@ export async function addImageFrames({ projectId, noteId }: NoteRef, files: File
   const replacePlaceholders = images.length >= MIN_FRAMES && note.frames.every((f) => f.kind !== 'image')
   const room = replacePlaceholders ? MAX_FRAMES : MAX_FRAMES - note.frames.length
   const picked = images.slice(0, room)
+  if (picked.length === 0) return images.length
   const added: Frame[] = await Promise.all(
     picked.map(async (file, i) => ({
       id: (replacePlaceholders ? note.frames.at(i)?.id : undefined) ?? crypto.randomUUID(),
@@ -42,7 +44,11 @@ export async function addImageFrames({ projectId, noteId }: NoteRef, files: File
       length: DEFAULT_LENGTH,
     })),
   )
-  updateNote(projectId, noteId, (n) => withFrames(n, (replacePlaceholders ? added : [...n.frames, ...added]).slice(0, MAX_FRAMES)))
+  updateNote(projectId, noteId, (n) => {
+    // Its thread waits as a new banknote's, so it only has to be shown
+    const { noThread: _added, ...threaded } = n
+    return withFrames(threaded, (replacePlaceholders ? added : [...n.frames, ...added]).slice(0, MAX_FRAMES))
+  })
   return images.length - picked.length
 }
 

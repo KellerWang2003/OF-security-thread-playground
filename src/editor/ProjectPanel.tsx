@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft, ChevronRight, Columns2, Copy, Droplet, Magnet, Plus, Redo2, Rows2, Trash2, Undo2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Columns2, Copy, Plus, Redo2, Rows2, Trash2, Undo2 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import {
   AlertDialog,
@@ -11,9 +11,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
@@ -22,19 +20,18 @@ import { runAction, reportError } from '../cloud/notices'
 import { NoteView } from '../components/NoteView'
 import { duplicateNote, removeNote, updateNote, updateProject, undoProject, redoProject } from '../lib/store'
 import { useHistory } from '../lib/history'
-import { LAYER_NAMES, PLACED_LAYERS, type PlacedLayer } from '../lib/layers'
+import { FEATURES, LAYER_NAMES, PLACED_LAYERS, hasFeature, hasThread, type Feature } from '../lib/layers'
 import { useTiltPad } from '../lib/tiltPad'
 import type { Note, Project } from '../lib/types'
+import { AddFeatureMenu, FEATURE_ICONS } from './AddFeatureMenu'
 import type { Layer } from './layerActions'
 
 const THUMB = 28
 
-/** Each placed layer's icon in the list and the + menu, as on its tab in the right panel */
-const LAYER_ICONS: Record<PlacedLayer, ReactNode> = { watermark: <Droplet />, magneticInk: <Magnet /> }
-
 /**
  * Top-left: back to the projects, the project's name, and its banknotes as a collapsible list. Each banknote opens
- * to its layers (Security thread, then Watermark and Magnetic ink once added); the selected one opens by itself.
+ * to its security features (its thread, watermark and magnetic ink, as it has them: each added from the + on its row,
+ * the Add menu, and removed from the bin on its own row); the selected one opens by itself.
  */
 export function ProjectPanel({
   project,
@@ -55,8 +52,8 @@ export function ProjectPanel({
   /** A banknote row picks the banknote itself (no layer, or 'note'), a layer row that layer */
   onSelect: (noteId: string, layer?: Layer) => void
   onAdd: () => void
-  onAddLayer: (noteId: string, layer: PlacedLayer) => void
-  onRemoveLayer: (noteId: string, layer: PlacedLayer) => void
+  onAddLayer: (noteId: string, layer: Feature) => void
+  onRemoveLayer: (noteId: string, layer: Feature) => void
   /** The tilt pad sits under the panel, bottom left, so the list stops short of it */
   aboveTilt?: boolean
 }) {
@@ -116,9 +113,8 @@ export function ProjectPanel({
             {project.notes.map((note) => {
               const selected = note.id === selectedId
               const expanded = isOpen(note.id)
-              // The + lists only the layers the banknote doesn't have yet, and goes once it has them all
-              const addable = PLACED_LAYERS.filter((l) => !note[l])
-              const canAdd = addable.length > 0
+              // The + lists only the features the banknote doesn't have yet, and goes once it has them all
+              const canAdd = FEATURES.some((f) => !hasFeature(note, f))
               return (
               <li key={note.id}>
                 <div className="group relative">
@@ -167,24 +163,7 @@ export function ProjectPanel({
                 </button>
                 {renaming !== note.id && (
                   <div className="absolute inset-y-0 right-1 hidden items-center group-hover:flex has-[[data-popup-open]]:flex">
-                    {canAdd && (
-                      <DropdownMenu>
-                        <Tooltip>
-                          <TooltipTrigger render={<DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Add layer" />} />}>
-                            <Plus />
-                          </TooltipTrigger>
-                          <TooltipContent>Add layer</TooltipContent>
-                        </Tooltip>
-                        <DropdownMenuContent className="w-40" align="start">
-                          {addable.map((l) => (
-                            <DropdownMenuItem key={l} onClick={() => onAddLayer(note.id, l)}>
-                              {LAYER_ICONS[l]}
-                              {LAYER_NAMES[l]}
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
+                    <AddFeatureMenu note={note} onAdd={(feature) => onAddLayer(note.id, feature)} />
                     <IconButton
                       label="Duplicate"
                       size="icon-xs"
@@ -203,18 +182,21 @@ export function ProjectPanel({
                   </div>
                 )}
                 </div>
-                {expanded && (
+                {expanded && FEATURES.some((f) => hasFeature(note, f)) && (
                   <ul aria-label={`Layers of ${note.name}`} className="flex flex-col gap-0.5 pt-0.5">
-                    <LayerRow
-                      icon={note.thread.direction === 'vertical' ? <Columns2 /> : <Rows2 />}
-                      name="Security thread"
-                      selected={selected && layer === 'thread'}
-                      onSelect={() => onSelect(note.id, 'thread')}
-                    />
+                    {hasThread(note) && (
+                      <LayerRow
+                        icon={note.thread.direction === 'vertical' ? <Columns2 /> : <Rows2 />}
+                        name="Security thread"
+                        selected={selected && layer === 'thread'}
+                        onSelect={() => onSelect(note.id, 'thread')}
+                        onRemove={() => onRemoveLayer(note.id, 'thread')}
+                      />
+                    )}
                     {PLACED_LAYERS.filter((l) => note[l]).map((l) => (
                       <LayerRow
                         key={l}
-                        icon={LAYER_ICONS[l]}
+                        icon={FEATURE_ICONS[l]}
                         name={LAYER_NAMES[l]}
                         selected={selected && layer === l}
                         onSelect={() => onSelect(note.id, l)}
@@ -254,8 +236,8 @@ export function ProjectPanel({
 }
 
 /**
- * One part of a banknote, under it in the list, built like the banknote's own row: its icon sits under the banknote's
- * thumbnail and its name under the banknote's name, so its highlight starts under the thumbnail.
+ * One part of a banknote, under it in the list, a level in from the banknote's own row and smaller (Keller, 4
+ * November): its icon lines up with the banknote's name, 13 px, its highlight starting just before the icon.
  */
 function LayerRow({ icon, name, selected, onSelect, onRemove }: {
   icon: ReactNode
@@ -265,20 +247,21 @@ function LayerRow({ icon, name, selected, onSelect, onRemove }: {
   onRemove?: () => void
 }) {
   return (
-    <li className="group/layer relative ml-6">
+    // The banknote's name starts 60 px in (its row's 24 px padding, 28 px thumbnail and 8 px gap): the icon starts there
+    <li className="group/layer relative ml-[52px]">
       <button
         type="button"
         onClick={onSelect}
         className={cn(
-          'flex w-full items-center gap-2 rounded-lg py-1 pr-1.5 text-left transition-colors',
+          'flex w-full items-center gap-2 rounded-lg py-1 pr-1.5 pl-2 text-left transition-colors',
           onRemove && 'group-hover/layer:pr-8',
           selected ? 'bg-muted' : 'hover:bg-muted/50',
         )}
       >
-        <span className={cn('flex size-7 shrink-0 items-center justify-center [&_svg]:size-4', selected ? 'text-foreground' : 'text-muted-foreground')}>
+        <span className={cn('flex size-5 shrink-0 items-center justify-start [&_svg]:size-3.5', selected ? 'text-foreground' : 'text-muted-foreground')}>
           {icon}
         </span>
-        <span className="min-w-0 flex-1 truncate text-sm">{name}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px]">{name}</span>
       </button>
       {onRemove && (
         <div className="absolute inset-y-0 right-1 hidden items-center group-hover/layer:flex">

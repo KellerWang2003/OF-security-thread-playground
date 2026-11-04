@@ -5,7 +5,7 @@ import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Drawer, Group, IconButton, Labeled, LengthField, Panel, PartTab, Section, Segmented, SwitchField, TabStrip } from '../components/controls'
 import { sideImageId, type Side } from '../lib/back'
 import { clamp } from '../lib/frames'
-import { LAYER_NAMES, fitLayers, isPlaced, moveLayersTo, type PlacedLayer } from '../lib/layers'
+import { FEATURE_NAMES, fitLayers, hasThread, isPlaced, moveLayersTo, type Feature } from '../lib/layers'
 import { NOTE_SIZE } from '../lib/notes'
 import { mod, patternOf } from '../lib/pattern'
 import { setPatternOffset, shufflePatternOffset, usePatternOffsets } from '../lib/patternOffset'
@@ -14,6 +14,7 @@ import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
 import { showsBack, useTilt } from '../tilt/tilt'
+import { AddFeatureMenu } from './AddFeatureMenu'
 import { ChecksDrawer, ContinuousSection } from './DesignChecks'
 import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
 import { BackgroundFill } from './FillPicker'
@@ -38,7 +39,7 @@ type Change = (note: Note) => Note
  * time, so the panel never grows with features. Every control has a small label over it (`Labeled`) unless a word in
  * it or beside it already says what it is.
  */
-export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onWindowSelect, onPlace, onRemove, windowsTip, onWindowsTipDone }: {
+export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onWindowSelect, onPlace, onAdd, onRemove, windowsTip, onWindowsTipDone }: {
   note: Note
   /** Picks a part of the banknote, as its row in the list does */
   onLayer: (layer: Layer) => void
@@ -49,7 +50,9 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
   onWindowSelect: (id: string | undefined) => void
   /** Shows the placed layer the panel shows on the canvas, flat, with its box to place it */
   onPlace: () => void
-  onRemove: (layer: PlacedLayer) => void
+  /** Adds a security feature from the + at the end of the tabs, the Add menu the Banknotes list has too */
+  onAdd: (feature: Feature) => void
+  onRemove: (feature: Feature) => void
   /** The tip by Windows saying they can be added there (a new project's first banknote), and its end */
   windowsTip?: boolean
   onWindowsTipDone?: () => void
@@ -104,12 +107,15 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
       <div className="flex items-center gap-1 border-b border-border px-4 pt-3 pb-2.5">
         <TabStrip active={layer}>
           <PartTab value="note"><Banknote />Banknote</PartTab>
-          <PartTab value="thread">{thread.direction === 'vertical' ? <Columns2 /> : <Rows2 />}Thread</PartTab>
+          {hasThread(note) && <PartTab value="thread">{thread.direction === 'vertical' ? <Columns2 /> : <Rows2 />}Thread</PartTab>}
           {note.watermark && <PartTab value="watermark"><Droplet />Watermark</PartTab>}
           {note.magneticInk && <PartTab value="magneticInk"><Magnet />Magnetic ink</PartTab>}
         </TabStrip>
-        {isPlaced(layer) && note[layer] && (
-          <IconButton label={`Remove ${LAYER_NAMES[layer].toLowerCase()}`} size="icon-xs" className="-mr-1 shrink-0 text-muted-foreground" onClick={() => onRemove(layer)}><Trash2 /></IconButton>
+        {/* Every feature is added from the + after its tabs and removed the same way, by the bin while its tab is open */}
+        <AddFeatureMenu note={note} align="end" onAdd={onAdd} />
+        {((isPlaced(layer) && note[layer]) || (layer === 'thread' && hasThread(note))) && (
+          <IconButton label={`Remove ${FEATURE_NAMES[layer].toLowerCase()}`} size="icon-xs" className="-mr-1 shrink-0 text-muted-foreground"
+            onClick={() => onRemove(layer)}><Trash2 /></IconButton>
         )}
       </div>
 

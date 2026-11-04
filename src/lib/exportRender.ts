@@ -211,6 +211,12 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     return
   }
   if (magneticInk && assets.ink) drawInk(ctx, magneticInk, assets.ink, mm, { x: angleX, y: angle })
+  // A banknote without a thread ends there too (Keller, 4 November: the thread is added like any other feature)
+  if (note.noThread) {
+    drawShade(ctx, width, height, { x: angleX, y: angle }, options.perspective)
+    ctx.restore()
+    return
+  }
 
   const horizontal = thread.direction === 'horizontal'
   const lengthMm = threadLength(note)

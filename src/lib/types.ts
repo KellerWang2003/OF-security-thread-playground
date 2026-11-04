@@ -271,6 +271,12 @@ export interface Note {
   background: 'solid' | 'image'
   color: string
   faceImageId?: string
+  /**
+   * The security thread, added like any other feature (Keller, 4 November): set when the banknote has none (new
+   * banknotes, or one removed), its thread, frames and pattern then waiting unused, as a new thread's; banknotes from
+   * before have their thread
+   */
+  noThread?: true
   thread: ThreadSettings
   frames: Frame[]
   tilt: TiltSettings

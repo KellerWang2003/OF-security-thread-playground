@@ -10,6 +10,7 @@ import { createNote, createProject, migrateProject } from '../src/lib/notes'
 import { createDemoProject } from '../src/lib/demo'
 import { newWatermark } from '../src/lib/watermark'
 import { presetPattern } from '../src/lib/patternPresets'
+import { setTiltPadOpen } from '../src/lib/tiltPad'
 import { setTilt, useTilt } from '../src/tilt/tilt'
 import { TooltipProvider } from '../src/components/ui/tooltip'
 
@@ -624,6 +625,29 @@ describe('username workspace editor', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Playback settings' })).toBeNull())
     expect(screen.getByRole('button', { name: 'Playback settings', exact: true })).toBeDefined()
     expect(saves).not.toHaveBeenCalled()
+  })
+  it('records a move from the playback settings: the list closes, the tilt pad opens to drag on, and Escape cancels', async () => {
+    const user = userEvent.setup()
+    setTiltPadOpen(false)
+    localStorage.setItem('of-thread-workspace', 'record-move-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    expect(screen.queryByRole('group', { name: 'Tilt pad' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Playback settings', exact: true }))
+    const dialog = await screen.findByRole('dialog', { name: 'Playback settings' })
+    // Record a move is the moves list's last row
+    await user.click(within(dialog).getByRole('button', { name: 'Record a move' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Playback settings' })).toBeNull())
+    expect(useTilt.getState().recording).toBe(true)
+    expect(screen.getByRole('group', { name: 'Tilt pad' })).toBeDefined()
+    // Escape only cancels it: the banknote stays selected
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(useTilt.getState().recording).toBe(false)
+    expect(tab()).toBe('Banknote')
+    // The pad stays open, as the browser remembers
+    expect(screen.getByRole('group', { name: 'Tilt pad' })).toBeDefined()
+    setTiltPadOpen(false)
   })
   it('discards demo edits on exit and signs out without creating any project', async () => {
     const user = userEvent.setup()

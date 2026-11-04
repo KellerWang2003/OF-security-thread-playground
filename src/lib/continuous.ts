@@ -474,7 +474,8 @@ export function designChecks(note: Note, design: DesignPixels, reading: Reading 
       issues: lightIssues(paperLight(design, [box], [], watermarkWeight(watermark, reading, back)), (share) => `${share} of it is over darker print`),
     })
   }
-  if (side === 'back') return checks
+  // Nothing round a thread the side doesn't have
+  if (side === 'back' || note.noThread) return checks
   const thread = threadBoxes(note)
   const around = paperLight(design, thread.map((box) => grow(box, SURROUND_MM)), thread)
   if (around) {
