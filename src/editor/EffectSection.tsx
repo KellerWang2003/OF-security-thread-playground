@@ -29,6 +29,7 @@ import {
   flatStep,
   frameEdges,
   reachSpans,
+  revealLevelAt,
   revealMinFast,
   revealReaches,
   stepOffset,
@@ -369,11 +370,7 @@ function FlatStrip({ note, lens, set }: { note: Note; lens: LensState; set: (pat
       for (let k = 1; k < 2 * count; k++) if (Math.abs(stepOffset(k, note.frames) - u) < Math.abs(stepOffset(best, note.frames) - u)) best = k
       if (best !== step) set({ flatAt: best })
     } else if (reaches.length) {
-      // The reach nearest to how far the pointer is from flat, either way round the loop
-      const d = Math.min(Math.abs(u - lens.offset), 1 - Math.abs(u - lens.offset))
-      let level = 0
-      reaches.forEach((r, k) => { if (Math.abs(r.reach - d) < Math.abs((reaches.at(level)?.reach ?? 0) - d)) level = k })
-      set({ revealLevel: level })
+      set({ revealLevel: revealLevelAt(reaches, lens.offset, u) })
     }
   }
 

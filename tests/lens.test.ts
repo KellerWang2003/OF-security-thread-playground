@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { playbackAngles, playbackTilts } from '../src/lib/exportRender'
 import { frameMix, frameSpans } from '../src/lib/frames'
-import { cyclesFromLens, flatLabel, flatOffset, flatStep, framesReached, lensAngle, lensCycle, lensMix, lensState, reachSpans, revealCycle, revealMinFast, revealOptions, revealReaches, tiltForPosition } from '../src/lib/lens'
+import { cyclesFromLens, flatLabel, flatOffset, flatStep, framesReached, lensAngle, lensCycle, lensMix, lensState, reachSpans, revealCycle, revealLevelAt, revealMinFast, revealOptions, revealReaches, tiltForPosition } from '../src/lib/lens'
 import { migrateProject } from '../src/lib/notes'
 import { SWEEP_SECONDS } from '../src/lib/playback'
 import type { TiltSettings } from '../src/lib/types'
@@ -187,6 +187,15 @@ describe('flat position and Partial reveal reach', () => {
     const narrow = lensState({ ...base, revealLevel: 1 }, five)
     expect([...framesReached({ frames: five, tilt: { ...base, revealLevel: 1 } }, 'x', narrow)]).toEqual([2])
     expect(lensState({ ...base, revealLevel: 9 }, five).cycleX).toBe(narrow.cycleX)
+  })
+
+  it('picks the reach nearest a dragged end, measured from flat the short way round the loop', () => {
+    const reaches = [{ reach: 0.3 }, { reach: 0.1 }]
+    expect(revealLevelAt(reaches, 0.5, 0.82)).toBe(0)
+    expect(revealLevelAt(reaches, 0.5, 0.42)).toBe(1)
+    // 0.05 is 0.15 from flat at 0.9, past the loop's end
+    expect(revealLevelAt(reaches, 0.9, 0.05)).toBe(1)
+    expect(revealLevelAt([], 0.5, 0.2)).toBe(0)
   })
 
   it('splits a reach where it wraps round the loop', () => {

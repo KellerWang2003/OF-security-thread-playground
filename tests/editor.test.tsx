@@ -719,6 +719,38 @@ describe('username workspace editor', () => {
     expect(screen.getByRole('group', { name: 'Tilt pad' })).toBeDefined()
     setTiltPadOpen(false)
   })
+  it('drags the ends of Partial reveal’s slow-tilt lane on the timeline to hide more or fewer frames', async () => {
+    for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
+    }
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'reveal-lane-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const demo = useProjects.getState().demoPreview!
+    const tilt = () => useProjects.getState().demoPreview!.notes[0].tilt
+    // Five equal frames, flat in the middle of 3: side tilt can hide frames 1 and 5, or every frame but 3
+    act(() => updateNote(demo.id, demo.notes[0].id, (n) => ({ ...n,
+      frames: Array.from({ length: 5 }, (_, i) => ({ ...n.frames[0], id: `frame-${i}`, length: 10 })),
+      tilt: { ...n.tilt, cycleDeg: 30, effect: 'reveal', revealAxis: 'y', revealWobble: 1, flatAt: undefined } })))
+    // The two ends of the side-tilt lane, the slow one, on the timeline
+    const ends = () => [...document.querySelectorAll<HTMLElement>('[data-reach]')].filter((end) => end.parentElement?.title === 'Frames tilting side to side shows')
+    expect(ends()).toHaveLength(2)
+    // jsdom puts the track at 0: the cycle runs from 12 px, 100 px a frame, flat at 262. Dragged towards flat, the reach
+    // narrows to the next step, hiding more; dragged back out, it widens again
+    const drag = (end: HTMLElement, from: number, to: number) => {
+      fireEvent.pointerDown(end, { button: 0, buttons: 1, clientX: from, pointerId: 1 })
+      fireEvent.pointerMove(end, { buttons: 1, clientX: to, pointerId: 1 })
+      fireEvent.pointerUp(end, { button: 0, clientX: to, pointerId: 1 })
+    }
+    drag(ends()[1], 412, 312)
+    expect(tilt().revealLevel).toBe(1)
+    drag(ends()[0], 212, 112)
+    expect(tilt().revealLevel).toBe(0)
+    // The tilt is left alone, and nothing is scrubbed
+    expect(useTilt.getState().frameTilts[demo.notes[0].id]).toBeUndefined()
+  })
   it('discards demo edits on exit and signs out without creating any project', async () => {
     const user = userEvent.setup()
     localStorage.setItem('of-thread-workspace', 'demo-ui-test')

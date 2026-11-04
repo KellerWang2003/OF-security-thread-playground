@@ -195,6 +195,17 @@ export function revealReaches(frames: Pick<Frame, 'length'>[], offset: number, f
   })
 }
 
+/**
+ * The Partial reveal reach (`revealLevel`, a step inwards from the widest of `revealReaches`) nearest a point on the cycle
+ * (0 to 1), as an end of the slow tilt's reach is dragged there: by how far it is from flat, either way round the loop
+ */
+export function revealLevelAt(reaches: { reach: number }[], offset: number, at: number) {
+  const d = Math.min(Math.abs(at - offset), 1 - Math.abs(at - offset))
+  let level = 0
+  reaches.forEach((r, k) => { if (Math.abs(r.reach - d) < Math.abs((reaches.at(level)?.reach ?? 0) - d)) level = k })
+  return level
+}
+
 /** The lens settings a note carries, with the defaults a project from before lenses gets */
 export function lensState(tilt: TiltSettings, frames: Pick<Frame, 'length'>[] = []): LensState {
   const effect = tilt.effect ?? 'updown'

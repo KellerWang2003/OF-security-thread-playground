@@ -15,12 +15,13 @@ import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { FrameThumb } from '../components/NoteView'
 import { clamp, cyclePhase } from '../lib/frames'
-import { cyclePosition, flatLabel, flatStep, lensState, reachSpans, respondsTo, tiltForPosition, tiltReach, type LensState } from '../lib/lens'
+import { cyclePosition, flatLabel, flatStep, lensState, reachSpans, respondsTo, revealLevelAt, revealReaches, tiltForPosition, tiltReach, type Axis, type LensState } from '../lib/lens'
 import { pickFiles } from '../lib/images'
 import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
 import { setTiltPadOpen } from '../lib/tiltPad'
-import { framesMissed, playbackLens, playbackTilt, sectionMix, timelineSection } from '../lib/pattern'
-import type { Note } from '../lib/types'
+import { framesMissed, patternOf, playbackLens, playbackTilt, sectionMix, setSectionLens, timelineSection } from '../lib/pattern'
+import { updateNote } from '../lib/store'
+import type { Note, TiltSettings } from '../lib/types'
 import { framesTiltOf, scrubFrames, setRecording, setTilt, togglePlayback, useTilt } from '../tilt/tilt'
 import { FrameFillPanel } from './FillPicker'
 import { PlaybackPanel } from './PlaybackPanel'
@@ -31,8 +32,10 @@ const PAD = 12
 /** The + after the last frame: its gap from the last clip and its width, px */
 const ADD_GAP = 4
 const ADD_PX = 28
-/** Height of one tilt-reach lane above the frames, in px */
-const LANE = 9
+/** Height of one tilt-reach lane above the frames, in px: room for its ↕ or ↔, which Keller wanted bigger (4 November) */
+const LANE = 12
+/** Thickness of a lane's bar, px */
+const BAR = 6
 /** Height of the band above the frames to scrub on when there are no lanes there, px */
 const SCRUB_BAND = 14
 /** Pixels per unit of frame length; a new frame (10 units) starts 100 px wide */
@@ -163,6 +166,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
     | { mode: 'scrub' }
     | { mode: 'resize'; frameId: string; startX: number; startLength: number }
     | { mode: 'drag'; frameId: string; from: number; startX: number; moved: boolean }
+    | { mode: 'reach' }
     | null
   >(null)
   const [drag, setDrag] = useState<ClipDrag>()
@@ -184,7 +188,25 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
   // With both tilts live, each tilt's reach gets its own lane above the frames instead of sitting on them; either way
   // a band above the frames is there to scrub on
   const lanes = bars.length > 1 ? bars.length : 0
+  const laneTop = (row: number) => 2 + row * LANE
   const framesTop = lanes ? 4 + lanes * LANE : SCRUB_BAND
+  // Partial reveal: the slow tilt's lane has two ends to drag, hiding more or fewer frames as the band on the Lens effect's
+  // Seen flat strip does (Keller); either end snaps to the reach nearest it
+  const slowAxis: Axis | undefined = lens.effect === 'reveal' ? (lens.revealAxis === 'y' ? 'x' : 'y') : undefined
+  const reaches = slowAxis ? revealReaches(frames, lens.offset, (lens.revealAxis === 'y' ? lens.cycleY : lens.cycleX) ?? 0, lens.wobble) : []
+  const reachEnds = slowAxis && reaches.length
+    ? [lens.offset - tiltReach(lens, slowAxis), lens.offset + tiltReach(lens, slowAxis)].map((end) => ((end % 1) + 1) % 1)
+    : []
+  const level = Math.min(Math.max(0, Math.round(tilt.revealLevel ?? 0)), Math.max(0, reaches.length - 1))
+  /** Changes the lens the track follows: the banknote's, or with Mixed angles that section's own */
+  const setLens = (patch: Partial<TiltSettings>) => updateNote(noteRef.projectId, noteRef.noteId, (n) =>
+    patternOf(n).mixed ? { ...n, pattern: setSectionLens(n, followed.section.id, patch) } : { ...n, tilt: { ...n.tilt, ...patch } })
+  const reachTo = (clientX: number) => {
+    const rect = track.current?.getBoundingClientRect()
+    if (!rect || !reaches.length) return
+    const next = revealLevelAt(reaches, lens.offset, clamp((clientX - rect.left - PAD) / (totalLength * pxPerUnit), 0, 1))
+    if (next !== level) setLens({ revealLevel: next })
+  }
 
   // Wheel: ⌘/Ctrl zooms the timeline, a plain vertical wheel scrolls it sideways
   useEffect(() => {
@@ -242,7 +264,9 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
             const resized = frames.find((f) => f.id === handle?.dataset.resize)
             const clip = el.closest<HTMLElement>('[data-frame-clip]')
             const from = frames.findIndex((f) => f.id === clip?.dataset.frameClip)
-            if (resized) {
+            if (el.closest('[data-reach]')) {
+              gesture.current = { mode: 'reach' }
+            } else if (resized) {
               gesture.current = { mode: 'resize', frameId: resized.id, startX: e.clientX, startLength: resized.length }
             } else if (from >= 0 && !el.closest('[data-playhead]')) {
               gesture.current = { mode: 'drag', frameId: frames[from].id, from, startX: e.clientX, moved: false }
@@ -263,6 +287,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
               return
             }
             if (g?.mode === 'scrub') scrubTo(e.clientX)
+            if (g?.mode === 'reach') reachTo(e.clientX)
             if (g?.mode === 'drag') {
               const dx = e.clientX - g.startX
               // Past a few px a press becomes a drag, so a click still goes to the frame
@@ -317,11 +342,12 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
                   </span>
                 )}
                 {missed(i).length > 0 && (
+                  // Big enough to read at a glance which tilt never shows it (Keller)
                   <span
-                    className="absolute bottom-0.5 left-1 flex items-center gap-0.5 rounded bg-background/80 px-1 text-[10px] font-medium"
+                    className="absolute bottom-0.5 left-1 flex items-center gap-0.5 rounded bg-background/80 px-1 text-xs leading-4 font-semibold"
                     title={missed(i).map((a) => (a === 'y' ? 'Never seen tilting up or down' : 'Never seen tilting side to side')).join('; ')}
                   >
-                    <EyeOff className="size-3" />
+                    <EyeOff className="size-3.5" />
                     {missed(i).map((a) => (a === 'y' ? '↕' : '↔')).join('')}
                   </span>
                 )}
@@ -358,18 +384,25 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
 
           {lanes > 0 && bars.map(({ axis, spans }, row) => (
             // The frames each tilt alone shows: how far it reaches either way from flat (to ±90°), wrapping round the loop
-            <div key={axis} className="absolute" style={{ top: 3 + row * LANE, height: LANE - 3, left: x(0), width: totalLength * pxPerUnit }}
+            <div key={axis} className="absolute" style={{ top: laneTop(row) + (LANE - BAR) / 2, height: BAR, left: x(0), width: totalLength * pxPerUnit }}
               title={axis === 'y' ? 'Frames tilting up or down shows' : 'Frames tilting side to side shows'}>
               <div className="absolute inset-0 rounded-full bg-foreground/5" />
               {spans.map(([lo, hi], k) => (
                 <div key={k} className={cn('absolute inset-y-0 rounded-full', axis === 'y' ? 'bg-sky-500' : 'bg-amber-500')} style={{ left: `${lo * 100}%`, width: `${(hi - lo) * 100}%` }} />
               ))}
+              {axis === slowAxis && reachEnds.map((end, k) => (
+                // Where it meets the frames it never shows; above the playhead, being the smaller target
+                <div key={k} data-reach="" title={`${axis === 'y' ? '↕' : '↔'} reach: drag to hide more or fewer frames`}
+                  className="absolute -inset-y-[3px] z-30 w-4 -translate-x-1/2 cursor-ew-resize" style={{ left: `${end * 100}%` }}>
+                  <div className={cn('absolute inset-y-0 left-1/2 w-1.5 -translate-x-1/2 rounded-full ring-2 ring-background', axis === 'y' ? 'bg-sky-600' : 'bg-amber-600')} />
+                </div>
+              ))}
             </div>
           ))}
           {lanes > 0 && bars.map(({ axis }, row) => (
-            // Which lane is which, just left of the first frame
-            <span key={axis} className={cn('pointer-events-none absolute text-[9px] leading-none font-semibold', axis === 'y' ? 'text-sky-600' : 'text-amber-600')}
-              style={{ top: 3 + row * LANE - 1.5, left: 1 }}>
+            // Which lane is which, just left of the first frame, big enough to read (Keller)
+            <span key={axis} className={cn('pointer-events-none absolute flex items-center justify-center text-xs leading-none font-semibold', axis === 'y' ? 'text-sky-600' : 'text-amber-600')}
+              style={{ top: laneTop(row), height: LANE, left: 0, width: PAD }}>
               {axis === 'y' ? '↕' : '↔'}
             </span>
           ))}
