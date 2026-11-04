@@ -1,16 +1,7 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, EyeOff, MoreHorizontal, TriangleAlert } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
@@ -54,34 +45,36 @@ const round = (v: number, digits = 0) => Math.round(v * 10 ** digits) / 10 ** di
 export type SetLens = (patch: Partial<TiltSettings>) => void
 
 /**
- * Which way frames run on each tilt. Flat always shows the middle frame, so the default (1 → 5 top to bottom
- * and left to right) rarely needs changing; it lives in the lens title's ⋯ menu.
+ * What rarely changes, in a small panel off the lens title's ⋯: which way frames run on each tilt (flat always shows the
+ * middle frame, so the default, 1 → 5 top to bottom and left to right, seldom needs changing) and, for Partial reveal, the
+ * wobble allowance (Keller moved it here on 4 November, at 1° by default)
  */
 export function LensMenu({ note, set }: { note: Pick<Note, 'frames' | 'tilt'>; set: SetLens }) {
   const lens = lensState(note.tilt, note.frames)
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Lens options" className="text-muted-foreground" />}>
+    <Popover>
+      <PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Lens options" className="text-muted-foreground" />}>
         <MoreHorizontal />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>1 → 5 ↕</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={lens.dirY < 0 ? 'down' : 'up'} onValueChange={(v) => set({ runY: v as 'up' | 'down' })}>
-            <DropdownMenuRadioItem value="down"><ArrowDown />Top to bottom</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="up"><ArrowUp />Bottom to top</DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>1 → 5 ↔</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={lens.dirX < 0 ? 'left' : 'right'} onValueChange={(v) => set({ runX: v as 'left' | 'right' })}>
-            <DropdownMenuRadioItem value="right"><ArrowRight />Left to right</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="left"><ArrowLeft />Right to left</DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 gap-3 p-3">
+        <Labeled label="1 → 5 ↕">
+          <Segmented value={lens.dirY < 0 ? 'down' : 'up'} onChange={(v) => set({ runY: v })}
+            options={[{ value: 'down', label: <><ArrowDown />Top to bottom</> }, { value: 'up', label: <><ArrowUp />Bottom to top</> }]} />
+        </Labeled>
+        <Labeled label="1 → 5 ↔">
+          <Segmented value={lens.dirX < 0 ? 'left' : 'right'} onChange={(v) => set({ runX: v })}
+            options={[{ value: 'right', label: <><ArrowRight />Left to right</> }, { value: 'left', label: <><ArrowLeft />Right to left</> }]} />
+        </Labeled>
+        {lens.effect === 'reveal' && (
+          <Explain
+            picture={<WobblePreview note={note} lens={lens} />}
+            caption={`Hidden frames stay hidden even if the hand drifts ${round(lens.wobble, 1)}° ${lens.revealAxis === 'y' ? 'up or down' : 'sideways'} while tilting ${lens.revealAxis === 'y' ? 'sideways' : 'up or down'}`}>
+            <ScrubField label="Wobble" title="Allowance for a hand that isn't perfectly straight" value={round(lens.wobble, 1)} min={0} max={20} step={0.5} unit="°"
+              onChange={(v) => set({ revealWobble: v })} />
+          </Explain>
+        )}
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -135,7 +128,7 @@ export function EffectSection({ note, set, printNote = note, title, action, chil
       {Math.abs(lensAngle(lens)) === 90 && <SponsorWarning />}
 
       {/* Which tilt hides frames, then the Cycle, above where flat sits and how far each tilt reaches (Keller put the
-          cycle first, 3 November), then the wobble allowance */}
+          cycle first, 3 November); the wobble allowance is in the title's ⋯ (`LensMenu`) */}
       {lens.effect === 'reveal' && (
           <div className="flex items-center gap-3" title="The tilt that never shows the outer frames, at any angle; the other tilt plays every frame">
             <span className="shrink-0 text-xs text-muted-foreground">Hidden on</span>
@@ -205,14 +198,6 @@ export function EffectSection({ note, set, printNote = note, title, action, chil
           <FlatStrip note={note} lens={lens} set={set} />
         </Explain>
       </Labeled>
-      {lens.effect === 'reveal' && (
-          <Explain
-            picture={<WobblePreview note={note} lens={lens} />}
-            caption={`Hidden frames stay hidden even if the hand drifts ${round(lens.wobble, 1)}° ${lens.revealAxis === 'y' ? 'up or down' : 'sideways'} while tilting ${lens.revealAxis === 'y' ? 'sideways' : 'up or down'}`}>
-            <ScrubField label="Wobble" title="Allowance for a hand that isn't perfectly straight" value={round(lens.wobble, 1)} min={0} max={20} step={0.5} unit="°"
-              onChange={(v) => set({ revealWobble: v })} />
-          </Explain>
-      )}
 
     </Section>
 
@@ -296,7 +281,7 @@ export function SponsorWarning({ className, children = 'Not supported by our spo
 
 /** A banknote rocking in the 1 → 5 direction and back, its thread numbered with the frame that shows */
 /** The slow tilt swept all the way to 90° each way while the hand drifts on the fast tilt: the outer frames never show */
-function WobblePreview({ note, lens }: { note: Note; lens: LensState }) {
+function WobblePreview({ note, lens }: { note: Pick<Note, 'frames' | 'tilt'>; lens: LensState }) {
   const t = useClock()
   const slow = Math.sin((t / 4) * Math.PI * 2) * 90
   const drift = Math.sin(t * 7) * lens.wobble

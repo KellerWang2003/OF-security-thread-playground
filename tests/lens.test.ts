@@ -130,7 +130,7 @@ describe('flat at the middle of the middle frame', () => {
   it('hides the outer frames on the slow tilt of Partial reveal at any angle, with a wobbling hand', () => {
     expect(revealOptions(f, 0.5)).toEqual([2, 4])
     expect(revealCycle(f, 60, undefined, 0.5)).toBe(201)
-    const tilt = { ...centred, effect: 'reveal' } as TiltSettings
+    const tilt = { ...centred, effect: 'reveal', revealWobble: 5 } as TiltSettings
     const lens = lensState(tilt, f)
     // 5° of wobble on the 50° fast tilt uses 0.1 of the 0.3 to frame 1's edge: 90° ÷ 0.2 = 450°, plus a degree
     expect(lens.wobble).toBe(5)
@@ -139,6 +139,18 @@ describe('flat at the middle of the middle frame', () => {
     expect([...framesReached({ frames: f, tilt }, 'x', lens)].sort()).toEqual([1, 2, 3])
     for (let x = -90; x <= 90; x += 0.5)
       for (const y of [-5, -2.5, 0, 2.5, 5]) expect([0, 4]).not.toContain(lensMix({ frames: f, tilt }, { x, y }, lens).current)
+  })
+
+  it('allows 1° of wobble by default, so a 30° fast cycle leaves side tilt changing frame from about 34°', () => {
+    const tilt = { ...centred, cycleDeg: 30, effect: 'reveal' } as TiltSettings
+    const lens = lensState(tilt, f)
+    expect(lens.wobble).toBe(1)
+    // 1° on the 30° fast tilt uses a thirtieth of the 0.3 to frame 1's edge: 90° ÷ (0.3 − 1/30) = 337.5°, past it to 338°
+    expect(lens.cycleX).toBe(338)
+    expect(lensMix({ frames: f, tilt }, { x: 33, y: 0 }, lens).current).toBe(2)
+    expect(lensMix({ frames: f, tilt }, { x: 35, y: 0 }, lens).current).toBe(3)
+    // A wobble set by hand is kept
+    expect(lensState({ ...tilt, revealWobble: 5 }, f).cycleX).toBe(676)
   })
 
   it('says when the fast cycle is too short for the wobble', () => {
@@ -172,7 +184,7 @@ describe('flat position and Partial reveal reach', () => {
   })
 
   it('hides 1 and 4 of four frames with flat between 2 and 3, at any slow tilt with the wobble', () => {
-    const tilt = { cycleDeg: 40, transition: 0, effect: 'reveal', flatAt: 4 } as TiltSettings
+    const tilt = { cycleDeg: 40, transition: 0, effect: 'reveal', revealWobble: 5, flatAt: 4 } as TiltSettings
     const lens = lensState(tilt, four)
     expect([...framesReached({ frames: four, tilt }, 'x', lens)].sort()).toEqual([1, 2])
     for (let x = -90; x <= 90; x += 0.5)

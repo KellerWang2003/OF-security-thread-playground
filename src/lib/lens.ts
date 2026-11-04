@@ -32,8 +32,12 @@ export const LENS_EFFECTS: { value: LensEffect; label: string; description: stri
 export const SWEEP_MAX = TILT_LIMIT
 /** Partial reveal keeps its hidden frames hidden at every angle a real banknote can be tilted to */
 export const HIDE_LIMIT = TILT_LIMIT
-/** Partial reveal's default allowance for a hand that drifts onto the fast tilt while sweeping the slow one */
-export const DEFAULT_WOBBLE = 5
+/**
+ * Partial reveal's default allowance for a hand that drifts onto the fast tilt while sweeping the slow one. Keller set it
+ * to 1° on 4 November (it was 5°, which slowed the slow tilt so much that the demo's side tilt changed frame only past
+ * about 68°); banknotes that never set their own follow it
+ */
+export const DEFAULT_WOBBLE = 1
 
 /** The lens as the frames see it: each tilt's cycle (null when that tilt does nothing) and direction */
 export interface LensState {
