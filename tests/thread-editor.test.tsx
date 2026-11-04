@@ -636,18 +636,17 @@ describe('thread editor', () => {
     expect(frameButton(1).getAttribute('aria-pressed')).toBe('true')
     expect([useTilt.getState().angle, useTilt.getState().target]).toEqual([0, 0])
 
-    // Its fill, in a panel of its own as Figma's (Keller), + and − adding and removing it; the panel's second section is
-    // the background colour under every frame, which an empty frame shows
+    // Its fill, laid out right here (Keller, 4 November: its image to upload first, its colour under it), + and − adding
+    // and removing it; its second section is the background colour under every frame, which an empty frame shows
     await user.click(within(editor).getByRole('button', { name: 'Remove tile pattern' }))
     expect(note().frames[0].kind).toBe('none')
-    expect(within(editor).queryByRole('button', { name: /^Tile pattern: / })).toBeNull()
+    expect(within(editor).queryByRole('button', { name: 'Upload image' })).toBeNull()
     await user.click(within(editor).getByRole('button', { name: 'Add tile pattern' }))
     expect(note().frames[0].kind).toBe('color')
-    await user.click(within(editor).getByRole('button', { name: /^Tile pattern: #/ }))
+    expect(within(editor).getByRole('button', { name: 'Upload image' })).toBeDefined()
     expect(screen.queryByRole('button', { name: 'Background', exact: true })).toBeNull()
-    await user.click(screen.getByRole('switch', { name: 'Background colour' }))
+    await user.click(within(editor).getByRole('switch', { name: 'Background colour' }))
     expect(note().thread.backgroundColor).toBe('#ffffff')
-    await user.click(within(editor).getByRole('button', { name: /^Tile pattern: #/ }))
 
     // An image sits in the repeat; its Place comes before its Fill, fitted at first, then where its fields put it. The
     // tile is set by hand here, so it stays 4 mm (on Fit it would take the image's length)

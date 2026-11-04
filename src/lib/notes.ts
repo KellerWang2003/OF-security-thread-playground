@@ -22,7 +22,8 @@ export const THREAD_WIDTH = { min: 3, max: 6, step: 0.5 }
  */
 export const NOTE_SIZE = { min: 20, max: 2000 }
 export const FRAME_COLORS = ['#D9A441', '#2E9C8F', '#C2456B', '#4A6FD1', '#7C4DBA']
-export const DEFAULT_NOTE = { widthMm: 150, heightMm: 70, color: '#5B6B8C' }
+/** A new banknote's size, and its colour: very light grey paper, until its design is uploaded (Keller, 4 November) */
+export const DEFAULT_NOTE = { widthMm: 150, heightMm: 70, color: '#E5E5E5' }
 /** Space left between notes when they are placed on the canvas */
 export const NOTE_GAP = 20
 

@@ -80,6 +80,8 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 /** The right panel's open tab, the part of the banknote picked: Banknote, Thread or Watermark */
 const tab = () => screen.queryByRole('tab', { selected: true })?.textContent
+/** The colours' hex fields laid out in the right panel, in order (each beside its swatch, which is an input too) */
+const hexFields = () => (screen.getAllByDisplayValue(/^#[0-9a-f]{6}$/i) as HTMLInputElement[]).filter((input) => input.type === 'text')
 
 describe('username workspace editor', () => {
   it('creates a project and banknote, autosaves a rename, and duplicates the project', async () => {
@@ -373,15 +375,15 @@ describe('username workspace editor', () => {
     await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
     const note = () => useProjects.getState().demoPreview!.notes[0]
 
-    // The banknote's background is chosen as a frame's fill is (Keller: the same everywhere), and Image starts empty
-    const background = () => screen.getByRole('button', { name: /^Front: / })
-    await user.click(background())
-    await user.click(await screen.findByRole('button', { name: 'Image', exact: true }))
-    expect(note().background).toBe('image')
-    expect(screen.getByRole('button', { name: 'Upload design' })).toBeDefined()
-    await user.click(screen.getByRole('button', { name: 'Colour', exact: true }))
+    // The banknote's background is laid out as a frame's fill is (Keller: the same everywhere), right on the panel
+    // (Keller, 4 November): each side's design to upload first, then its colour, the secondary choice
+    expect(screen.getByText('Front', { exact: true })).toBeDefined()
+    expect(screen.getByText('Back', { exact: true })).toBeDefined()
+    expect(screen.getAllByRole('button', { name: 'Upload design' })).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'Image', exact: true })).toBeNull()
+    fireEvent.change(hexFields()[0], { target: { value: '#abcdef' } })
+    expect(note().color).toBe('#abcdef')
     expect(note().background).toBe('solid')
-    await user.click(background())
 
     // Across the thread: its Width when it runs down the banknote, its Height when it runs across
     await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
@@ -420,29 +422,24 @@ describe('username workspace editor', () => {
     // (Keller), its fill chosen in a panel of its own as Figma's; the timeline picks the frame, so no frame numbers
     expect(screen.getByText('Tile pattern', { exact: true })).toBeDefined()
     expect(screen.queryByRole('button', { name: 'Frame 1', exact: true })).toBeNull()
-    // + and − add and remove it, as in Figma; its panel offers a colour or an image, then, in a second section, the
-    // background colour under every frame (Keller), which an empty frame shows
-    const fill = () => screen.queryByRole('button', { name: /^Tile pattern: / })
+    // + and − add and remove it, as in Figma. It is laid out right here (Keller, 4 November): its image to upload first,
+    // its colour under it, then, in a second section, the background colour under every frame (Keller), which an empty
+    // frame shows. There is no Colour or Image to pick: what shows is the image when there is one, else the colour
+    const upload = () => screen.queryByRole('button', { name: 'Upload image' })
     await user.click(screen.getByRole('button', { name: 'Remove tile pattern' }))
-    expect(fill()).toBeNull()
+    expect(upload()).toBeNull()
     const emptied = note().frames.findIndex((f) => f.kind === 'none')
     expect(emptied).toBeGreaterThanOrEqual(0)
     await user.click(screen.getByRole('button', { name: 'Add tile pattern' }))
     expect(note().frames[emptied].kind).toBe('color')
-    await user.click(fill()!)
-    expect(screen.getAllByRole('button', { name: /^(Colour|Image)$/ }).map((b) => b.textContent)).toEqual(['Colour', 'Image'])
+    expect(upload()).not.toBeNull()
+    expect(screen.queryByRole('button', { name: 'Image', exact: true })).toBeNull()
+    fireEvent.change(hexFields()[0], { target: { value: '#abcdef' } })
+    expect(note().frames[emptied].color).toBe('#abcdef')
     await user.click(screen.getByRole('switch', { name: 'Background colour' }))
     expect(note().thread.backgroundColor).toBe('#ffffff')
     await user.click(screen.getByRole('switch', { name: 'Background colour' }))
     expect(note().thread.backgroundColor).toBeUndefined()
-    // Image starts empty, an image to add with its button, rather than asking for a file straight away (Keller)
-    await user.click(screen.getByRole('button', { name: 'Image', exact: true }))
-    expect(note().frames[emptied].kind).toBe('image')
-    expect(note().frames[emptied].imageId).toBeUndefined()
-    expect(screen.getByRole('button', { name: 'Upload image' })).toBeDefined()
-    await user.click(screen.getByRole('button', { name: 'Colour', exact: true }))
-    expect(note().frames[emptied].kind).toBe('color')
-    await user.click(fill()!)
     // There is no Image gap any more
     expect(screen.queryByTitle('Space between complete image copies along the thread')).toBeNull()
 
@@ -937,9 +934,8 @@ describe('username workspace editor', () => {
     const finishTurn = () => act(() => setTilt({ turn: useTilt.getState().flipped ? 1 : 0 }))
     const flip = () => screen.getByRole('button', { name: 'Show the back' })
 
-    // Each side's background is its own row; until set, the back is the front's paper
-    expect(screen.getByRole('button', { name: 'Front: #123456' })).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Back: #123456' })).toBeDefined()
+    // Each side's background is laid out on its own; until set, the back is the front's paper
+    expect(hexFields().map((f) => f.value)).toEqual(['#123456', '#123456'])
 
     // F turns every banknote over, as the button under the lamp shows: the back has no thread, the watermark mirrored
     fireEvent.keyDown(window, { key: 'f' })
@@ -976,18 +972,15 @@ describe('username workspace editor', () => {
     expect(tab()).toBe('Banknote')
     finishTurn()
 
-    // Opening the front's background turns the banknotes to the front, and the back's to the back
-    await user.click(screen.getByRole('button', { name: /^Front: / }))
+    // Working on the front's background turns the banknotes to the front, and on the back's to the back, whose colour is
+    // its own once set
+    fireEvent.pointerDown(hexFields()[0])
     expect(useTilt.getState().flipped).toBe(false)
-    await user.click(screen.getByRole('button', { name: /^Front: / }))
-    await user.click(screen.getByRole('button', { name: /^Back: / }))
+    fireEvent.pointerDown(hexFields()[1])
     expect(useTilt.getState().flipped).toBe(true)
-    await user.click(await screen.findByRole('button', { name: 'Image', exact: true }))
-    expect(note().back).toEqual({ background: 'image', color: '#123456' })
-    expect(screen.getByRole('button', { name: 'Upload design' })).toBeDefined()
-    await user.click(screen.getByRole('button', { name: 'Colour', exact: true }))
-    expect(note().back).toEqual({ background: 'solid', color: '#123456' })
-    await user.click(screen.getByRole('button', { name: /^Back: / }))
+    fireEvent.change(hexFields()[1], { target: { value: '#654321' } })
+    expect(note().back).toEqual({ background: 'solid', color: '#654321' })
+    expect(note().color).toBe('#123456')
     finishTurn()
 
     // An export of the banknotes turned over is of their backs

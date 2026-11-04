@@ -16,7 +16,7 @@ import type { Note } from '../lib/types'
 import { showsBack, useTilt } from '../tilt/tilt'
 import { ChecksDrawer, ContinuousSection } from './DesignChecks'
 import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
-import { BackgroundFillRow } from './FillPicker'
+import { BackgroundFill } from './FillPicker'
 import { FramePanel } from './FramePanel'
 import { MagneticInkPanel } from './MagneticInkPanel'
 import { PanelResizer } from './PanelResizer'
@@ -139,17 +139,14 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
         </div>
       </Section>
 
+      {/* Each side's background laid out as a frame's fill is (Keller: the same everywhere), its design to upload first and
+          its colour under it; working on one turns the banknotes to that side. One above the other, as two image cards
+          don't fit side by side */}
       <Section nested>
-        {/* Each side's background, chosen as a frame's fill is, in a panel of its own (Keller: the same everywhere);
-            opening one turns the banknotes to that side */}
-        <div className="grid grid-cols-2 gap-2">
-          <Labeled label="Front">
-            <BackgroundFillRow note={note} noteRef={noteRef} side="front" />
-          </Labeled>
-          <Labeled label="Back">
-            <BackgroundFillRow note={note} noteRef={noteRef} side="back" />
-          </Labeled>
-        </div>
+        <BackgroundFill note={note} noteRef={noteRef} side="front" />
+      </Section>
+      <Section nested>
+        <BackgroundFill note={note} noteRef={noteRef} side="back" />
       </Section>
       {hasDesign && <ContinuousSection note={note} noteRef={noteRef} />}
       </Group>

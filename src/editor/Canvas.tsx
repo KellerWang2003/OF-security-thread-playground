@@ -24,6 +24,7 @@ import { EdgeMarks, NeighbourRing } from './ContinuousView'
 import { addImageFrames, type NoteRef } from './frameActions'
 import { placeLayer, type Layer } from './layerActions'
 import { PlacingBox } from './PlacingBox'
+import { UploadDesignButton } from './UploadDesignButton'
 import { WindowEditor } from './WindowEditor'
 import { useElementSize } from './useElementSize'
 
@@ -569,6 +570,12 @@ export function Canvas({
                 {isSelected && editingWindows && note.thread.windows.enabled && (
                   <WindowEditor note={note} scale={scale} selectedId={selectedWindowId} onSelect={onWindowSelect}
                     onChange={(sections) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, windows: { ...n.thread.windows, sections } } }))} />
+                )}
+                {/* A side showing no design has a + in its middle to upload one (Keller), out of the way while it plays or is
+                    dragged, edited or placed on, and on banknotes too small on screen to hold it */}
+                {!(face.background === 'image' && face.faceImageId) && !quiet && !editingThis && !placingThis
+                  && Math.min(note.widthMm, note.heightMm) * scale >= 64 && (
+                  <UploadDesignButton noteRef={ref} side={back ? 'back' : 'front'} />
                 )}
               </div>
               {drift && <EdgeMarks note={face} scale={scale} drift={drift} quiet={quiet} />}

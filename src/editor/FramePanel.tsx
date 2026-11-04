@@ -5,7 +5,7 @@ import { IconButton, Labeled, LengthField, Section } from '../components/control
 import { IMAGE_STEP, imageBox, placeOf, uprightBox } from '../lib/artwork'
 import { patternOf } from '../lib/pattern'
 import type { Frame, Note } from '../lib/types'
-import { FrameFillRow } from './FillPicker'
+import { FrameFill } from './FillPicker'
 import { updateFrame, type NoteRef } from './frameActions'
 import { swatch } from './LensVisuals'
 
@@ -14,8 +14,8 @@ import { swatch } from './LensVisuals'
  * for finer control, a row of frame numbers to go to another frame without the timeline (`picker`) and, for an image,
  * where it sits in the tile (`place`: X and Y of its top-left corner as drawn, and its width, its height following);
  * on the canvas an image simply fits the thread's width, the tile following it. Then its fill, called Tile pattern
- * (Keller: people uploaded the whole thread's artwork, not one tile; it matches Tile length), one row that opens the
- * fill's own panel (`FrameFillRow`);
+ * (Keller: people uploaded the whole thread's artwork, not one tile; it matches Tile length), laid out right here: its
+ * image's card first, then its colour (`FrameFill`; Keller, 4 November: no upload hidden a level down);
  * + and − add and remove it, as in Figma, an empty frame showing the banknote through.
  */
 export function FramePanel({ note, noteRef, frame, index, onShow, picker = true, place = true }: {
@@ -55,7 +55,7 @@ export function FramePanel({ note, noteRef, frame, index, onShow, picker = true,
       <Section nested title="Tile pattern" action={frame.kind === 'none'
         ? <IconButton label="Add tile pattern" size="icon-xs" onClick={() => set({ kind: 'color' })}><Plus /></IconButton>
         : <IconButton label="Remove tile pattern" size="icon-xs" onClick={() => set({ kind: 'none' })}><Minus /></IconButton>}>
-        {frame.kind !== 'none' && <FrameFillRow note={note} noteRef={noteRef} frame={frame} />}
+        {frame.kind !== 'none' && <FrameFill note={note} noteRef={noteRef} frame={frame} />}
       </Section>
     </>
   )

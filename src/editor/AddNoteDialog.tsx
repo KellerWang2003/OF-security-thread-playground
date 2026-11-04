@@ -3,12 +3,15 @@ import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { ColorField, Field, IconButton, LengthNumberField } from '../components/controls'
+import { Field, IconButton, LengthNumberField } from '../components/controls'
 import { DEFAULT_NOTE, NOTE_SIZE, createNote, nextNotePosition } from '../lib/notes'
 import { addNote } from '../lib/store'
 import type { Note } from '../lib/types'
 
-/** Adds a note of any size to a project; starts from the size of the last note so a series is quick to set up */
+/**
+ * Adds a note of any size to a project; starts from the size of the last note so a series is quick to set up. It asks
+ * for no colour (Keller, 4 November): every new banknote is plain light grey paper until its design is uploaded
+ */
 export function AddNoteDialog({
   projectId,
   notes,
@@ -29,7 +32,6 @@ export function AddNoteDialog({
     widthMm: last?.widthMm ?? DEFAULT_NOTE.widthMm,
     heightMm: last?.heightMm ?? DEFAULT_NOTE.heightMm,
   })
-  const [color, setColor] = useState(last?.color ?? DEFAULT_NOTE.color)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -48,7 +50,7 @@ export function AddNoteDialog({
               name: name.trim() || `Banknote ${notes.length + 1}`,
               ...nextNotePosition(notes),
               ...size,
-              color,
+              color: DEFAULT_NOTE.color,
             })
             // Cycle and fade are shared by every banknote in the project
             const note = last ? { ...created, tilt: last.tilt } : created
@@ -94,9 +96,6 @@ export function AddNoteDialog({
               />
             </Field>
           </div>
-          <Field label="Colour">
-            <ColorField value={color} onChange={setColor} />
-          </Field>
           <DialogFooter>
             <Button type="submit">Add</Button>
           </DialogFooter>
