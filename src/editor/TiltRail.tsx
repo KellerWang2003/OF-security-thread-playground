@@ -1,4 +1,4 @@
-import { FlipHorizontal2, Lamp, Lock, LockOpen, RotateCcw } from 'lucide-react'
+import { ChevronDown, ChevronUp, FlipHorizontal2, Lamp, Lock, LockOpen, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -8,6 +8,7 @@ import { TILT_LIMIT, clamp } from '../lib/frames'
 import { padToTilt, tiltToPad } from '../lib/pad'
 import type { LensState } from '../lib/lens'
 import { moveFromRecording, nextRecordingName, planLitPaths, planPath, playbackPlan, recordingFromSamples } from '../lib/moves'
+import { setTiltPadOpen, useTiltPad } from '../lib/tiltPad'
 import type { RecordedPoint, TiltSettings } from '../lib/types'
 import { setRecording, setTilt, turnOver, useTilt } from '../tilt/tilt'
 import { saveTilt } from './playbackActions'
@@ -16,6 +17,12 @@ import { saveTilt } from './playbackActions'
 const PAD_PX = 136
 /** Outer width of the pad's panel (the pad, its p-1.5 padding and border), which the playback bar's controls line up with */
 export const TILT_PANEL_PX = PAD_PX + 2 * 6 + 2
+
+/** Keys pressed while a dialog or menu is open are its own */
+const POPUP = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'
+
+/** The lamp and Show the back, on the card's top row */
+const ROW_TOGGLE = 'size-6 min-w-6 rounded-[min(var(--radius-md),10px)] bg-background/95 p-0 aria-pressed:bg-primary aria-pressed:text-primary-foreground'
 
 type Axis = 'x' | 'y'
 
@@ -35,10 +42,11 @@ function holdAt(next: { x?: number; y?: number }, limit: number, respectLocks = 
 }
 
 /**
- * Left edge of the canvas: a pad you press and drag in any direction to tilt every banknote (up/down
- * vertically, side to side horizontally), held where you let go. Each axis has a field for an exact angle
- * and a lock that keeps the pad and canvas drag off it. The lamp in its corner holds every banknote up to the light,
- * and on the canvas the button in the corner below it turns every banknote over to its back.
+ * Bottom left of the canvas: every banknote's tilt as its ↕ and ↔ angles, each with a field for an exact angle and a lock
+ * that keeps the pad and canvas drag off it. The chevron at the card's top opens a pad you press and drag in any direction
+ * to tilt them (up/down vertically, side to side horizontally), held where you let go; the pad folds away by default
+ * (Keller), and the browser remembers which. Beside the chevron, so they work folded, the lamp holds every banknote up to
+ * the light, the button after it turns every banknote over to its back (on the canvas), and back to flat shows once tilted.
  */
 export function TiltRail({ limit = TILT_LIMIT, playback, flip = false }: {
   limit?: number
@@ -48,29 +56,102 @@ export function TiltRail({ limit = TILT_LIMIT, playback, flip = false }: {
   flip?: boolean
 }) {
   const recording = useTilt((s) => s.recording)
+  const open = useTiltPad((s) => s.open)
+
+  // Escape cancels an armed recording before anything else hears it (Thread Studio's own Escape would go back to the
+  // canvas). Added once, as the card mounts: its parents add theirs after it, so this one stays ahead of them
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || !useTilt.getState().recording || document.querySelector(POPUP)) return
+      e.preventDefault()
+      setRecording(false)
+    }
+    window.addEventListener('keydown', onKey, { capture: true })
+    return () => window.removeEventListener('keydown', onKey, { capture: true })
+  }, [])
+
   return (
-    <Panel className="absolute bottom-[108px] left-3 flex flex-col gap-1.5 p-1.5">
-      <Pad
-        limit={limit}
-        playback={playback}
-        flip={flip}
-        recording={recording}
-        onRecorded={(samples) => {
-          setRecording(false)
-          if (!playback) return
-          const recordings = playback.tilt.recordings ?? []
-          const made = recordingFromSamples(samples, limit, nextRecordingName(recordings))
-          if (!made) return
-          // A new recording is what plays now, on its own; it also joins the saved recordings
-          saveTilt(playback.projectId, { recordings: [...recordings, made], moves: [moveFromRecording(made)] })
-          setTilt({ source: 'wobble' })
-        }}
-      />
-      <div className="flex gap-1" style={{ width: PAD_PX }}>
-        <AxisField axis="y" limit={limit} />
-        <AxisField axis="x" limit={limit} />
+    <Panel className="absolute bottom-[108px] left-3 p-1.5">
+      <div role="group" aria-label="Tilt" className="flex flex-col gap-1.5" style={{ width: PAD_PX }}>
+        {/* The chevron in the middle, as a handle, the lamp and Show the back to its left and back to flat to its right */}
+        <div className="grid h-6 grid-cols-[1fr_auto_1fr] items-center">
+          <div className="flex gap-1">
+            <LampToggle />
+            {flip && <FlipToggle />}
+          </div>
+          <IconButton label={open ? 'Fold the tilt pad away' : 'Open the tilt pad'} size="icon-xs" className="text-muted-foreground"
+            onClick={() => setTiltPadOpen(!open)}>
+            {open ? <ChevronDown /> : <ChevronUp />}
+          </IconButton>
+          <div className="flex justify-end">
+            <BackToFlat />
+          </div>
+        </div>
+        {open && (
+          <Pad
+            limit={limit}
+            playback={playback}
+            recording={recording}
+            onRecorded={(samples) => {
+              setRecording(false)
+              if (!playback) return
+              const recordings = playback.tilt.recordings ?? []
+              const made = recordingFromSamples(samples, limit, nextRecordingName(recordings))
+              if (!made) return
+              // A new recording is what plays now, on its own; it also joins the saved recordings
+              saveTilt(playback.projectId, { recordings: [...recordings, made], moves: [moveFromRecording(made)] })
+              setTilt({ source: 'wobble' })
+            }}
+          />
+        )}
+        <div className="flex gap-1">
+          <AxisField axis="y" limit={limit} />
+          <AxisField axis="x" limit={limit} />
+        </div>
       </div>
     </Panel>
+  )
+}
+
+/** The lamp: every banknote held up to the light, until pressed again */
+function LampToggle() {
+  const backlit = useTilt((s) => s.backlit)
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<Toggle aria-label="Hold up to the light" variant="outline" size="sm" pressed={backlit} onPressedChange={(on) => setTilt({ backlit: on })} className={ROW_TOGGLE} />}
+      >
+        <Lamp className="size-3" />
+      </TooltipTrigger>
+      <TooltipContent>{backlit ? 'Back to reflected light (tap L, or hold to peek)' : 'Hold up to the light (tap L, or hold to peek)'}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+/** Built as the lamp is: every banknote turned over, side to side, until pressed again */
+function FlipToggle() {
+  const flipped = useTilt((s) => s.flipped)
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<Toggle aria-label="Show the back" variant="outline" size="sm" pressed={flipped} onPressedChange={(on) => turnOver(on)} className={ROW_TOGGLE} />}
+      >
+        <FlipHorizontal2 className="size-3" />
+      </TooltipTrigger>
+      <TooltipContent>{flipped ? 'Back to the front (F)' : 'Turn over to the back (F)'}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+/** Back to flat, only once there is somewhere to go back from; while playing it stays put rather than blink at each pass through flat */
+function BackToFlat() {
+  const offFlat = useTilt((s) => s.source === 'wobble'
+    || Math.round(s.source === 'hold' ? s.targetX : s.angleX) !== 0 || Math.round(s.source === 'hold' ? s.target : s.angle) !== 0)
+  if (!offFlat) return null
+  return (
+    <IconButton label="Back to flat" variant="outline" size="icon-xs" className="bg-background/95" onClick={() => setTilt({ source: 'hold', target: 0, targetX: 0 })}>
+      <RotateCcw />
+    </IconButton>
   )
 }
 
@@ -119,10 +200,9 @@ function AxisField({ axis, limit }: { axis: Axis; limit: number }) {
 }
 
 /** The square maps ±limit on each axis: the centre is flat, the top edge full up tilt, the right edge full right */
-function Pad({ limit, playback, flip, recording, onRecorded }: {
+function Pad({ limit, playback, recording, onRecorded }: {
   limit: number
   playback?: { tilt: TiltSettings; lens: LensState }
-  flip: boolean
   recording: boolean
   onRecorded: (samples: RecordedPoint[]) => void
 }) {
@@ -131,8 +211,6 @@ function Pad({ limit, playback, flip, recording, onRecorded }: {
   const lockX = useTilt((s) => s.lockX)
   const lockY = useTilt((s) => s.lockY)
   const playing = useTilt((s) => s.source === 'wobble')
-  // Back to flat only shows once there is somewhere to go back from; while playing it stays put rather than blink at each pass through flat
-  const offFlat = playing || Math.round(x) !== 0 || Math.round(y) !== 0
   const pad = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
   const half = PAD_PX / 2
@@ -151,8 +229,6 @@ function Pad({ limit, playback, flip, recording, onRecorded }: {
     // toPx only depends on limit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playback, limit])
-  const backlit = useTilt((s) => s.backlit)
-  const flipped = useTilt((s) => s.flipped)
 
   // While recording a drag, sample the held tilt and the light every animation frame, so pauses are kept too
   const samples = useRef<RecordedPoint[] | null>(null)
@@ -190,7 +266,7 @@ function Pad({ limit, playback, flip, recording, onRecorded }: {
     <div
       ref={pad}
       role="group"
-      aria-label="Tilt"
+      aria-label="Tilt pad"
       tabIndex={0}
       className={cn(
         'relative touch-none overflow-hidden rounded-md bg-muted outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50',
@@ -248,63 +324,6 @@ function Pad({ limit, playback, flip, recording, onRecorded }: {
         className="pointer-events-none absolute size-3 -translate-1/2 rounded-full border-2 border-background bg-primary shadow"
         style={{ left: toPx(x), top: toPx(-y) }}
       />
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Toggle
-              aria-label="Hold up to the light"
-              variant="outline"
-              size="sm"
-              pressed={backlit}
-              onPressedChange={(on) => setTilt({ backlit: on })}
-              // A press here is not a drag on the pad
-              onPointerDown={(e) => e.stopPropagation()}
-              onDoubleClick={(e) => e.stopPropagation()}
-              className="absolute top-1 left-1 size-6 min-w-6 rounded-[min(var(--radius-md),10px)] bg-background/95 p-0 aria-pressed:bg-primary aria-pressed:text-primary-foreground"
-            />
-          }
-        >
-          <Lamp className="size-3" />
-        </TooltipTrigger>
-        <TooltipContent>{backlit ? 'Back to reflected light (tap L, or hold to peek)' : 'Hold up to the light (tap L, or hold to peek)'}</TooltipContent>
-      </Tooltip>
-      {flip && (
-        // Below the lamp, built as it is: every banknote turned over, side to side, until pressed again
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                aria-label="Show the back"
-                variant="outline"
-                size="sm"
-                pressed={flipped}
-                onPressedChange={(on) => turnOver(on)}
-                // A press here is not a drag on the pad
-                onPointerDown={(e) => e.stopPropagation()}
-                onDoubleClick={(e) => e.stopPropagation()}
-                className="absolute bottom-1 left-1 size-6 min-w-6 rounded-[min(var(--radius-md),10px)] bg-background/95 p-0 aria-pressed:bg-primary aria-pressed:text-primary-foreground"
-              />
-            }
-          >
-            <FlipHorizontal2 className="size-3" />
-          </TooltipTrigger>
-          <TooltipContent>{flipped ? 'Back to the front (F)' : 'Turn over to the back (F)'}</TooltipContent>
-        </Tooltip>
-      )}
-      {offFlat && (
-        <IconButton
-          label="Back to flat"
-          variant="outline"
-          size="icon-xs"
-          className="absolute top-1 right-1 bg-background/95"
-          // A press here is not a drag on the pad
-          onPointerDown={(e) => e.stopPropagation()}
-          onDoubleClick={(e) => e.stopPropagation()}
-          onClick={() => setTilt({ source: 'hold', target: 0, targetX: 0 })}
-        >
-          <RotateCcw />
-        </IconButton>
-      )}
     </div>
   )
 }

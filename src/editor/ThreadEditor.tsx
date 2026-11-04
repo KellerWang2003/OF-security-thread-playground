@@ -35,6 +35,7 @@ import {
 import { PATTERN_PRESETS, presetPattern } from '../lib/patternPresets'
 import { checkPattern, warningCount, type PatternCheck } from '../lib/patternRules'
 import { stepNote, updateNote } from '../lib/store'
+import { useTiltPad } from '../lib/tiltPad'
 import type { Note, Project, ThreadPattern, ThreadSection } from '../lib/types'
 import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
 import { Explain, RidgeIcon, swatch } from './LensVisuals'
@@ -73,6 +74,8 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
   // Preview and Checks open one at a time, as an accordion, so the controls above always keep room
   const [info, setInfo] = useState<'preview' | 'checks'>()
   const openInfo = (part: 'preview' | 'checks') => (open: boolean) => setInfo(open ? part : undefined)
+  // The left panel stops short of the tilt pad's card, whose height depends on whether the pad is open
+  const padOpen = useTiltPad((s) => s.open)
   const history = useHistory((s) => s.entries[project.id])
   // Undo here only takes back this banknote's steps; the canvas's undo still covers the whole project
   const canUndo = canStepNote(project, note.id, 'undo', history)
@@ -193,7 +196,8 @@ export function ThreadEditor({ project, note, onClose }: { project: Project; not
       </Panel>
 
       {/* As wide as the canvas's Banknotes panel */}
-      <Panel className="absolute top-16 left-3 flex max-h-[calc(100%-376px)] min-h-12 w-[224px] flex-col rounded-[calc(var(--radius)+0.375rem+1px)]">
+      <Panel className={cn('absolute top-16 left-3 flex min-h-12 w-[224px] flex-col rounded-[calc(var(--radius)+0.375rem+1px)]',
+        padOpen ? 'max-h-[calc(100%-406px)]' : 'max-h-[calc(100%-264px)]')}>
         {/* The hero control: whether sections can each have their own lens, and so which presets apply */}
         <div className="px-3 pt-3 pb-2">
           <SwitchField label="Mixed angles" title="Each section plays its own lens; off, every section plays the banknote's"

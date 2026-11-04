@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { TooltipProvider } from '../src/components/ui/tooltip'
 import { TiltRail } from '../src/editor/TiltRail'
 import { padToTilt, tiltToPad } from '../src/lib/pad'
+import { setTiltPadOpen, useTiltPad } from '../src/lib/tiltPad'
 import { setTilt, springToFlat, useTilt } from '../src/tilt/tilt'
 
 // jsdom lays the pad out at 0,0: its 136 px square is centred on 68,68 and ±90° spans 62 px each way, on a curve
@@ -17,8 +18,9 @@ beforeEach(() => {
 afterEach(cleanup)
 
 const renderPad = () => {
+  setTiltPadOpen(true)
   render(<TooltipProvider><TiltRail /></TooltipProvider>)
-  return screen.getByRole('group', { name: 'Tilt' })
+  return screen.getByRole('group', { name: 'Tilt pad' })
 }
 const at = (x: number, y: number) => ({ clientX: C + px(x), clientY: C - px(y), pointerId: 1 })
 
@@ -59,6 +61,27 @@ describe('tilt pad', () => {
       fireEvent.pointerMove(pad, { buttons: 1, ...at(0, 30) })
       expect(useTilt.getState().target).toBeCloseTo(0)
     }
+  })
+
+  it('folds away to its angles until the chevron opens it, remembered per browser', () => {
+    setTiltPadOpen(false)
+    render(<TooltipProvider><TiltRail /></TooltipProvider>)
+    expect(screen.queryByRole('group', { name: 'Tilt pad' })).toBeNull()
+    // Folded, the angles still tilt, and the lamp and back to flat still work from the chevron's row
+    fireEvent.change(screen.getByTitle('Up/down tilt').querySelector('input')!, { target: { value: '20' } })
+    expect(useTilt.getState()).toMatchObject({ source: 'hold', target: 20 })
+    fireEvent.click(screen.getByRole('button', { name: 'Back to flat' }))
+    expect(useTilt.getState()).toMatchObject({ target: 0, targetX: 0 })
+    fireEvent.click(screen.getByRole('button', { name: 'Hold up to the light' }))
+    expect(useTilt.getState().backlit).toBe(true)
+    setTilt({ backlit: false })
+    fireEvent.click(screen.getByRole('button', { name: 'Open the tilt pad' }))
+    expect(screen.getByRole('group', { name: 'Tilt pad' })).toBeDefined()
+    expect(useTiltPad.getState().open).toBe(true)
+    expect(localStorage.getItem('of-playground.tilt-pad')).toBe('open')
+    fireEvent.click(screen.getByRole('button', { name: 'Fold the tilt pad away' }))
+    expect(screen.queryByRole('group', { name: 'Tilt pad' })).toBeNull()
+    expect(localStorage.getItem('of-playground.tilt-pad')).toBe('folded')
   })
 
   it('ignores a right-click', () => {

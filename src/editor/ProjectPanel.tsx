@@ -23,6 +23,7 @@ import { NoteView } from '../components/NoteView'
 import { duplicateNote, removeNote, updateNote, updateProject, undoProject, redoProject } from '../lib/store'
 import { useHistory } from '../lib/history'
 import { LAYER_NAMES, PLACED_LAYERS, type PlacedLayer } from '../lib/layers'
+import { useTiltPad } from '../lib/tiltPad'
 import type { Note, Project } from '../lib/types'
 import type { Layer } from './layerActions'
 
@@ -67,9 +68,11 @@ export function ProjectPanel({
   const [toggled, setToggled] = useState<{ selection?: string; open: Record<string, boolean> }>({ open: {} })
   const overrides = toggled.selection === selectedId ? toggled.open : {}
   const isOpen = (id: string) => overrides[id] ?? id === selectedId
+  // Above the tilt pad's card it stops short of it, whose height depends on whether the pad is open
+  const padOpen = useTiltPad((s) => s.open)
 
   return (
-    <Panel className={cn('absolute top-3 left-3 flex w-[224px]', aboveTilt ? 'max-h-[calc(100%-312px)] min-h-12' : 'max-h-[calc(100%-120px)]', 'flex-col')}>
+    <Panel className={cn('absolute top-3 left-3 flex w-[224px]', aboveTilt ? cn(padOpen ? 'max-h-[calc(100%-342px)]' : 'max-h-[calc(100%-200px)]', 'min-h-12') : 'max-h-[calc(100%-120px)]', 'flex-col')}>
       <div className="flex items-center justify-between gap-1 p-1.5">
         <Button variant="ghost" size="sm" className="rounded-lg px-1.5" onClick={() => (location.hash = '')}>
           <ChevronLeft />
