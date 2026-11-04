@@ -29,6 +29,8 @@ import { TILT_PANEL_PX } from './TiltRail'
 import { addEmptyFrame, addImageFrames, deleteFrame, moveFrameTo, updateFrame, type NoteRef } from './frameActions'
 
 const PAD = 12
+/** The track's padding before the frames while it has lanes: room for their ↕ and ↔, which Keller wanted a little bigger again */
+const LANE_PAD = 18
 /** The + after the last frame: its gap from the last clip and its width, px */
 const ADD_GAP = 4
 const ADD_PX = 28
@@ -183,11 +185,12 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
   const lengths = frames.map((f) => f.length)
   const totalLength = lengths.reduce((sum, l) => sum + l, 0)
   const starts = lengths.map((_, i) => lengths.slice(0, i).reduce((sum, l) => sum + l, 0))
-  const x = (units: number) => PAD + units * pxPerUnit
   const bars = (['y', 'x'] as const).filter((a) => respondsTo(lens, a)).map((a) => ({ axis: a, spans: reachSpans(lens.offset, tiltReach(lens, a)) }))
   // With both tilts live, each tilt's reach gets its own lane above the frames instead of sitting on them; either way
   // a band above the frames is there to scrub on
   const lanes = bars.length > 1 ? bars.length : 0
+  const pad = lanes ? LANE_PAD : PAD
+  const x = (units: number) => pad + units * pxPerUnit
   const laneTop = (row: number) => 2 + row * LANE
   const framesTop = lanes ? 4 + lanes * LANE : SCRUB_BAND
   // Partial reveal: the slow tilt's lane has two ends to drag, hiding more or fewer frames as the band on the Lens effect's
@@ -204,7 +207,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
   const reachTo = (clientX: number) => {
     const rect = track.current?.getBoundingClientRect()
     if (!rect || !reaches.length) return
-    const next = revealLevelAt(reaches, lens.offset, clamp((clientX - rect.left - PAD) / (totalLength * pxPerUnit), 0, 1))
+    const next = revealLevelAt(reaches, lens.offset, clamp((clientX - rect.left - pad) / (totalLength * pxPerUnit), 0, 1))
     if (next !== level) setLens({ revealLevel: next })
   }
 
@@ -228,7 +231,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
   const scrubTo = (clientX: number) => {
     const rect = track.current?.getBoundingClientRect()
     if (!rect) return
-    const u = clamp((clientX - rect.left - PAD) / (totalLength * pxPerUnit), 0, 1)
+    const u = clamp((clientX - rect.left - pad) / (totalLength * pxPerUnit), 0, 1)
     // It picks the frames shown and leaves the banknotes' tilt alone (Keller)
     scrubFrames(note.id, tiltForPosition(lens, u))
   }
@@ -400,9 +403,9 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
             </div>
           ))}
           {lanes > 0 && bars.map(({ axis }, row) => (
-            // Which lane is which, just left of the first frame, big enough to read (Keller)
-            <span key={axis} className={cn('pointer-events-none absolute flex items-center justify-center text-xs leading-none font-semibold', axis === 'y' ? 'text-sky-600' : 'text-amber-600')}
-              style={{ top: laneTop(row), height: LANE, left: 0, width: PAD }}>
+            // Which lane is which, just left of the first frame, big enough to read (Keller), clear of the lane's start
+            <span key={axis} className={cn('pointer-events-none absolute flex items-center justify-center text-sm leading-none font-semibold', axis === 'y' ? 'text-sky-600' : 'text-amber-600')}
+              style={{ top: laneTop(row), height: LANE, left: 0, width: pad - 2 }}>
               {axis === 'y' ? '↕' : '↔'}
             </span>
           ))}

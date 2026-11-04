@@ -43,10 +43,11 @@ function holdAt(next: { x?: number; y?: number }, limit: number, respectLocks = 
 
 /**
  * Bottom left of the canvas: every banknote's tilt as its ↕ and ↔ angles, each with a field for an exact angle and a lock
- * that keeps the pad and canvas drag off it. The chevron at the card's top opens a pad you press and drag in any direction
- * to tilt them (up/down vertically, side to side horizontally), held where you let go; the pad folds away by default
- * (Keller), and the browser remembers which. Beside the chevron, so they work folded, the lamp holds every banknote up to
- * the light, the button after it turns every banknote over to its back (on the canvas), and back to flat shows once tilted.
+ * that keeps the pad and canvas drag off it. The chevron at the right of the card's top row opens a pad you press and
+ * drag in any direction to tilt them (up/down vertically, side to side horizontally), held where you let go; the pad
+ * folds away by default (Keller), and the browser remembers which. On that row, so they work folded, the lamp holds every
+ * banknote up to the light, the button after it turns every banknote over to its back (on the canvas), and back to flat,
+ * just left of the chevron, shows once tilted.
  */
 export function TiltRail({ limit = TILT_LIMIT, playback, flip = false }: {
   limit?: number
@@ -73,18 +74,18 @@ export function TiltRail({ limit = TILT_LIMIT, playback, flip = false }: {
   return (
     <Panel className="absolute bottom-[108px] left-3 p-1.5">
       <div role="group" aria-label="Tilt" className="flex flex-col gap-1.5" style={{ width: PAD_PX }}>
-        {/* The chevron in the middle, as a handle, the lamp and Show the back to its left and back to flat to its right */}
-        <div className="grid h-6 grid-cols-[1fr_auto_1fr] items-center">
+        {/* The lamp and Show the back on the left; back to flat on the right, then the chevron at the row's end (Keller) */}
+        <div className="flex h-6 items-center justify-between">
           <div className="flex gap-1">
             <LampToggle />
             {flip && <FlipToggle />}
           </div>
-          <IconButton label={open ? 'Fold the tilt pad away' : 'Open the tilt pad'} size="icon-xs" className="text-muted-foreground"
-            onClick={() => setTiltPadOpen(!open)}>
-            {open ? <ChevronDown /> : <ChevronUp />}
-          </IconButton>
-          <div className="flex justify-end">
+          <div className="flex items-center gap-1">
             <BackToFlat />
+            <IconButton label={open ? 'Fold the tilt pad away' : 'Open the tilt pad'} size="icon-xs" className="text-muted-foreground"
+              onClick={() => setTiltPadOpen(!open)}>
+              {open ? <ChevronDown /> : <ChevronUp />}
+            </IconButton>
           </div>
         </div>
         {open && (

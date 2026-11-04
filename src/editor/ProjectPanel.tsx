@@ -112,11 +112,13 @@ export function ProjectPanel({
           <ul className="flex flex-col gap-0.5 px-1.5 pb-1.5">
             {project.notes.map((note) => {
               const selected = note.id === selectedId
+              // The banknote itself picked: its grey runs on behind its features, as they are part of it (Keller)
+              const picked = selected && layer === 'note'
               const expanded = isOpen(note.id)
               // The + lists only the features the banknote doesn't have yet, and goes once it has them all
               const canAdd = FEATURES.some((f) => !hasFeature(note, f))
               return (
-              <li key={note.id}>
+              <li key={note.id} className={cn('rounded-lg', picked && 'bg-muted')}>
                 <div className="group relative">
                 <button
                   type="button"
@@ -125,7 +127,7 @@ export function ProjectPanel({
                   className={cn(
                     'flex w-full items-center gap-2 rounded-lg py-1 pr-1.5 pl-6 text-left transition-colors group-has-[[data-popup-open]]:pr-20',
                     canAdd ? 'group-hover:pr-20' : 'group-hover:pr-14',
-                    selected && layer === 'note' ? 'bg-muted' : 'hover:bg-muted/50',
+                    !picked && 'hover:bg-muted/50',
                   )}
                 >
                   <span className="flex size-7 shrink-0 items-center justify-center">
@@ -189,6 +191,7 @@ export function ProjectPanel({
                         icon={note.thread.direction === 'vertical' ? <Columns2 /> : <Rows2 />}
                         name="Security thread"
                         selected={selected && layer === 'thread'}
+                        onBlock={picked}
                         onSelect={() => onSelect(note.id, 'thread')}
                         onRemove={() => onRemoveLayer(note.id, 'thread')}
                       />
@@ -199,6 +202,7 @@ export function ProjectPanel({
                         icon={FEATURE_ICONS[l]}
                         name={LAYER_NAMES[l]}
                         selected={selected && layer === l}
+                        onBlock={picked}
                         onSelect={() => onSelect(note.id, l)}
                         onRemove={() => onRemoveLayer(note.id, l)}
                       />
@@ -237,12 +241,15 @@ export function ProjectPanel({
 
 /**
  * One part of a banknote, under it in the list, a level in from the banknote's own row and smaller (Keller, 4
- * November): its icon lines up with the banknote's name, 13 px, its highlight starting just before the icon.
+ * November): its icon lines up with the banknote's name, 13 px, its highlight starting just before the icon, and its
+ * name as close to the icon as on the right panel's tabs (Keller).
  */
-function LayerRow({ icon, name, selected, onSelect, onRemove }: {
+function LayerRow({ icon, name, selected, onBlock = false, onSelect, onRemove }: {
   icon: ReactNode
   name: string
   selected: boolean
+  /** On its banknote's grey, the banknote itself being picked: its hover darkens that grey */
+  onBlock?: boolean
   onSelect: () => void
   onRemove?: () => void
 }) {
@@ -253,12 +260,12 @@ function LayerRow({ icon, name, selected, onSelect, onRemove }: {
         type="button"
         onClick={onSelect}
         className={cn(
-          'flex w-full items-center gap-2 rounded-lg py-1 pr-1.5 pl-2 text-left transition-colors',
+          'flex w-full items-center gap-1.5 rounded-lg py-1 pr-1.5 pl-2 text-left transition-colors',
           onRemove && 'group-hover/layer:pr-8',
-          selected ? 'bg-muted' : 'hover:bg-muted/50',
+          selected ? 'bg-muted' : onBlock ? 'hover:bg-foreground/5' : 'hover:bg-muted/50',
         )}
       >
-        <span className={cn('flex size-5 shrink-0 items-center justify-start [&_svg]:size-3.5', selected ? 'text-foreground' : 'text-muted-foreground')}>
+        <span className={cn('flex h-5 shrink-0 items-center [&_svg]:size-3.5', selected ? 'text-foreground' : 'text-muted-foreground')}>
           {icon}
         </span>
         <span className="min-w-0 flex-1 truncate text-[13px]">{name}</span>
