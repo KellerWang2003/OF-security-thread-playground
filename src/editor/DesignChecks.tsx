@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { create } from 'zustand'
 import { cn } from '@/lib/utils'
 import { Drawer, Labeled, LengthField, Section, SwitchField } from '../components/controls'
+import { designFace, type Side } from '../lib/back'
 import { CUT_MM, designChecks, driftWithin, failingChecks, setCutDrift, useCutDrift, useDesign, type DesignCheck } from '../lib/continuous'
 import { useReading } from '../lib/relief'
 import { updateNote } from '../lib/store'
@@ -63,18 +64,25 @@ const useChecksDrawer = create<{ open: boolean }>(() => ({ open: false }))
 /**
  * At the Banknote tab's foot, for an uploaded design, as Thread Studio's Checks: with the Continuous check on, whether
  * the design is at the banknote's size and its edges join; then whether the paper is light under the watermark and around
- * the thread. Warnings only, closed by default, the number of checks with something to look at beside its title.
+ * the thread. Warnings only, closed by default, the number of checks with something to look at beside its title. They
+ * check the design of the side the canvas shows, the back's once the banknotes are turned over.
  */
-export function ChecksDrawer({ note }: { note: Note }) {
+export function ChecksDrawer({ note, side = 'front' }: { note: Note; side?: Side }) {
   const open = useChecksDrawer((s) => s.open)
-  const design = useDesign(note)
+  const design = useDesign(designFace(note, side))
   const reading = useReading(note.watermark)
   const unit = useLengthUnit((s) => s.unit)
-  const checks = design ? designChecks(note, design, reading, unit) : []
+  const checks = design ? designChecks(note, design, reading, unit, side) : []
   const failing = failingChecks(checks)
   return (
     <Drawer title="Checks" open={open} onOpenChange={(next) => useChecksDrawer.setState({ open: next })}
-      action={failing > 0 ? <span className="text-xs text-amber-600 tabular-nums dark:text-amber-500">{failing}</span> : undefined}>
+      // Marked as the back's, as the Preview drawer marks a mixed print
+      action={side === 'back' || failing > 0 ? (
+        <span className="flex items-center gap-2">
+          {side === 'back' && <span className="text-[11px] text-muted-foreground" title="The banknotes are turned over: these check the back's design">Back</span>}
+          {failing > 0 && <span className="text-xs text-amber-600 tabular-nums dark:text-amber-500">{failing}</span>}
+        </span>
+      ) : undefined}>
       <CheckList checks={checks} />
     </Drawer>
   )

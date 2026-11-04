@@ -1,3 +1,4 @@
+import { backOf, mirrored, sideImageId } from './back'
 import { SHADE_DEG } from './frames'
 import { lensMix, type Tilt2 } from './lens'
 import { watermarkOpacity, watermarkReveal } from './light'
@@ -122,17 +123,19 @@ export function framePx(note: Note, frame: Frame, scale: number) {
 /**
  * A banknote's images, ready to draw at the full resolution they were uploaded at (Keller): the originals, never display
  * copies, and the watermark and magnetic ink read from the whole image, an SVG's at least as big as `scale` (px per mm)
- * draws it
+ * draws it. For its back (`back`), only what shows there: the back's design and the watermark.
  */
-export async function loadNoteAssets(note: Note, scale = 0): Promise<NoteAssets> {
+export async function loadNoteAssets(note: Note, scale = 0, back = false): Promise<NoteAssets> {
   const frames = new Map<string, HTMLImageElement>()
   const drawnPx = (box: { widthMm: number; heightMm: number }) => Math.max(box.widthMm, box.heightMm) * scale
-  const { watermark, magneticInk } = note
+  const { watermark } = note
+  const magneticInk = back ? undefined : note.magneticInk
+  const design = sideImageId(note, back ? 'back' : 'front')
   const [face, relief, ink] = await Promise.all([
-    note.background === 'image' && note.faceImageId ? loadArtwork(note.faceImageId) : undefined,
+    design ? loadArtwork(design) : undefined,
     watermark?.imageId ? exportRelief({ imageId: watermark.imageId, invert: watermark.invert, levels: watermark.levels }, drawnPx(watermark)) : undefined,
     magneticInk?.imageId ? exportInkMask(magneticInk.imageId, magneticInk.invert, drawnPx(magneticInk)) : undefined,
-    ...note.frames.map(async (frame) => {
+    ...(back ? [] : note.frames).map(async (frame) => {
       if (frame.kind !== 'image' || !frame.imageId) return
       const img = await loadArtwork(frame.imageId)
       if (img) frames.set(frame.id, img)
@@ -156,6 +159,8 @@ export interface FaceOptions {
   reveal?: number
   /** Where along the thread the pattern's repeat starts, mm, as the canvas previews it */
   offsetMm?: number
+  /** The banknote's back, as the canvas shows it turned over: its own background and the watermark, mirrored (its assets loaded for it) */
+  back?: boolean
 }
 
 /** The flat note at `scale` px per mm, as NoteView draws it before it is turned in 3D */
@@ -167,7 +172,7 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
   ctx.save()
   roundedRect(ctx, width, height, mm(1.5))
   ctx.clip()
-  ctx.fillStyle = note.color
+  ctx.fillStyle = options.back ? backOf(note).color : note.color
   ctx.fillRect(0, 0, width, height)
 
   const face = assets.face
@@ -184,10 +189,26 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     ctx.globalAlpha = watermarkOpacity(watermark.depth, options.reveal ?? watermarkReveal(0, { x: angleX, y: angle }))
     // Scaled down as smoothly as the canvas draws it, so fine detail doesn't turn to grain
     ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(assets.relief.canvas, mm(watermark.xMm), mm(watermark.yMm), mm(watermark.widthMm), mm(watermark.heightMm))
+    if (options.back) {
+      // Seen from the back it lies the other way round, at the other side
+      const box = mirrored(watermark, note)
+      ctx.save()
+      ctx.translate(mm(box.xMm + box.widthMm), mm(box.yMm))
+      ctx.scale(-1, 1)
+      ctx.drawImage(assets.relief.canvas, 0, 0, mm(box.widthMm), mm(box.heightMm))
+      ctx.restore()
+    } else {
+      ctx.drawImage(assets.relief.canvas, mm(watermark.xMm), mm(watermark.yMm), mm(watermark.widthMm), mm(watermark.heightMm))
+    }
     ctx.imageSmoothingQuality = 'low'
     ctx.globalAlpha = 1
     ctx.globalCompositeOperation = 'source-over'
+  }
+  if (options.back) {
+    // Nothing else shows on the back: no magnetic ink, no thread
+    drawShade(ctx, width, height, { x: angleX, y: angle }, options.perspective)
+    ctx.restore()
+    return
   }
   if (magneticInk && assets.ink) drawInk(ctx, magneticInk, assets.ink, mm, { x: angleX, y: angle })
 
@@ -280,7 +301,15 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
   }
   ctx.restore()
 
-  if (options.perspective && t !== 0) {
+  drawShade(ctx, width, height, { x: angleX, y: angle }, options.perspective)
+  if (options.frameNumbers && frames.length > 0) drawFrameNumber(ctx, shownLabel(mixes.map((mix) => mix.current)), strip, mm)
+  ctx.restore()
+}
+
+/** The light and shade a note catches as it turns, over all of it, as NoteView's shade parts (only in perspective) */
+function drawShade(ctx: Ctx, width: number, height: number, tilt: Tilt2, perspective: boolean) {
+  const t = tilt.y / SHADE_DEG
+  if (perspective && t !== 0) {
     // The note catches a little light or shade as it turns away from flat
     const gradient = ctx.createLinearGradient(0, 0, 0, height)
     if (t < 0) {
@@ -293,8 +322,8 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, width, height)
   }
-  const tx = angleX / SHADE_DEG
-  if (options.perspective && tx !== 0) {
+  const tx = tilt.x / SHADE_DEG
+  if (perspective && tx !== 0) {
     // Turning sideways, as NoteView: the edge turning away darkens, the near edge catches the light
     const gradient = ctx.createLinearGradient(0, 0, width, 0)
     if (tx > 0) {
@@ -307,8 +336,6 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, width, height)
   }
-  if (options.frameNumbers && frames.length > 0) drawFrameNumber(ctx, shownLabel(mixes.map((mix) => mix.current)), strip, mm)
-  ctx.restore()
 }
 
 /**

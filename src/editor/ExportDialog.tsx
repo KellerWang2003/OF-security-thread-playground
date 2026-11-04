@@ -65,14 +65,16 @@ export function ExportDialog({ project, selectedId, open, onOpenChange }: {
   const sheen = useTilt((s) => s.sheen)
   const perspective = useTilt((s) => s.perspective)
   const frameNumbers = useTilt((s) => s.frameNumbers)
-  // The lamp switch left on holds the whole video up to the light, as # carries frame numbers into it
+  // The lamp switch left on holds the whole video up to the light, as # carries frame numbers into it, and banknotes
+  // turned over export their backs
   const backlit = useTilt((s) => s.backlit)
+  const back = useTilt((s) => s.flipped)
   const offsets = usePatternOffsets((s) => s.offsets)
 
   const notes = project.notes.filter((n) => chosen.has(n.id))
   const several = notes.length > 1
   const allChosen = notes.length === project.notes.length
-  const options = { format, notes, separate: several && separate, height, fps, loops: format === 'gif' ? 1 : loops, sheen, perspective, frameNumbers, backlit,
+  const options = { format, notes, separate: several && separate, height, fps, loops: format === 'gif' ? 1 : loops, sheen, perspective, frameNumbers, backlit, back,
     background: format === 'gif' && transparent ? undefined : background, offsets }
   const size = exportSize(notes, options)
   const busy = progress !== undefined
@@ -167,7 +169,7 @@ export function ExportDialog({ project, selectedId, open, onOpenChange }: {
             <Progress className="flex-1" value={Math.round(progress * 100)} />
           ) : (
             <span className="text-xs text-muted-foreground tabular-nums">
-              {notes.length > 0 && `${size.width} × ${size.height} · ${size.seconds.toFixed(1)} s${files > 1 ? ` · ${files} files` : ''}${backlit ? ' · held to the light' : ''}`}
+              {notes.length > 0 && `${size.width} × ${size.height} · ${size.seconds.toFixed(1)} s${files > 1 ? ` · ${files} files` : ''}${back ? ' · backs' : ''}${backlit ? ' · held to the light' : ''}`}
             </span>
           )}
           <div className="flex shrink-0 gap-2">

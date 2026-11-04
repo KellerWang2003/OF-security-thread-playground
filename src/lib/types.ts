@@ -246,6 +246,18 @@ export interface ThreadPattern {
   sections: ThreadSection[]
 }
 
+/**
+ * The banknote's back, shown when the banknotes are turned over (side to side, as a page turns): its own background, a
+ * solid colour or an uploaded design. The thread and magnetic ink don't show there; the watermark, being in the paper,
+ * shows through, mirrored (back.ts).
+ */
+export interface NoteBack {
+  background: 'solid' | 'image'
+  color: string
+  /** The back's uploaded design; kept while the background is solid, so it comes back when Image is picked again */
+  imageId?: string
+}
+
 /** One banknote in a project, with its own size, thread and frames */
 export interface Note {
   id: string
@@ -270,6 +282,8 @@ export interface Note {
   magneticInk?: MagneticInk
   /** The thread's sections; absent on banknotes from before patterns, which are one section with the banknote's lens */
   pattern?: ThreadPattern
+  /** The back; absent until it is set, when it is plain paper of the front's colour (`backOf`) */
+  back?: NoteBack
 }
 
 export interface Project {

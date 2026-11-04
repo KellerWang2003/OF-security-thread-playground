@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { IconButton, Panel } from '../components/controls'
 import { NoteView } from '../components/NoteView'
+import { designFace } from '../lib/back'
 import { driftWithin, useCutDrift } from '../lib/continuous'
 import { clamp } from '../lib/frames'
 import { lensState } from '../lib/lens'
@@ -18,7 +19,7 @@ import type { Note } from '../lib/types'
 import { lengthIn, useLengthUnit } from '../lib/units'
 import { isPlaced, type PlacedLayer } from '../lib/layers'
 import { type PlacedBox, moveBox } from '../lib/placed'
-import { setTilt, springToFlat, useTilt, useTiltLoop } from '../tilt/tilt'
+import { setTilt, showsBack, springToFlat, useTilt, useTiltLoop } from '../tilt/tilt'
 import { EdgeMarks, NeighbourRing } from './ContinuousView'
 import { addImageFrames, type NoteRef } from './frameActions'
 import { placeLayer, type Layer } from './layerActions'
@@ -53,8 +54,11 @@ type Gesture =
   /** `moved` once the drag passes a few px: a plain click leaves the tilt where it is, and picks the banknote */
   | { mode: 'tilt'; noteId: string; startX: number; startY: number; start: number; startSide: number; moved: boolean }
   | { mode: 'thread'; noteId: string; startX: number; startY: number; startPosition: number; alongMm: number }
-  /** A placed layer (the watermark, magnetic ink) moves only once the drag passes a few px, so a click just picks it */
-  | { mode: 'placed'; layer: PlacedLayer; noteId: string; startX: number; startY: number; original: PlacedBox; moved: boolean }
+  /**
+   * A placed layer (the watermark, magnetic ink) moves only once the drag passes a few px, so a click just picks it;
+   * pressed on the banknote's back (`mirror`), a drag to the right moves it towards the front's left
+   */
+  | { mode: 'placed'; layer: PlacedLayer; noteId: string; startX: number; startY: number; original: PlacedBox; moved: boolean; mirror: boolean }
 
 function fitView(notes: Note[], size: { width: number; height: number }): View {
   // A widened right panel takes more room
@@ -142,6 +146,8 @@ export function Canvas({
   const perspective = useTilt((s) => s.perspective)
   const sheen = useTilt((s) => s.sheen)
   const frameNumbers = useTilt((s) => s.frameNumbers)
+  // Turned over, the banknotes show their backs (from halfway round, as NoteView does)
+  const back = useTilt(showsBack)
 
   const selected = notes.find((n) => n.id === selectedId)
   const reference = selected ?? notes.at(0)
@@ -385,7 +391,7 @@ export function Canvas({
           // The watermark or magnetic ink moves around the banknote, as the thread moves across it. Picking it shows its
           // box, whose corners resize it.
           onSelectLayer(note.id, onPlaced)
-          gesture.current = { mode: 'placed', layer: onPlaced, noteId: note.id, startX: e.clientX, startY: e.clientY, original: placed, moved: false }
+          gesture.current = { mode: 'placed', layer: onPlaced, noteId: note.id, startX: e.clientX, startY: e.clientY, original: placed, moved: false, mirror: back }
         } else if (labelId) {
           onSelect(note.id)
           gesture.current = { mode: 'move', noteId: note.id, startX: e.clientX, startY: e.clientY, noteX: note.x, noteY: note.y }
@@ -427,7 +433,7 @@ export function Canvas({
           // From where the press found it, in 0.5 mm steps, kept on the banknote
           const note = notes.find((n) => n.id === g.noteId)
           const box = note?.[g.layer]
-          const next = note && moveBox(g.original, dx / scale, dy / scale, note)
+          const next = note && moveBox(g.original, (g.mirror ? -dx : dx) / scale, dy / scale, note)
           if (box && next && (next.xMm !== box.xMm || next.yMm !== box.yMm)) placeLayer({ projectId, noteId: g.noteId }, g.layer, next)
         } else if (g.mode === 'move') {
           const round = (mm: number) => Math.round(mm * 2) / 2
@@ -512,8 +518,10 @@ export function Canvas({
           const ref: NoteRef = { projectId, noteId: note.id }
           // The continuous check shows around an uploaded design while the banknote itself is picked, with the drift it
           // previews. Meanwhile the banknote has no outline, label or shadow, so nothing comes between it and its
-          // neighbours (Keller)
-          const check = picked === 'note' && note.background === 'image' && note.faceImageId ? note.continuous : undefined
+          // neighbours (Keller). It checks the side showing: turned over, the back's design, which the drift moves as it
+          // moves the front's
+          const face = designFace(note, back ? 'back' : 'front')
+          const check = picked === 'note' && face.background === 'image' && face.faceImageId ? note.continuous : undefined
           const drift = check ? driftWithin(drifts[note.id], check.cutMm) : undefined
           return (
             <div
@@ -521,7 +529,7 @@ export function Canvas({
               className="absolute"
               style={{ left: current.x + note.x * scale, top: current.y + note.y * scale }}
             >
-              {drift && <NeighbourRing note={note} scale={scale} drift={drift} quiet={quiet} />}
+              {drift && <NeighbourRing note={face} scale={scale} drift={drift} quiet={quiet} />}
               <div
                 data-note-label={note.id}
                 className={cn(
@@ -534,6 +542,8 @@ export function Canvas({
                 <span className="text-muted-foreground/70 tabular-nums">
                   {lengthIn(note.widthMm, unit)} × {lengthIn(note.heightMm, unit)} {unit}
                 </span>
+                {/* Which side shows, once turned over, as the back has no thread to tell it by */}
+                {back && <span data-side-label="" className="text-muted-foreground/70">Back</span>}
               </div>
               <div
                 data-note-body={note.id}
@@ -554,14 +564,14 @@ export function Canvas({
                   selected={picked === 'note' || editingThis || placingThis || quiet ? undefined : picked} hovered={hovered === 'note' ? undefined : hovered}
                   faceShiftMm={drift && (drift.x || drift.y) ? drift : undefined} />
                 {placingThis && (
-                  <PlacingBox note={note} layer={placingThis} box={note[placingThis]!} scale={scale} onChange={(next) => placeLayer(ref, placingThis, next)} />
+                  <PlacingBox note={note} layer={placingThis} box={note[placingThis]!} scale={scale} mirror={back} onChange={(next) => placeLayer(ref, placingThis, next)} />
                 )}
                 {isSelected && editingWindows && note.thread.windows.enabled && (
                   <WindowEditor note={note} scale={scale} selectedId={selectedWindowId} onSelect={onWindowSelect}
                     onChange={(sections) => updateNote(projectId, note.id, (n) => ({ ...n, thread: { ...n.thread, windows: { ...n.thread.windows, sections } } }))} />
                 )}
               </div>
-              {drift && <EdgeMarks note={note} scale={scale} drift={drift} quiet={quiet} />}
+              {drift && <EdgeMarks note={face} scale={scale} drift={drift} quiet={quiet} />}
             </div>
           )
         })}

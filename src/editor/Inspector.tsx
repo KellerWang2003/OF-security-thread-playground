@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Drawer, Group, IconButton, Labeled, LengthField, Panel, PartTab, Section, Segmented, SwitchField, TabStrip } from '../components/controls'
+import { sideImageId, type Side } from '../lib/back'
 import { clamp } from '../lib/frames'
 import { LAYER_NAMES, fitLayers, isPlaced, moveLayersTo, type PlacedLayer } from '../lib/layers'
 import { NOTE_SIZE } from '../lib/notes'
@@ -12,6 +13,7 @@ import { windowReports } from '../lib/patternRules'
 import { updateNote } from '../lib/store'
 import { fitSections } from '../lib/thread'
 import type { Note } from '../lib/types'
+import { showsBack, useTilt } from '../tilt/tilt'
 import { ChecksDrawer, ContinuousSection } from './DesignChecks'
 import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
 import { BackgroundFillRow } from './FillPicker'
@@ -86,8 +88,10 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
       return moveLayersTo({ ...n, ...flipped, thread: { ...n.thread, positionMm, windows: { ...n.thread.windows, sections: fitSections(n.thread.windows.sections, n.thread.direction === 'vertical' ? flipped.heightMm : flipped.widthMm) } } }, n)
     })
   const portrait = note.heightMm >= note.widthMm
-  // An uploaded design can be checked: whether it joins up at its edges, and is light where the brief asks
-  const hasDesign = note.background === 'image' && note.faceImageId !== undefined
+  // An uploaded design can be checked: whether it joins up at its edges, and is light where the brief asks. The checks
+  // are for the side the canvas shows, the back's once the banknotes are turned over
+  const side: Side = useTilt(showsBack) ? 'back' : 'front'
+  const hasDesign = sideImageId(note, side) !== undefined
 
   return (
     <>
@@ -136,10 +140,16 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
       </Section>
 
       <Section nested>
-        {/* Chosen as a frame's fill is, in a panel of its own (Keller: the same everywhere) */}
-        <Labeled label="Background">
-          <BackgroundFillRow note={note} noteRef={noteRef} />
-        </Labeled>
+        {/* Each side's background, chosen as a frame's fill is, in a panel of its own (Keller: the same everywhere);
+            opening one turns the banknotes to that side */}
+        <div className="grid grid-cols-2 gap-2">
+          <Labeled label="Front">
+            <BackgroundFillRow note={note} noteRef={noteRef} side="front" />
+          </Labeled>
+          <Labeled label="Back">
+            <BackgroundFillRow note={note} noteRef={noteRef} side="back" />
+          </Labeled>
+        </div>
       </Section>
       {hasDesign && <ContinuousSection note={note} noteRef={noteRef} />}
       </Group>
@@ -199,7 +209,7 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
         </TabsContent>
       )}
       {layer === 'thread' && <PreviewDrawer note={note} />}
-      {layer === 'note' && hasDesign && <ChecksDrawer note={note} />}
+      {layer === 'note' && hasDesign && <ChecksDrawer note={note} side={side} />}
       </Tabs>
     </Panel>
     </>

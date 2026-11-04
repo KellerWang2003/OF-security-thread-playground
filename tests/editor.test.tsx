@@ -374,7 +374,7 @@ describe('username workspace editor', () => {
     const note = () => useProjects.getState().demoPreview!.notes[0]
 
     // The banknote's background is chosen as a frame's fill is (Keller: the same everywhere), and Image starts empty
-    const background = () => screen.getByRole('button', { name: /^Background: / })
+    const background = () => screen.getByRole('button', { name: /^Front: / })
     await user.click(background())
     await user.click(await screen.findByRole('button', { name: 'Image', exact: true }))
     expect(note().background).toBe('image')
@@ -910,6 +910,89 @@ describe('username workspace editor', () => {
     // The lamp on the pad switches it off again
     await user.click(screen.getByRole('button', { name: 'Hold up to the light' }))
     expect(useTilt.getState().backlit).toBe(false)
+    expect(saves).not.toHaveBeenCalled()
+  })
+
+  it('turns every banknote over to its back, where only the watermark shows, the other way round, and sets the back as the front is set', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      callback: ResizeObserverCallback
+      constructor(callback: ResizeObserverCallback) { this.callback = callback }
+      observe() { this.callback([{ contentRect: { width: 1280, height: 720 } } as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      unobserve() {} disconnect() {}
+    })
+    for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, value: vi.fn(() => true) })
+    }
+    setTilt({ flipped: false, turn: 0 })
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'back-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    const demo = useProjects.getState().demoPreview!
+    const note = () => useProjects.getState().demoPreview!.notes[0]
+    act(() => updateNote(demo.id, demo.notes[0].id, (n) => ({ ...n, watermark: { ...newWatermark(n), imageId: 'fixture-watermark' } })))
+    const shown = (selector: string) => document.querySelector(`[data-note-body] ${selector}`)
+    // Turning over takes a moment, the loop easing it round; here it is done at once
+    const finishTurn = () => act(() => setTilt({ turn: useTilt.getState().flipped ? 1 : 0 }))
+    const flip = () => screen.getByRole('button', { name: 'Show the back' })
+
+    // Each side's background is its own row; until set, the back is the front's paper
+    expect(screen.getByRole('button', { name: 'Front: #123456' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Back: #123456' })).toBeDefined()
+
+    // F turns every banknote over, as the button under the lamp shows: the back has no thread, the watermark mirrored
+    fireEvent.keyDown(window, { key: 'f' })
+    expect(useTilt.getState().flipped).toBe(true)
+    expect(flip().getAttribute('aria-pressed')).toBe('true')
+    finishTurn()
+    expect(shown('[data-back]')).not.toBeNull()
+    expect(shown('[data-thread]')).toBeNull()
+    expect(document.querySelector('[data-side-label]')?.textContent).toBe('Back')
+    expect((shown('[data-watermark]') as HTMLElement).style.transform).toBe('scaleX(-1)')
+
+    // On the back a drag to the right moves the watermark right there, so towards the front's left; its box does the same
+    const start = note().watermark!
+    fireEvent.pointerDown(shown('[data-watermark]')!, { button: 0, buttons: 1, pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(shown('[data-watermark]')!, { buttons: 1, pointerId: 1, clientX: 140, clientY: 100 })
+    fireEvent.pointerUp(shown('[data-watermark]')!, { button: 0, pointerId: 1, clientX: 140, clientY: 100 })
+    const moved = note().watermark!
+    expect(moved.xMm).toBeLessThan(start.xMm)
+    expect(tab()).toBe('Watermark')
+    const placing = screen.getByRole('group', { name: 'Place watermark' })
+    fireEvent.keyDown(placing, { key: 'ArrowRight' })
+    expect(note().watermark!.xMm).toBe(moved.xMm - 0.5)
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    // Picking the thread turns them back round to the front, where it is
+    await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
+    expect(useTilt.getState().flipped).toBe(false)
+    finishTurn()
+    expect(shown('[data-thread]')).not.toBeNull()
+    expect(document.querySelector('[data-side-label]')).toBeNull()
+    // Turned over again, the thread can't stay picked: the banknote itself is
+    await user.click(flip())
+    expect(useTilt.getState().flipped).toBe(true)
+    expect(tab()).toBe('Banknote')
+    finishTurn()
+
+    // Opening the front's background turns the banknotes to the front, and the back's to the back
+    await user.click(screen.getByRole('button', { name: /^Front: / }))
+    expect(useTilt.getState().flipped).toBe(false)
+    await user.click(screen.getByRole('button', { name: /^Front: / }))
+    await user.click(screen.getByRole('button', { name: /^Back: / }))
+    expect(useTilt.getState().flipped).toBe(true)
+    await user.click(await screen.findByRole('button', { name: 'Image', exact: true }))
+    expect(note().back).toEqual({ background: 'image', color: '#123456' })
+    expect(screen.getByRole('button', { name: 'Upload design' })).toBeDefined()
+    await user.click(screen.getByRole('button', { name: 'Colour', exact: true }))
+    expect(note().back).toEqual({ background: 'solid', color: '#123456' })
+    await user.click(screen.getByRole('button', { name: /^Back: / }))
+    finishTurn()
+
+    // An export of the banknotes turned over is of their backs
+    await user.click(screen.getByRole('button', { name: 'Export', exact: true }))
+    expect(await screen.findByText(/· backs/)).toBeDefined()
     expect(saves).not.toHaveBeenCalled()
   })
 

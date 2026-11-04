@@ -1,4 +1,4 @@
-import { Lamp, Lock, LockOpen, RotateCcw } from 'lucide-react'
+import { FlipHorizontal2, Lamp, Lock, LockOpen, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -9,7 +9,7 @@ import { padToTilt, tiltToPad } from '../lib/pad'
 import type { LensState } from '../lib/lens'
 import { moveFromRecording, nextRecordingName, planLitPaths, planPath, playbackPlan, recordingFromSamples } from '../lib/moves'
 import type { RecordedPoint, TiltSettings } from '../lib/types'
-import { setRecording, setTilt, useTilt } from '../tilt/tilt'
+import { setRecording, setTilt, turnOver, useTilt } from '../tilt/tilt'
 import { saveTilt } from './playbackActions'
 
 /** Width and height of the pad, in px */
@@ -37,12 +37,15 @@ function holdAt(next: { x?: number; y?: number }, limit: number, respectLocks = 
 /**
  * Left edge of the canvas: a pad you press and drag in any direction to tilt every banknote (up/down
  * vertically, side to side horizontally), held where you let go. Each axis has a field for an exact angle
- * and a lock that keeps the pad and canvas drag off it. The lamp in its corner holds every banknote up to the light.
+ * and a lock that keeps the pad and canvas drag off it. The lamp in its corner holds every banknote up to the light,
+ * and on the canvas the button in the corner below it turns every banknote over to its back.
  */
-export function TiltRail({ limit = TILT_LIMIT, playback }: {
+export function TiltRail({ limit = TILT_LIMIT, playback, flip = false }: {
   limit?: number
   /** The project's playback, drawn on the pad and added to by recording; absent in tests of the pad alone */
   playback?: { projectId: string; tilt: TiltSettings; lens: LensState }
+  /** Offers turning the banknotes over; not in Thread Studio, as the thread is only on the front */
+  flip?: boolean
 }) {
   const recording = useTilt((s) => s.recording)
   return (
@@ -50,6 +53,7 @@ export function TiltRail({ limit = TILT_LIMIT, playback }: {
       <Pad
         limit={limit}
         playback={playback}
+        flip={flip}
         recording={recording}
         onRecorded={(samples) => {
           setRecording(false)
@@ -115,9 +119,10 @@ function AxisField({ axis, limit }: { axis: Axis; limit: number }) {
 }
 
 /** The square maps ±limit on each axis: the centre is flat, the top edge full up tilt, the right edge full right */
-function Pad({ limit, playback, recording, onRecorded }: {
+function Pad({ limit, playback, flip, recording, onRecorded }: {
   limit: number
   playback?: { tilt: TiltSettings; lens: LensState }
+  flip: boolean
   recording: boolean
   onRecorded: (samples: RecordedPoint[]) => void
 }) {
@@ -147,6 +152,7 @@ function Pad({ limit, playback, recording, onRecorded }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playback, limit])
   const backlit = useTilt((s) => s.backlit)
+  const flipped = useTilt((s) => s.flipped)
 
   // While recording a drag, sample the held tilt and the light every animation frame, so pauses are kept too
   const samples = useRef<RecordedPoint[] | null>(null)
@@ -262,6 +268,29 @@ function Pad({ limit, playback, recording, onRecorded }: {
         </TooltipTrigger>
         <TooltipContent>{backlit ? 'Back to reflected light (tap L, or hold to peek)' : 'Hold up to the light (tap L, or hold to peek)'}</TooltipContent>
       </Tooltip>
+      {flip && (
+        // Below the lamp, built as it is: every banknote turned over, side to side, until pressed again
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                aria-label="Show the back"
+                variant="outline"
+                size="sm"
+                pressed={flipped}
+                onPressedChange={(on) => turnOver(on)}
+                // A press here is not a drag on the pad
+                onPointerDown={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
+                className="absolute bottom-1 left-1 size-6 min-w-6 rounded-[min(var(--radius-md),10px)] bg-background/95 p-0 aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+              />
+            }
+          >
+            <FlipHorizontal2 className="size-3" />
+          </TooltipTrigger>
+          <TooltipContent>{flipped ? 'Back to the front (F)' : 'Turn over to the back (F)'}</TooltipContent>
+        </Tooltip>
+      )}
       {offFlat && (
         <IconButton
           label="Back to flat"

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { drawInk, exportLayout, exportSize, framePx, loadNoteAssets, perspectiveFor, playbackAngles, projectRow, sourceRow, tiltedBounds } from '../src/lib/exportRender'
+import { drawFace, drawInk, exportLayout, exportSize, framePx, loadNoteAssets, perspectiveFor, playbackAngles, projectRow, sourceRow, tiltedBounds } from '../src/lib/exportRender'
+import type { InkMask } from '../src/lib/inkMask'
+import type { Relief } from '../src/lib/relief'
 import { DEFAULT_INK, INK_BAR_LIGHT, INK_ROLL_DEG, barCentre, inkShift } from '../src/lib/magneticInk'
 import { createNote } from '../src/lib/notes'
 import { SWEEP_SECONDS } from '../src/lib/playback'
@@ -169,5 +171,49 @@ describe('magnetic ink in an export', () => {
     // Only where the shape takes ink, then onto the banknote at its box
     expect(calls.slice(-2)).toEqual([['composite', 'destination-in'], ['draw', 'mask', 0, 0, 60, 40]])
     expect(face.drawImage).toHaveBeenCalledWith(expect.anything(), 20, 10, 60, 40)
+  })
+})
+
+describe('the back in an export', () => {
+  it('draws the back’s paper and the watermark the other way round at the other side, and nothing of the thread or magnetic ink', () => {
+    const calls: unknown[][] = []
+    const ctx = new Proxy({} as Record<string, unknown>, {
+      get(target, key) {
+        if (key in target) return target[key as string]
+        if (key === 'createLinearGradient') return () => ({ addColorStop() {} })
+        return (...args: unknown[]) => calls.push([key, ...args])
+      },
+      set(target, key, value) {
+        calls.push(['=', key, value])
+        target[key as string] = value
+        return true
+      },
+    }) as unknown as CanvasRenderingContext2D
+    const note = {
+      ...makeNote(150, 75),
+      back: { background: 'solid' as const, color: '#F0EAD6' },
+      watermark: { imageId: 'w', xMm: 10, yMm: 10, widthMm: 30, heightMm: 30, depth: 0.6 },
+      magneticInk: { imageId: 'i', xMm: 100, yMm: 10, widthMm: 20, heightMm: 20, ...DEFAULT_INK },
+    }
+    const light = 'light' as unknown as HTMLCanvasElement
+    drawFace(ctx, note, { frames: new Map(), relief: { canvas: light } as Relief, ink: { canvas: 'mask' } as unknown as InkMask }, 2, 20, { sheen: true, perspective: true, back: true })
+    expect(calls).toContainEqual(['=', 'fillStyle', '#F0EAD6'])
+    // 150 − 10 − 30 = 110 mm: drawn from its right edge, at 140 mm, flipped
+    expect(calls).toContainEqual(['translate', 280, 20])
+    expect(calls).toContainEqual(['scale', -1, 1])
+    expect(calls.filter((c) => c[0] === 'drawImage')).toEqual([['drawImage', light, 0, 0, 60, 60]])
+    // The paper, then only the light and shade of the tilt: no thread, no sheen
+    expect(calls.filter((c) => c[0] === 'fillRect')).toEqual([['fillRect', 0, 0, 300, 150], ['fillRect', 0, 0, 300, 150]])
+    expect(calls).not.toContainEqual(['=', 'globalCompositeOperation', 'soft-light'])
+  })
+
+  it('loads only what the back shows: its design and the watermark', async () => {
+    const plain = makeNote(150, 75)
+    const frame = { ...plain.frames[0], kind: 'image' as const, imageId: 'art', aspect: 2 }
+    const note = { ...plain, background: 'image' as const, faceImageId: 'design', back: { background: 'image' as const, color: '#ffffff', imageId: 'back' },
+      frames: [frame, ...plain.frames.slice(1)] }
+    loadImageUrl.mockClear()
+    await loadNoteAssets(note, 10, true)
+    expect(loadImageUrl.mock.calls.map(([id]) => id)).toEqual(['back'])
   })
 })

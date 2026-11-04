@@ -92,6 +92,9 @@ describe('light paper', () => {
     expect(weight(15, 25)).toBeCloseTo(128 / 255)
     expect(watermarkWeight(watermark, undefined)).toBeUndefined()
     expect(watermarkWeight({ ...watermark, imageId: undefined }, reading)).toBeUndefined()
+    // Seen from the back of a 150 mm banknote it lies at 120 to 140 mm, the other way round
+    const back = watermarkWeight({ ...watermark, xMm: 120 }, reading, true)!
+    expect([back(125, 15), back(135, 15)]).toEqual([1, 0])
   })
 
   it('around the thread is where it shows: each window, or its whole length', () => {
@@ -138,6 +141,14 @@ describe('the checks', () => {
     const checks = designChecks({ ...note, watermark }, print, undefined, 'mm')
     expect(lines(checks)).toEqual({ watermark: ['50% of it is over darker print'], thread: ['25% of it is darker print'] })
     expect(checks.find((c) => c.id === 'thread')?.issues[0].title).toBe('That print is L* 17 on average; light is 80 or more')
+  })
+
+  it('check the back where the watermark shows through it, at the other side, and not round the thread, which is only on the front', () => {
+    const watermark = { xMm: 10, yMm: 10, widthMm: 20, heightMm: 20, depth: 1 }
+    // Seen from the back the watermark lies at 120 to 140 mm: darker print over its right half, and where the thread runs on the front
+    const print = design(150, 75, (x) => ((x >= 1040 && x < 1120) || (x >= 568 && x < 576) ? NAVY : PAPER))
+    expect(lines(designChecks({ ...note, watermark }, print, undefined, 'mm', 'back'))).toEqual({ watermark: ['50% of it is over darker print'] })
+    expect(lines(designChecks({ ...note, watermark }, print, undefined, 'mm'))).toEqual({ watermark: [], thread: ['25% of it is darker print'] })
   })
 })
 

@@ -7,6 +7,7 @@ import { reportError } from '../cloud/notices'
 import { THUMB_PX, pickFiles, useImageUrl } from '../lib/images'
 import { PLACE_MIN_MM, PLACE_STEP, type PlacedBox, boxRange, maxBoxWidth, resizeBox } from '../lib/placed'
 import type { Note } from '../lib/types'
+import { showsBack, useTilt } from '../tilt/tilt'
 
 /**
  * A placed layer's one image (the watermark's, magnetic ink's): Upload image, or Replace beside its thumbnail, and
@@ -55,7 +56,8 @@ export function LayerImage({ imageId, grayscale = false, onUpload, onRemove }: {
 
 /**
  * Where a placed layer sits: X and Y of its top-left corner and W, its height following its image (placed.ts). Typed
- * values are kept exactly, in any unit. `children` take the grid's fourth cell.
+ * values are kept exactly, in any unit. `children` take the grid's fourth cell. With the banknotes turned over, the same
+ * X is from the right edge, which is the front's left seen from the back (only the watermark shows there).
  */
 export function PlaceFields<T extends PlacedBox>({ note, box, name, onChange, children }: {
   note: Note
@@ -67,10 +69,11 @@ export function PlaceFields<T extends PlacedBox>({ note, box, name, onChange, ch
 }) {
   // It may hang off the edges, as long as a quarter of it stays on the banknote
   const range = boxRange(box, note)
+  const edge = useTilt(showsBack) ? 'right' : 'left'
   return (
     <div className="grid grid-cols-2 gap-2">
-      <Labeled label="From left">
-        <LengthField label="X" title={`${name} position from the left edge`} value={box.xMm} min={range.x[0]} max={range.x[1]}
+      <Labeled label={`From ${edge}`}>
+        <LengthField label="X" title={`${name} position from the ${edge} edge`} value={box.xMm} min={range.x[0]} max={range.x[1]}
           step={PLACE_STEP} onChange={(xMm) => onChange((b) => ({ ...b, xMm }))} />
       </Labeled>
       <Labeled label="From top">

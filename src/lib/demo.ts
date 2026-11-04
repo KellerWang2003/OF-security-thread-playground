@@ -7,13 +7,15 @@ import type { Frame, Note, PlaybackMove, Project, TiltSettings } from './types'
 /**
  * The demo the project list's Demo button opens. It is built here, its artwork drawn in code (demoArt.ts), so it
  * ships with the app and changes only with it. Banknote 1 shows the watermark beside the flapping bird; Banknote 2,
- * Partial reveal: a spinning star whose two outer frames only the up/down tilt shows. Mixed angles stays out of it
- * until it is known to be printable (Keller). Its playlist plays both.
+ * Partial reveal: a spinning star whose two outer frames only the up/down tilt shows. Both have backs to turn over to,
+ * Banknote 1's showing the watermark through it. Mixed angles stays out of it until it is known to be printable
+ * (Keller). Its playlist plays both.
  */
 
 /** The artwork's ids, fixed so opening the demo again reuses what it stored instead of adding more */
 export const DEMO_ART = {
   faces: ['306d5138-8f56-4236-9aef-20144ed61c67', '01c3aa06-ab18-4dcf-a69d-3131dfd819ab'],
+  backs: ['68449dde-ad8b-47fc-bf88-6a192280119d', 'dd109ac2-83a6-4b61-abd1-5f1828a3181e'],
   portrait: '0be755d9-bf5f-4c7d-92e2-0623a5a1a98e',
   birds: [
     '12b63eb3-8495-48be-b5b5-a58f132113a3',
@@ -57,6 +59,8 @@ export function demoProject(): Project {
     // On Fit: the bird is 6 mm long on a 4 mm thread, so they fly back to back
     pattern: { ...defaultPattern(6), fit: true },
     watermark: { imageId: DEMO_ART.portrait, xMm: 10, yMm: 18.5, widthMm: 30, heightMm: 37.5, depth: 0.8 },
+    // Turned over, the bird shows the other way round in the back's own plain oval, on the right
+    back: { background: 'image', color: first.color, imageId: DEMO_ART.backs[0] },
   }
 
   // Banknote 2: Partial reveal, as Keller set it out: up/down plays all five frames, side to side only the middle
@@ -74,6 +78,7 @@ export function demoProject(): Project {
     tilt: { ...tilt, effect: 'reveal', revealAxis: 'y' },
     // On Fit, as the stars' frames are 16 mm long on the 6 mm thread
     pattern: { ...defaultPattern(16), fit: true },
+    back: { background: 'image', color: second.color, imageId: DEMO_ART.backs[1] },
   }
 
   return { ...createProject('Silly bird demo'), notes: [watermark, stars] }
@@ -91,6 +96,8 @@ export async function createDemoProject(): Promise<Project> {
   await Promise.all([
     storeImageAs(DEMO_ART.faces[0], art.faces[0]),
     storeImageAs(DEMO_ART.faces[1], art.faces[1]),
+    storeImageAs(DEMO_ART.backs[0], art.backs[0]),
+    storeImageAs(DEMO_ART.backs[1], art.backs[1]),
     storeImageAs(DEMO_ART.portrait, art.portrait),
     ...DEMO_ART.birds.map((id, i) => storeImageAs(id, art.birds[i])),
     ...DEMO_ART.stars.map((id, i) => storeImageAs(id, art.stars[i])),

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
+import { backOf, mirrored, type Side } from '../lib/back'
 import { SHADE_DEG, TILT_LIMIT } from '../lib/frames'
 import { lensMix } from '../lib/lens'
 import { watermarkOpacity, watermarkReveal } from '../lib/light'
@@ -12,7 +13,7 @@ import { paintRelief, reliefPixels, useRelief } from '../lib/relief'
 import { useInkMask } from '../lib/inkMask'
 import { INK_BAR_LIGHT, barShift, inkRoll, inkShift } from '../lib/magneticInk'
 import type { PlacedLayer } from '../lib/layers'
-import { framesTiltOf, useTilt } from '../tilt/tilt'
+import { framesTiltOf, showsBack, turnDeg, useTilt } from '../tilt/tilt'
 import { DesignTiles } from './DesignTiles'
 
 // Height ÷ width of each image, once loaded
@@ -111,11 +112,11 @@ type InkBar = Pick<MagneticInk, 'barAxis' | 'barWidth'>
 /**
  * Everything about a tilt that changes continuously: the 3D turn, the light and shade overlays' opacity,
  * where the sheen sits, the fade between two frames, how clearly the watermark shows (its `depth` at `reveal`), and
- * magnetic ink's Tilted colour and where its bar has rolled (`ink`). All of it is transform or opacity, which the GPU
- * animates without repainting. Live notes write these straight onto their elements every animation frame instead of
- * re-rendering React.
+ * magnetic ink's Tilted colour and where its bar has rolled (`ink`), and how far the note has turned over (`turn`, in
+ * degrees of its own side turn, `turnDeg`). All of it is transform or opacity, which the GPU animates without
+ * repainting. Live notes write these straight onto their elements every animation frame instead of re-rendering React.
  */
-function tiltStyle(angle: number, angleX: number, blend: number, depth: number, reveal: number, ink?: InkBar) {
+function tiltStyle(angle: number, angleX: number, blend: number, depth: number, reveal: number, ink?: InkBar, turn = 0) {
   const t = angle / SHADE_DEG
   const tx = angleX / SHADE_DEG
   const share = (v: number) => Math.min(Math.max(v, 0) / SHADE_MAX, 1)
@@ -132,7 +133,8 @@ function tiltStyle(angle: number, angleX: number, blend: number, depth: number, 
     'ink-shift': { opacity: inkShift(tilt) },
     'ink-bar': { transform: ink?.barAxis === 'x' ? `translateX(${roll}%)` : `translateY(${roll}%)` },
   }
-  return { rotate: angleX ? `rotateX(${angle}deg) rotateY(${angleX}deg)` : `rotateX(${angle}deg)`, parts }
+  const side = angleX + turn
+  return { rotate: side ? `rotateX(${angle}deg) rotateY(${side}deg)` : `rotateX(${angle}deg)`, parts }
 }
 
 const CLEAR_WHITE = 'rgba(255,255,255,0)'
@@ -213,8 +215,11 @@ export function ThreadArt({ note, shown, blends, fill }: {
 const SIDE_LIGHT = `rgba(255,255,255,${0.12 * SHADE_MAX})`
 const SIDE_DARK = `rgba(0,0,0,${0.08 * SHADE_MAX})`
 
-/** The tilt and light a live note follows, and the tilt its frames are shown at while the timeline has been scrubbed */
-type LiveState = { angle: number; angleX: number; light: number; frameTilts: Record<string, { x: number; y: number }> }
+/**
+ * The tilt, light and turn a live note follows, and the tilt its frames are shown at while the timeline has been
+ * scrubbed
+ */
+type LiveState = { angle: number; angleX: number; light: number; turn: number; frameTilts: Record<string, { x: number; y: number }> }
 
 /**
  * The note with its thread, drawn at `scale` px per mm. The frame shown comes from the tilt (up/down `angle`,
@@ -222,7 +227,8 @@ type LiveState = { angle: number; angleX: number; light: number; frameTilts: Rec
  * the note also turns in 3D, and `sheen` adds a highlight that travels along the thread. Its watermark, in the
  * note's own colours under the thread, is only a hint flat, comes out clearly as the note tilts, and shows flat
  * held to the light. Its magnetic ink, over the watermark and under the thread, shifts colour as the note turns away
- * and rolls its bright bar on one tilt.
+ * and rolls its bright bar on one tilt. Its back (`side`, or for a live note the shared turn) shows the back's own
+ * background and the watermark through it, mirrored, and nothing else: no thread, no magnetic ink.
  */
 export function NoteView({
   note,
@@ -239,6 +245,7 @@ export function NoteView({
   selected,
   hovered,
   faceShiftMm,
+  side = 'front',
 }: {
   note: Note
   scale: number
@@ -267,11 +274,19 @@ export function NoteView({
    * way and its neighbours' copies come in at the edges. Never exported
    */
   faceShiftMm?: { x: number; y: number }
+  /** The face a still note shows; a live one shows whichever the shared turn has come round to, turning over in 3D with `perspective` */
+  side?: Side
 }) {
   const { thread, frames, watermark, magneticInk } = note
   const root = useRef<HTMLDivElement>(null)
   const mm = (value: number) => value * scale
-  const face = useImageUrl(note.background === 'image' ? note.faceImageId : undefined, designPx(note, scale))
+  // Live notes re-render once as they come edge-on, where the face changes
+  const liveBack = useTilt((s) => live && showsBack(s))
+  const back = live ? liveBack : side === 'back'
+  const shownBack = back ? backOf(note) : undefined
+  const design = shownBack ? (shownBack.background === 'image' ? shownBack.imageId : undefined) : note.background === 'image' ? note.faceImageId : undefined
+  const paper = shownBack?.color ?? note.color
+  const face = useImageUrl(design, designPx(note, scale))
   // Live notes re-render only when this changes, not on every animation frame
   const liveShown = useTilt((s) => (live ? shownKey(note, framesTiltOf(s, note.id).y, framesTiltOf(s, note.id).x) : ''))
   const shown = parseShown(live ? liveShown : shownKey(note, angle, angleX))
@@ -302,7 +317,7 @@ export function NoteView({
       // The frames follow the timeline once it is scrubbed; the turn, shade and watermark follow the banknote's tilt
       const frameTilt = framesTiltOf(state, note.id)
       const blends = blendsAt(note, frameTilt.y, frameTilt.x)
-      const style = tiltStyle(angle, angleX, blends[0] ?? 0, depth, revealOf(state), inkBar)
+      const style = tiltStyle(angle, angleX, blends[0] ?? 0, depth, revealOf(state), inkBar, turnDeg(state.turn))
       element.style.transform = perspective ? style.rotate : ''
       for (const part of element.querySelectorAll<HTMLElement>('[data-tilt]')) {
         const section = part.dataset.section
@@ -314,7 +329,8 @@ export function NoteView({
   useLayoutEffect(() => {
     if (!live) return
     return useTilt.subscribe((state, previous) => {
-      if (state.angle !== previous.angle || state.angleX !== previous.angleX || state.light !== previous.light || state.frameTilts[note.id] !== previous.frameTilts[note.id]) apply.current(state)
+      if (state.angle !== previous.angle || state.angleX !== previous.angleX || state.light !== previous.light || state.turn !== previous.turn
+        || state.frameTilts[note.id] !== previous.frameTilts[note.id]) apply.current(state)
     })
   }, [live, note.id])
 
@@ -329,45 +345,49 @@ export function NoteView({
   const windowMask = threadWindowMask(thread, scale)
   // Static notes (thumbnails, tests) are drawn from props; live ones leave these to apply()
   const blends = live ? undefined : blendsAt(note, angle, angleX)
-  const still = blends && tiltStyle(angle, angleX, blends[0] ?? 0, depth, revealOf({ angle, angleX, light: 0, frameTilts: {} }), inkBar)
+  const still = blends && tiltStyle(angle, angleX, blends[0] ?? 0, depth, revealOf({ angle, angleX, light: 0, turn: 0, frameTilts: {} }), inkBar)
   const part = (name: TiltPart, style: CSSProperties = {}) => ({ 'data-tilt': name, style: { ...style, ...still?.parts[name] } })
   const placed = (box: { xMm: number; yMm: number; widthMm: number; heightMm: number }): CSSProperties =>
     ({ left: mm(box.xMm), top: mm(box.yMm), width: mm(box.widthMm), height: mm(box.heightMm) })
-  const watermarkBox = watermark && placed(watermark)
+  // Seen from the back, the watermark lies the other way round, at the other side
+  const watermarkBox = watermark && placed(back ? mirrored(watermark, note) : watermark)
   const inkBox = magneticInk && placed(magneticInk)
+  // The back has only the watermark to outline
   const boxOf = (target: 'thread' | PlacedLayer | undefined) =>
-    target === 'thread' ? strip : target === 'watermark' ? watermarkBox : target === 'magneticInk' ? inkBox : undefined
+    target === 'watermark' ? watermarkBox : back ? undefined : target === 'thread' ? strip : target === 'magneticInk' ? inkBox : undefined
   const inkShape = inkMask && `url(${inkMask.url})`
   const art = <ThreadArt note={note} shown={shown} blends={blends} fill={fill} />
 
   return (
     <div
       ref={root}
+      data-back={back ? '' : undefined}
       className="relative overflow-hidden shadow-note"
       style={{
         width: mm(note.widthMm),
         height: mm(note.heightMm),
-        backgroundColor: note.color,
+        backgroundColor: paper,
         borderRadius: mm(1.5),
         transform: perspective && still ? still.rotate : undefined,
         willChange: live && perspective ? 'transform' : undefined,
       }}
     >
       {face && (faceShiftMm
-        ? <DesignTiles url={face} width={mm(note.widthMm)} height={mm(note.heightMm)} color={note.color} shift={{ x: mm(faceShiftMm.x), y: mm(faceShiftMm.y) }} />
+        ? <DesignTiles url={face} width={mm(note.widthMm)} height={mm(note.heightMm)} color={paper} shift={{ x: mm(faceShiftMm.x), y: mm(faceShiftMm.y) }} />
         : <img src={face} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />)}
 
       {watermarkBox && watermark?.imageId && (
         // Light through thinner paper (relief.ts, through its levels), colour-dodged over the design: it only ever
         // brightens it, in proportion, so it keeps the note's own colours and dark print stays dark. Its opacity is how
         // much of that light comes through. The thread lies over it, unchanged. On the canvas it takes a press, faint or
-        // clear, so it drags as the thread does; not with no depth to show.
+        // clear, so it drags as the thread does; not with no depth to show. The same canvas on either face, so its
+        // light stays painted: from the back it is the other way round
         <canvas ref={light} data-watermark={note.id} data-placed="watermark" width={lightWidth} height={lightHeight}
           className={cn('absolute', live && depth > 0 ? 'cursor-move' : 'pointer-events-none')}
-          {...part('watermark', { ...watermarkBox, mixBlendMode: 'color-dodge' })} />
+          {...part('watermark', back ? { ...watermarkBox, mixBlendMode: 'color-dodge', transform: 'scaleX(-1)' } : { ...watermarkBox, mixBlendMode: 'color-dodge' })} />
       )}
 
-      {inkBox && magneticInk?.imageId && inkShape && inkBar && (
+      {!back && inkBox && magneticInk?.imageId && inkShape && inkBar && (
         // Magnetic ink, printed over the design and the watermark, under the thread: its Flat colour, the Tilted one fading
         // in over it as the note turns away, and the bright bar rolling across on its tilt, all clipped to the shape by
         // its mask (inkMask.ts). Like the watermark, it takes a press on the canvas anywhere in its box, to drag it
@@ -380,31 +400,34 @@ export function NoteView({
         </div>
       )}
 
-      {showWindowCuts && thread.windows.enabled && (
+      {!back && showWindowCuts && thread.windows.enabled && (
         <div aria-hidden="true" data-window-ghost className="pointer-events-none absolute overflow-hidden" style={{ ...strip, opacity: 0.2, backgroundColor: thread.backgroundColor }}>
           {art}
         </div>
       )}
 
-      <div
-        data-thread=""
-        className={cn('absolute overflow-hidden', horizontal ? 'cursor-ns-resize' : 'cursor-ew-resize')}
-        style={{ ...strip, ...windowMask, backgroundColor: thread.backgroundColor }}
-      >
-        {art}
-        {sheen && (
-          // The highlight sits halfway along the thread when flat and slides along it as the note tilts
-          <div
-            className="absolute inset-0 mix-blend-soft-light"
-            {...part('sheen', {
-              background: 'linear-gradient(180deg, transparent 32%, rgba(255,255,255,0.7) 50%, transparent 68%)',
-              willChange: live ? 'transform' : undefined,
-            })}
-          />
-        )}
-      </div>
+      {/* The thread shows only on the front (Keller) */}
+      {!back && (
+        <div
+          data-thread=""
+          className={cn('absolute overflow-hidden', horizontal ? 'cursor-ns-resize' : 'cursor-ew-resize')}
+          style={{ ...strip, ...windowMask, backgroundColor: thread.backgroundColor }}
+        >
+          {art}
+          {sheen && (
+            // The highlight sits halfway along the thread when flat and slides along it as the note tilts
+            <div
+              className="absolute inset-0 mix-blend-soft-light"
+              {...part('sheen', {
+                background: 'linear-gradient(180deg, transparent 32%, rgba(255,255,255,0.7) 50%, transparent 68%)',
+                willChange: live ? 'transform' : undefined,
+              })}
+            />
+          )}
+        </div>
+      )}
 
-      {showWindowCuts && thread.windows.enabled && (
+      {!back && showWindowCuts && thread.windows.enabled && (
         <div aria-hidden="true" data-window-cuts className="pointer-events-none absolute" style={strip}>
           {windowEdges(thread, lengthMm).map((edge) => (
             <div key={edge} className="absolute border-dashed border-fuchsia-500" style={horizontal
@@ -414,7 +437,7 @@ export function NoteView({
         </div>
       )}
 
-      {showFrameNumber && frames.length > 0 && (
+      {!back && showFrameNumber && frames.length > 0 && (
         <div aria-hidden="true" data-frame-number className="pointer-events-none absolute flex items-center justify-center" style={strip}>
           <span
             className="rounded-full bg-foreground/85 px-1.5 font-semibold leading-none text-background tabular-nums shadow-sm"

@@ -24,6 +24,8 @@ export interface ExportOptions {
   frameNumbers?: boolean
   /** The whole video held up to the light (the watermark clear throughout), as the lamp switch on the canvas; otherwise only Hold to light moves are */
   backlit?: boolean
+  /** Every banknote's back, as the canvas shows them turned over */
+  back?: boolean
   /** Where each banknote's thread pattern starts along its thread (mm, by banknote id), as the canvas previews it */
   offsets?: Record<string, number>
 }
@@ -103,7 +105,7 @@ export async function exportTilt(projectName: string, options: ExportOptions, on
     const scale = scaleForHeight(group, angles, options.perspective, options.height)
     for (const note of group) scales.set(note.id, Math.max(scales.get(note.id) ?? 0, scale))
   }
-  const assets = new Map(await Promise.all(notes.map(async (n) => [n.id, await loadNoteAssets(n, scales.get(n.id))] as const)))
+  const assets = new Map(await Promise.all(notes.map(async (n) => [n.id, await loadNoteAssets(n, scales.get(n.id), options.back)] as const)))
   const framesEach = playbackTilts(notes[0], options.fps, options.format === 'gif' ? 1 : options.loops).length
   const total = framesEach * groups.length
   let done = 0

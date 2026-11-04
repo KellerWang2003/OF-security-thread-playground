@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { create } from 'zustand'
+import { mirrored, type Side } from './back'
 import { clamp } from './frames'
 import { loadImageUrl } from './images'
 import { pictureOf, type Picture } from './imageWork'
@@ -388,14 +389,16 @@ const grow = (box: Box, by: number): Box => ({ x: box.x - by, y: box.y - by, wid
 
 /**
  * How much of a watermark's light falls at a point on the banknote, 0 to 1: its image as read, through its levels, so
- * only where it shows counts. Undefined (the whole box alike) without an image read yet.
+ * only where it shows counts. Undefined (the whole box alike) without an image read yet. Given its box as it lies seen
+ * from the back (`mirror`), its image reads the other way round.
  */
-export function watermarkWeight(watermark: Watermark, reading: Reading | undefined) {
+export function watermarkWeight(watermark: Watermark, reading: Reading | undefined, mirror = false) {
   if (!watermark.imageId || !reading || reading.width === 0 || reading.height === 0) return undefined
   const curve = levelsCurve(watermark.levels ?? reading.auto)
   const table = Float32Array.from({ length: 256 }, (_, v) => curve(v / 255))
   return (xMm: number, yMm: number) => {
-    const u = Math.floor(((xMm - watermark.xMm) / watermark.widthMm) * reading.width)
+    const across = Math.floor(((xMm - watermark.xMm) / watermark.widthMm) * reading.width)
+    const u = mirror ? reading.width - 1 - across : across
     const v = Math.floor(((yMm - watermark.yMm) / watermark.heightMm) * reading.height)
     return u < 0 || v < 0 || u >= reading.width || v >= reading.height ? 0 : table[reading.thin[v * reading.width + u]]
   }
@@ -429,9 +432,10 @@ function breakIssues(stretches: Stretch[], edgeMm: number, from: string, unit: L
 
 /**
  * Every check the design takes: with Continuous on, that it is at the banknote's size and its edges join up; then that
- * the paper under the watermark, if any, and around the thread is light
+ * the paper under the watermark, if any, and around the thread is light. The back's design (`side`) has the watermark
+ * the other way round and no thread to check round.
  */
-export function designChecks(note: Note, design: DesignPixels, reading: Reading | undefined, unit: LengthUnit): DesignCheck[] {
+export function designChecks(note: Note, design: DesignPixels, reading: Reading | undefined, unit: LengthUnit, side: Side = 'front'): DesignCheck[] {
   const checks: DesignCheck[] = []
   if (note.continuous) {
     const { crop } = design
@@ -458,16 +462,19 @@ export function designChecks(note: Note, design: DesignPixels, reading: Reading 
       },
     )
   }
-  const { watermark } = note
-  if (watermark) {
+  if (note.watermark) {
+    // It shows through to the back, where it lies the other way round
+    const back = side === 'back'
+    const watermark = back ? mirrored(note.watermark, note) : note.watermark
     const box = { x: watermark.xMm, y: watermark.yMm, width: watermark.widthMm, height: watermark.heightMm }
     checks.push({
       id: 'watermark',
       title: 'Watermark on light paper',
       explain: `The design under the watermark is light (L* ${LIGHT_L} or more), as the brief asks, so it shows held to the light`,
-      issues: lightIssues(paperLight(design, [box], [], watermarkWeight(watermark, reading)), (share) => `${share} of it is over darker print`),
+      issues: lightIssues(paperLight(design, [box], [], watermarkWeight(watermark, reading, back)), (share) => `${share} of it is over darker print`),
     })
   }
+  if (side === 'back') return checks
   const thread = threadBoxes(note)
   const around = paperLight(design, thread.map((box) => grow(box, SURROUND_MM)), thread)
   if (around) {

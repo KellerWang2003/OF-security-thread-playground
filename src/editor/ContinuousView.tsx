@@ -27,9 +27,12 @@ const MARK_PX = 2
 const MARK_GAP_PX = 2
 const MARK_MIN_PX = 3
 
-/** Whether what is drawn flat around the banknote lines up with it: not while it is turned in perspective, played or dragged */
+/**
+ * Whether what is drawn flat around the banknote lines up with it: not while it is turned in perspective, turning over,
+ * played or dragged
+ */
 function useShown(quiet: boolean) {
-  const flat = useTilt((s) => !s.perspective || (Math.abs(s.angle) < FLAT_DEG && Math.abs(s.angleX) < FLAT_DEG))
+  const flat = useTilt((s) => (s.turn === 0 || s.turn === 1) && (!s.perspective || (Math.abs(s.angle) < FLAT_DEG && Math.abs(s.angleX) < FLAT_DEG)))
   return flat && !quiet
 }
 

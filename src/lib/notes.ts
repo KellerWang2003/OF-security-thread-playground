@@ -1,3 +1,4 @@
+import { fitBack } from './back'
 import { fitContinuous } from './continuous'
 import { defaultPattern, migratePattern } from './pattern'
 import { DEFAULT_PLAYBACK, playbackSettings } from './playback'
@@ -122,8 +123,9 @@ export function migrateProject(raw: unknown): Project {
       : []
   // Notes saved before the canvas had no position: lay them out in a row
   const placed: Note[] = []
-  for (const { watermark, continuous, magneticInk, ...raw } of notes) {
+  for (const { watermark, continuous, magneticInk, back: savedBack, ...raw } of notes) {
     const check = fitContinuous(continuous)
+    const back = fitBack(savedBack)
     // Older notes had no background mode; an uploaded face meant an image background
     const n: Note = {
       ...raw,
@@ -132,6 +134,8 @@ export function migrateProject(raw: unknown): Project {
       ...(magneticInk && typeof magneticInk === 'object' ? { magneticInk: fitMagneticInk(magneticInk, raw) } : {}),
       // The continuous check is on only while saved, its tolerance kept in range
       ...(check ? { continuous: check } : {}),
+      // A back once it has been set; until then it shows the front's paper
+      ...(back ? { back } : {}),
       background: raw.background ?? (raw.faceImageId ? 'image' : 'solid'),
       // Older frames had degree spans, or split one shared range equally: keep their proportions and cycle
       frames: raw.frames.map((f) => ({ ...f, length: f.length ?? oldLength(raw.frames, f) })),

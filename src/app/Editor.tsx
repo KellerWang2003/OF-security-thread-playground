@@ -1,6 +1,6 @@
 import { undoProject, redoProject, updateNote } from '../lib/store'
 import { beginHistoryGroup, endHistoryGroup, breakHistoryGroup } from '../lib/history'
-import { pressLight, releaseLight, springToFlat, togglePlayback, useTilt } from '../tilt/tilt'
+import { pressLight, releaseLight, setTilt, springToFlat, togglePlayback, turnOver, useTilt } from '../tilt/tilt'
 import { playbackLens, playbackTilt } from '../lib/pattern'
 import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -50,12 +50,16 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
     setSelectedWindowId(undefined)
   }
   const exitPlacing = () => setPlacingNoteId(undefined)
-  /** Selects exactly what was picked: a banknote itself, or one of its layers; picking its watermark or magnetic ink places it */
+  /**
+   * Selects exactly what was picked: a banknote itself, or one of its layers; picking its watermark or magnetic ink places
+   * it. The thread and magnetic ink are only on the front, so picking either turns the banknotes back round to it
+   */
   const selectLayer = (noteId: string, next: Layer) => {
     if (noteId !== selectedId || next !== 'thread') exitWindows()
     setSelectedId(noteId)
     setLayer(next)
     setPlacingNoteId(isPlaced(next) ? noteId : undefined)
+    if (next === 'thread' || next === 'magneticInk') turnOver(false)
   }
   /** Selects a banknote itself, or nothing */
   const selectNote = (noteId: string | undefined) => {
@@ -100,6 +104,22 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
       springToFlat()
     }
   }, [playsOnOpen])
+
+  // Turned over, the banknotes show only their backs and watermarks: a thread or magnetic ink picked on the front leaves
+  // the banknote itself picked, and window editing ends
+  const flipped = useTilt((s) => s.flipped)
+  useEffect(() => {
+    if (!flipped) return
+    exitWindows()
+    if (layer === 'thread' || layer === 'magneticInk') {
+      setLayer('note')
+      exitPlacing()
+    }
+    // Only on turning over
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flipped])
+  // Each project opens on its fronts
+  useEffect(() => () => setTilt({ flipped: false, turn: 0 }), [])
 
   // Escape leaves window editing or placing a layer, otherwise clears the selection, unless a field or dialog is handling it
   useEffect(() => {
@@ -175,6 +195,21 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
       onBlur()
     }
   }, [])
+
+  // F turns every banknote over to its back, or back to its front; not in Thread Studio, as the thread is only on the front
+  const inStudio = threadNoteId !== undefined && note?.id === threadNoteId
+  useEffect(() => {
+    if (inStudio) return
+    const onDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'f' || event.metaKey || event.ctrlKey || event.altKey || event.isComposing || event.defaultPrevented) return
+      const element = event.target instanceof Element ? event.target : null
+      if (element?.closest(TYPING) || document.querySelector(POPUP)) return
+      event.preventDefault()
+      if (!event.repeat) turnOver()
+    }
+    window.addEventListener('keydown', onDown)
+    return () => window.removeEventListener('keydown', onDown)
+  }, [inStudio])
 
   useEffect(() => {
     const onSpace = (event: KeyboardEvent) => {
@@ -278,7 +313,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
         <ThreadEditor key={threadNote.id} project={project} note={threadNote} onClose={closeThread} />
       ) : (
         <>
-          {tiltPad && <TiltRail limit={lens?.viewDeg} playback={reference && lens ? { projectId: project.id, tilt: playbackTilt(reference), lens } : undefined} />}
+          {tiltPad && <TiltRail limit={lens?.viewDeg} playback={reference && lens ? { projectId: project.id, tilt: playbackTilt(reference), lens } : undefined} flip />}
           <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} layer={shownLayer} onSelect={selectFromList} onAdd={() => setAdding(true)} aboveTilt={tiltPad}
             onAddLayer={(noteId, added) => {
               addLayer({ projectId: project.id, noteId }, added)

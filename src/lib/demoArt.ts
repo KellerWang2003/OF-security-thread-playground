@@ -1,8 +1,8 @@
 /**
  * The demo's artwork, drawn in code so it ships with the app and comes out the same every time: two printed faces in
- * the manner of a banknote (fine-line waves, a braided border, rosettes, numerals and microtext), the bird portrait its
- * watermark is read from, the flapping bird the first thread plays, and the spinning star the second plays.
- * Everything is original, and nothing is random.
+ * the manner of a banknote (fine-line waves, a braided border, rosettes, numerals and microtext) and their backs, the
+ * bird portrait its watermark is read from, the flapping bird the first thread plays, and the spinning star the second
+ * plays. Everything is original, and nothing is random.
  */
 
 /** Pixels per millimetre the faces are drawn at */
@@ -274,6 +274,47 @@ async function drawStudioFace() {
 }
 
 /**
+ * Banknote 1's back, 150 × 75 mm, as it shows turned over: its plain oval on the right, where the watermark shows
+ * through the other way round, a large rosette on the left and the numeral between them
+ */
+async function drawWatermarkBack() {
+  const width = 150
+  const height = 75
+  const p = GREENS
+  const { canvas, g } = paper(width, height, p, false)
+  const layer = sheet(canvas.width, canvas.height)
+  layer.g.scale(FACE_PX, FACE_PX)
+  waves(layer.g, width, height, p)
+  clearOval(layer.g, 125, 37.5, 18.5, 28)
+  g.drawImage(layer.canvas, 0, 0, width, height)
+  plainOval(g, 125, 37.5, 18.5, 28, p)
+  ovalRing(g, 125, 37.5, 18.5, 28, p)
+  rosette(g, 32, 37.5, 20, p)
+  rosette(g, 79, 22, 7, p)
+  border(g, width, height, p)
+  microtext(g, 8, 143, 8.1, p.dark)
+  lettering(g, '10', 79, 54, 20, p.ink, p.edge)
+  lettering(g, '10', 135, 69, 5, p.ink, p.edge)
+  return toBlob(canvas, 'image/jpeg', 0.92)
+}
+
+/** Banknote 2's back, 75 × 150 mm: a large rosette above, the numeral below, as no thread crosses it there */
+async function drawStudioBack() {
+  const width = 75
+  const height = 150
+  const p = VIOLETS
+  const { canvas, g } = paper(width, height, p, true)
+  waves(g, width, height, p)
+  rosette(g, 37.5, 50, 24, p)
+  rosette(g, 57, 128, 8, p)
+  border(g, width, height, p)
+  microtext(g, 8, 68, 85, p.dark)
+  microtext(g, 8, 68, 141, p.dark)
+  lettering(g, '20', 30, 116, 22, p.ink, p.edge)
+  return toBlob(canvas, 'image/jpeg', 0.92)
+}
+
+/**
  * The watermark's bird, as a photo of a watermark held to the light shows one: brightest where the paper is thinnest,
  * on black, so the black reads as plain paper. It fades out towards the bottom, as portrait watermarks do. A new
  * watermark starts with it too (standIns.ts).
@@ -512,6 +553,7 @@ async function drawBird(i: number): Promise<Blob> {
 
 export interface DemoArt {
   faces: [watermark: Blob, studio: Blob]
+  backs: [watermark: Blob, studio: Blob]
   portrait: Blob
   birds: Blob[]
   stars: Blob[]
@@ -519,12 +561,14 @@ export interface DemoArt {
 
 /** Every piece of the demo's artwork */
 export async function drawDemoArt(): Promise<DemoArt> {
-  const [watermarkFace, studioFace, portrait, birds, stars] = await Promise.all([
+  const [watermarkFace, studioFace, watermarkBack, studioBack, portrait, birds, stars] = await Promise.all([
     drawWatermarkFace(),
     drawStudioFace(),
+    drawWatermarkBack(),
+    drawStudioBack(),
     drawPortrait(),
     Promise.all(BIRD_WORDS.map((_, i) => drawBird(i))),
     Promise.all(STAR_TURNS.map((_, i) => drawStarFrame(i))),
   ])
-  return { faces: [watermarkFace, studioFace], portrait, birds, stars }
+  return { faces: [watermarkFace, studioFace], backs: [watermarkBack, studioBack], portrait, birds, stars }
 }

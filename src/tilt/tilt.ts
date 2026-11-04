@@ -35,6 +35,13 @@ interface TiltState {
    * over LIGHT_RAMP_SECONDS, or what playback's moves say while playing (whichever is more)
    */
   light: number
+  /** The turn-over switch: every banknote shows its back, until turned back (F, or the button on the tilt pad) */
+  flipped: boolean
+  /**
+   * How far the banknotes have turned over, 0 (front) to 1 (back), as everything renders it: the switch, turned over
+   * FLIP_SECONDS. From halfway they show their backs (`showsBack`)
+   */
+  turn: number
   /**
    * Where each banknote's timeline was scrubbed to, by banknote id, as the tilt that would show it: that banknote's
    * frames show what it would while every banknote keeps the tilt, as scrubbing picks a frame and never tilts, and only
@@ -61,6 +68,8 @@ export const useTilt = create<TiltState>()(() => ({
   backlit: false,
   peek: false,
   light: 0,
+  flipped: false,
+  turn: 0,
   frameTilts: {},
 }))
 
@@ -119,6 +128,27 @@ export function releaseLight(now = performance.now(), tap = true) {
   setTilt({ peek: false, backlit: flip ? !backlit : backlit })
 }
 
+/** Seconds the banknotes take to turn over, or back */
+export const FLIP_SECONDS = 0.5
+
+/** Whether the banknotes show their backs: from halfway through turning over, edge-on, where the face changes */
+export const showsBack = (s: Pick<TiltState, 'turn'>) => s.turn >= 0.5
+
+/** Turns every banknote over to its back, or back to its front (by default whichever it isn't on) */
+export const turnOver = (back = !useTilt.getState().flipped) => setTilt({ flipped: back })
+
+/** Turning over starts and ends gently */
+const turnEase = (turn: number) => turn * turn * (3 - 2 * turn)
+
+/**
+ * The face shown partway through turning over, as rotateY degrees about the banknote's upright middle: the front from 0
+ * to 90 as its right edge goes away, then, edge-on, the back from −90 to 0 as it comes round
+ */
+export const turnDeg = (turn: number) => {
+  const deg = 180 * turnEase(clamp(turn, 0, 1))
+  return turn >= 0.5 ? deg - 180 : deg
+}
+
 /** Shared by the keyboard shortcut and the playback button. Pause holds the rendered angle. */
 export function togglePlayback() {
   const { source, angle, target, angleX, targetX } = useTilt.getState()
@@ -133,7 +163,7 @@ const approach = (value: number, target: number, step: number) => (value < targe
  * Manual tilt uses a critically damped spring. Playback follows the project's moves exactly (no spring), from
  * the start each time it begins; a change to the plan while playing keeps the same share of the way through.
  * The light fades towards the switch at a steady rate; while playing it is also at least what the moves say, and
- * on pausing it fades from there back to the switch.
+ * on pausing it fades from there back to the switch. The banknotes turn over towards the turn-over switch the same way.
  */
 export function useTiltLoop(plan: PlaybackPlan, limit = TILT_LIMIT) {
   const current = useRef({ plan, limit })
@@ -151,11 +181,16 @@ export function useTiltLoop(plan: PlaybackPlan, limit = TILT_LIMIT) {
     const damping = 2 * Math.sqrt(stiffness)
 
     const tick = (now: number) => {
-      const dt = Math.min((now - last) / 1000, 1 / 20)
+      // A frame's time can come before the moment the loop started from: never a step backwards, which would push the
+      // light and the turn away from where they are heading
+      const dt = clamp((now - last) / 1000, 0, 1 / 20)
       last = now
       const s = useTilt.getState()
       const { plan, limit } = current.current
       const fade = dt / LIGHT_RAMP_SECONDS
+      // Turning over, or back, at a steady rate whatever else moves
+      const turn = approach(s.turn, s.flipped ? 1 : 0, dt / FLIP_SECONDS)
+      if (turn !== s.turn) useTilt.setState({ turn })
       if (s.source === 'wobble') {
         if (lastSource === 'wobble' && plan.seconds > 0) share = (share + dt / plan.seconds) % 1
         else share = 0

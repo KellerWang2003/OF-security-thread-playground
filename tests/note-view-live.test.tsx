@@ -3,10 +3,10 @@ import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NoteView } from '../src/components/NoteView'
 import { WATERMARK_TILTED, watermarkOpacity, watermarkReveal } from '../src/lib/light'
-import { INK_ROLL_DEG, INK_SHIFT_DEG, barShift, inkShift } from '../src/lib/magneticInk'
+import { DEFAULT_INK, INK_ROLL_DEG, INK_SHIFT_DEG, barShift, inkShift } from '../src/lib/magneticInk'
 import { createNote } from '../src/lib/notes'
-import type { MagneticInk } from '../src/lib/types'
-import { setTilt } from '../src/tilt/tilt'
+import type { MagneticInk, Note } from '../src/lib/types'
+import { setTilt, turnDeg } from '../src/tilt/tilt'
 
 // The watermark's light layer is worked out from its image on a canvas, which jsdom lacks: each is named for what it
 // was drawn from, and painting one onto the watermark's canvas notes its name there
@@ -30,7 +30,7 @@ vi.mock('../src/lib/inkMask', () => ({
 
 afterEach(() => {
   cleanup()
-  setTilt({ source: 'hold', angle: 0, angleX: 0, target: 0, targetX: 0, light: 0 })
+  setTilt({ source: 'hold', angle: 0, angleX: 0, target: 0, targetX: 0, light: 0, flipped: false, turn: 0 })
 })
 
 const makeNote = () => createNote({ name: 'Live', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#112233' })
@@ -235,5 +235,52 @@ describe("a NoteView's magnetic ink", () => {
     expect(shape(container)).toContain('mask-ink-inverted.png')
     rerender(<NoteView note={withInk({ imageId: undefined })} scale={1} live />)
     expect(container.querySelector('[data-magnetic-ink]')).toBeNull()
+  })
+})
+
+describe("a NoteView's back", () => {
+  const twoSided = (): Note => ({
+    ...makeNote(),
+    back: { background: 'solid', color: '#F0EAD6' },
+    watermark: { imageId: 'mark', xMm: 10, yMm: 10, widthMm: 30, heightMm: 30, depth: 0.6 },
+    magneticInk: { imageId: 'ink', xMm: 100, yMm: 10, widthMm: 20, heightMm: 20, ...DEFAULT_INK },
+  })
+
+  it('shows its own paper and the watermark through it the other way round, and no thread or magnetic ink', () => {
+    const { container } = render(<NoteView note={twoSided()} scale={2} side="back" selected="watermark" hovered="thread" />)
+    const root = container.firstElementChild as HTMLElement
+    expect(root.style.backgroundColor).toBe('rgb(240, 234, 214)')
+    expect(root.hasAttribute('data-back')).toBe(true)
+    expect(container.querySelector('[data-thread]')).toBeNull()
+    expect(container.querySelector('[data-magnetic-ink]')).toBeNull()
+    const mark = container.querySelector<HTMLElement>('[data-watermark]')!
+    // 150 − 10 − 30 = 110 mm from the left, at 2 px per mm, flipped
+    expect([mark.style.left, mark.style.transform]).toEqual(['220px', 'scaleX(-1)'])
+    // Its outline follows it there; the thread has none to show
+    expect(container.querySelector<HTMLElement>('[data-outline="selected"]')!.style.left).toBe('220px')
+    expect(container.querySelector('[data-outline="hover"]')).toBeNull()
+  })
+
+  it('turns over with the shared turn, coming round edge-on to its back, and tilts there as the front does', () => {
+    const { container } = render(<NoteView note={twoSided()} scale={1} live perspective />)
+    const root = () => container.firstElementChild as HTMLElement
+    const mark = () => container.querySelector<HTMLElement>('[data-watermark]')!
+    act(() => setTilt({ turn: 0.25 }))
+    expect(root().style.transform).toBe(`rotateX(0deg) rotateY(${turnDeg(0.25)}deg)`)
+    expect(container.querySelector('[data-thread]')).not.toBeNull()
+    expect(mark().style.left).toBe('10px')
+    act(() => setTilt({ turn: 0.75 }))
+    expect(root().hasAttribute('data-back')).toBe(true)
+    expect(container.querySelector('[data-thread]')).toBeNull()
+    expect(root().style.transform).toBe(`rotateX(0deg) rotateY(${turnDeg(0.75)}deg)`)
+    // The same light layer, the other way round at the other side
+    expect([mark().style.left, mark().style.transform]).toEqual(['110px', 'scaleX(-1)'])
+    act(() => setTilt({ turn: 1, angle: 5, angleX: 10 }))
+    expect(root().style.transform).toBe('rotateX(5deg) rotateY(10deg)')
+    expect(Number(mark().style.opacity)).toBeCloseTo(watermarkOpacity(0.6, watermarkReveal(0, { x: 10, y: 5 })))
+    // And back again
+    act(() => setTilt({ turn: 0, angle: 0, angleX: 0 }))
+    expect(root().hasAttribute('data-back')).toBe(false)
+    expect([mark().style.left, mark().style.transform]).toEqual(['10px', ''])
   })
 })

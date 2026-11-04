@@ -22,7 +22,7 @@ vi.mock('../src/cloud/client', () => ({
   },
 }))
 
-/** A banknote using everything added since the first cloud saves: frame fills, a watermark, the continuous check, thread sections */
+/** A banknote using everything added since the first cloud saves: frame fills, a watermark, the continuous check, thread sections, a back */
 function everything(): Note {
   const note = createNote({ name: 'Banknote', x: 0, y: 0, widthMm: 134, heightMm: 68, color: '#DBECC6' })
   const [empty, colour] = note.frames
@@ -35,6 +35,7 @@ function everything(): Note {
     frames: [{ ...empty, kind: 'none' }, { ...colour, color: '#C2456B' }, image],
     watermark: { imageId: crypto.randomUUID(), xMm: 12.3, yMm: 4.5, widthMm: 20, heightMm: 30, depth: 0.4, invert: true, levels: { low: 0.1, high: 0.8, gamma: 1.6 } },
     continuous: { cutMm: 0.7 },
+    back: { background: 'image', color: '#F0EAD6', imageId: crypto.randomUUID() },
     pattern: {
       repeatMm: 12.5,
       mixed: true,
@@ -54,7 +55,7 @@ describe('saving to the cloud', () => {
     for (const id of projectImageIds(project)) await writeArtwork('save-test', id, new Blob(['art'], { type: 'image/png' }))
     const saved = await createRepository('save-test').save({ project, revision: crypto.randomUUID(), baseRevision: null, deleted: false, dirty: true })
     expect(saved.project).toEqual(project)
-    expect(cloud.uploads.toSorted()).toEqual([note.faceImageId, note.watermark!.imageId, note.frames[2].imageId].toSorted())
+    expect(cloud.uploads.toSorted()).toEqual([note.faceImageId, note.back!.imageId, note.watermark!.imageId, note.frames[2].imageId].toSorted())
   })
 
   it('saves the demo with all it shows: a watermark, Partial reveal and a playlist, but no mixed angles', async () => {
@@ -69,7 +70,7 @@ describe('saving to the cloud', () => {
     expect(demo.notes.map((n) => n.tilt.moves?.map((m) => m.kind))).toEqual([['y', 'x'], ['y', 'x']])
     // It opens as it was built: nothing for an old save's migrations to change
     expect(migrateProject(structuredClone(demo))).toEqual(demo)
-    expect(projectImageIds(demo).toSorted()).toEqual([...DEMO_ART.faces, DEMO_ART.portrait, ...DEMO_ART.birds, ...DEMO_ART.stars].toSorted())
+    expect(projectImageIds(demo).toSorted()).toEqual([...DEMO_ART.faces, ...DEMO_ART.backs, DEMO_ART.portrait, ...DEMO_ART.birds, ...DEMO_ART.stars].toSorted())
     for (const id of projectImageIds(demo)) await writeArtwork('demo-save-test', id, new Blob(['art'], { type: 'image/png' }))
     const saved = await createRepository('demo-save-test').save({ project: demo, revision: crypto.randomUUID(), baseRevision: null, deleted: false, dirty: true })
     expect(saved.project).toEqual(demo)

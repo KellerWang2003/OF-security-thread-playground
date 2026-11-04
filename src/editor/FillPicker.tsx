@@ -5,10 +5,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils'
 import { reportError } from '../cloud/notices'
 import { ColorField, IconButton, Segmented, SwitchField } from '../components/controls'
+import { backOf, type Side } from '../lib/back'
 import { THUMB_PX, pickFiles, useImageUrl } from '../lib/images'
 import { updateNote } from '../lib/store'
 import type { Frame, Note } from '../lib/types'
-import { replaceFrameImage, setFaceImage, updateFrame, type NoteRef } from './frameActions'
+import { turnOver } from '../tilt/tilt'
+import { replaceFrameImage, setBackImage, setFaceImage, updateBack, updateFrame, type NoteRef } from './frameActions'
 
 /** A fill as its picker shows it: a colour, an image (with its picture once there is one), or nothing */
 interface Fill {
@@ -125,9 +127,9 @@ function FillPanel({ fill, edits, trigger, side = 'left', align = 'start', onOpe
 }
 
 /** A fill as one row, Figma's way: its swatch and what it is, `name` saying whose fill it is; a click opens its panel */
-function FillRow({ name, fill, edits }: { name: string; fill: Fill; edits: FillEdits }) {
+function FillRow({ name, fill, edits, onOpenChange }: { name: string; fill: Fill; edits: FillEdits; onOpenChange?: (open: boolean) => void }) {
   return (
-    <FillPanel fill={fill} edits={edits} trigger={
+    <FillPanel fill={fill} edits={edits} onOpenChange={onOpenChange} trigger={
       <Button variant="outline" size="sm" aria-label={`${name}: ${fillName(fill)}`}
         className="h-8 w-full justify-start gap-2 rounded-lg px-1.5 font-normal data-[popup-open]:border-ring">
         <FillSwatch fill={fill} />
@@ -166,23 +168,27 @@ export function FrameFillPanel({ note, noteRef, frame, ...place }: { note: Note;
 }
 
 /**
- * The banknote's background, chosen as a frame's fill is (Keller: the same everywhere): its colour, or its design, an
- * image that can be removed again, which falls back to the colour
+ * A side of the banknote's background, chosen as a frame's fill is (Keller: the same everywhere): its colour, or its
+ * design, an image that can be removed again, which falls back to the colour. Opening it turns the banknotes to that
+ * side, so what changes is in sight.
  */
-export function BackgroundFillRow({ note, noteRef }: { note: Note; noteRef: NoteRef }) {
-  const url = useImageUrl(note.faceImageId, THUMB_PX)
+export function BackgroundFillRow({ note, noteRef, side = 'front' }: { note: Note; noteRef: NoteRef; side?: Side }) {
+  const back = side === 'back' ? backOf(note) : undefined
+  const url = useImageUrl(back ? back.imageId : note.faceImageId, THUMB_PX)
   const set = (patch: Partial<Note>) => updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, ...patch }))
+  const setImage = back ? setBackImage : setFaceImage
   return (
     <FillRow
-      name="Background"
-      fill={{ kind: note.background === 'image' ? 'image' : 'color', color: note.color, url }}
+      name={back ? 'Back' : 'Front'}
+      fill={{ kind: (back ?? note).background === 'image' ? 'image' : 'color', color: back?.color ?? note.color, url }}
       edits={{
-        setKind: (kind) => set({ background: kind === 'image' ? 'image' : 'solid' }),
-        setColor: (color) => set({ color }),
-        addImage: (file) => setFaceImage(noteRef, file),
-        removeImage: () => void setFaceImage(noteRef, undefined).catch(reportError),
+        setKind: (kind) => (back ? updateBack(noteRef, { background: kind === 'image' ? 'image' : 'solid' }) : set({ background: kind === 'image' ? 'image' : 'solid' })),
+        setColor: (color) => (back ? updateBack(noteRef, { color }) : set({ color })),
+        addImage: (file) => setImage(noteRef, file),
+        removeImage: () => void setImage(noteRef, undefined).catch(reportError),
         uploadLabel: 'Upload design',
       }}
+      onOpenChange={(open) => open && turnOver(side === 'back')}
     />
   )
 }
