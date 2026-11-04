@@ -357,7 +357,6 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
             </div>
           )}
           {note && noteRef && <Inspector key={note.id} note={note} noteRef={noteRef} layer={shownLayer} onLayer={(next) => selectLayer(note.id, next)}
-            selectedWindowId={editingWindows ? selectedWindowId : undefined}
             onWindowSelect={(windowId) => {
               if (!windowId) return exitWindows()
               setEditingNoteId(note.id)

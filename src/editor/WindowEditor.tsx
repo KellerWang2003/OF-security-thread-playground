@@ -1,9 +1,11 @@
 import { useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { LengthField } from '../components/controls'
 import { clamp } from '../lib/frames'
 import { sectionBounds, snapWindow, threadLength, WINDOW_STEP } from '../lib/thread'
 import type { Note, ThreadWindow } from '../lib/types'
+import { Measure } from './Measure'
 
 type Gesture = {
   mode: 'draw' | 'move' | 'start' | 'end'
@@ -14,6 +16,18 @@ type Gesture = {
   original: ThreadWindow[]
   section?: ThreadWindow
 }
+
+/** Px per mm under which the measurements hide: zoomed out that far, they can't be read against their windows */
+const MEASURE_MIN_SCALE = 2
+/** A measurement's card, px: its small label over a small field `FIELD` wide, as beside the thread in Thread Studio */
+const CARD = { width: 92, height: 57 }
+const FIELD = 'w-[80px]'
+/** Room kept between two cards along the thread, px */
+const CARD_GAP = 4
+/** Room a card on its window's tile keeps from the window's ends (and their handles) and sides, px */
+const TILE_ROOM = { along: 16, across: 8 }
+/** Lengths typed in any unit are kept to a millionth of a mm, as the fields keep them, without float dust */
+const exact = (mm: number) => Math.round(mm * 1e6) / 1e6
 
 /** Canvas-only editing surface; it intercepts gestures before the banknote can tilt or pan. */
 export function WindowEditor({ note, scale, selectedId, onSelect, onChange }: {
@@ -27,6 +41,8 @@ export function WindowEditor({ note, scale, selectedId, onSelect, onChange }: {
   const horizontal = note.thread.direction === 'horizontal'
   const length = threadLength(note)
   const sections = note.thread.windows.sections
+  // In order along the thread, as they are numbered (the Checks' Window 1, Window 2…)
+  const windows = sections.toSorted((a, b) => a.startMm - b.startMm)
   const resizeCursor = horizontal ? 'cursor-ew-resize' : 'cursor-ns-resize'
   const point = (event: React.PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -104,7 +120,7 @@ export function WindowEditor({ note, scale, selectedId, onSelect, onChange }: {
       onPointerUp={(event) => finish(event)}
       onPointerCancel={(event) => finish(event, true)}
     >
-      {sections.map((section, i) => {
+      {windows.map((section, i) => {
         const selected = section.id === selectedId
         return (
           <div key={section.id} className="absolute" style={horizontal
@@ -124,6 +140,105 @@ export function WindowEditor({ note, scale, selectedId, onSelect, onChange }: {
           </div>
         )
       })}
+      <WindowMeasures note={note} windows={windows} scale={scale} selectedId={selectedId} onSelect={onSelect}
+        onMove={(id, startMm, endMm) => onChange(sections.map((s) => (s.id === id ? { ...s, startMm: exact(startMm), endMm: exact(endMm) } : s)))} />
     </div>
+  )
+}
+
+/**
+ * The windows' measurements while they are edited, each a small field to scrub or type, as beside the thread in Thread
+ * Studio (Keller): every window's length, on its tile where it fits and else beside it, and for the picked window the
+ * distance to what lies either side of it along the thread, the next window (a gap) or the banknote's edge. Typing a
+ * length moves the window's end; typing a distance moves the window, its length kept. A length with no room from its
+ * neighbours' hides, though never the picked window's, and all of them hide once zoomed too far out to read.
+ */
+function WindowMeasures({ note, windows, scale, selectedId, onSelect, onMove }: {
+  note: Note
+  /** In order along the thread */
+  windows: ThreadWindow[]
+  scale: number
+  selectedId?: string
+  onSelect: (id: string) => void
+  /** Sets where a window starts and ends, mm */
+  onMove: (id: string, startMm: number, endMm: number) => void
+}) {
+  if (scale < MEASURE_MIN_SCALE) return null
+  const horizontal = note.thread.direction === 'horizontal'
+  const length = threadLength(note)
+  const thickness = note.thread.widthMm * scale
+  // Lengths along one side of the thread, the picked window's distances along the other
+  const lengthSide = horizontal ? 'top' : 'left'
+  const distanceSide = horizontal ? 'bottom' : 'right'
+  // Along the thread a card takes its width on a horizontal thread, its height on an upright one
+  const along = horizontal ? CARD.width : CARD.height
+  const across = horizontal ? CARD.height : CARD.width
+  const onTile = (w: ThreadWindow) => (w.endMm - w.startMm) * scale >= along + TILE_ROOM.along && thickness >= across + TILE_ROOM.across
+  const middle = (w: ThreadWindow) => ((w.startMm + w.endMm) / 2) * scale
+  // Cards beside the thread run along it in the windows' order, so one clashes with another only if it does with the next
+  const beside = windows.filter((w) => !onTile(w))
+  const crowded = (w: ThreadWindow) => {
+    const i = beside.indexOf(w)
+    return [beside[i - 1], beside[i + 1]].some((other) => other && Math.abs(middle(other) - middle(w)) < along + CARD_GAP)
+  }
+  const at = windows.findIndex((w) => w.id === selectedId)
+  const picked = windows[at]
+
+  return (
+    <>
+      {windows.map((w, i) => (w === picked || onTile(w) || !crowded(w)) && (
+        <Measure key={w.id} side={lengthSide} from={w.startMm * scale} to={w.endMm * scale} inside={onTile(w)}
+          label={`Window ${i + 1}`} onPress={() => onSelect(w.id)}>
+          <LengthField size="sm" className={FIELD} label="L" title={`Length of window ${i + 1}`}
+            value={w.endMm - w.startMm} min={Math.min(WINDOW_STEP, w.endMm - w.startMm)} max={(windows[i + 1]?.startMm ?? length) - w.startMm}
+            step={WINDOW_STEP} onChange={(mm) => onMove(w.id, w.startMm, w.startMm + mm)} />
+        </Measure>
+      ))}
+      {picked && <Distances picked={picked} index={at} before={windows[at - 1]} after={windows[at + 1]} length={length}
+        horizontal={horizontal} side={distanceSide} scale={scale} along={along} onMove={onMove} />}
+    </>
+  )
+}
+
+/**
+ * The picked window's distance to what lies before and after it along the thread: the previous and next windows' ends (a
+ * Gap), or where there is none, the banknote's edges (From top and From bottom, or From left and From right). Each card
+ * sits in the middle of what it measures where it fits, else flush against the window
+ */
+function Distances({ picked: w, index, before, after, length, horizontal, side, scale, along, onMove }: {
+  picked: ThreadWindow
+  index: number
+  before?: ThreadWindow
+  after?: ThreadWindow
+  length: number
+  horizontal: boolean
+  side: 'right' | 'bottom'
+  scale: number
+  along: number
+  onMove: (id: string, startMm: number, endMm: number) => void
+}) {
+  const from = before?.endMm ?? 0
+  const to = after?.startMm ?? length
+  const size = w.endMm - w.startMm
+  // How far the window can be from either side, its length kept
+  const room = to - from - size
+  const moveTo = (startMm: number) => onMove(w.id, startMm, startMm + size)
+  const n = index + 1
+  const edge = horizontal ? { before: 'left', after: 'right' } : { before: 'top', after: 'bottom' }
+  return (
+    <>
+      <Measure key="before" side={side} from={from * scale} to={w.startMm * scale} align={(w.startMm - from) * scale >= along ? 'center' : 'end'}
+        label={before ? 'Gap' : `From ${edge.before}`}>
+        <LengthField size="sm" className={FIELD} label={before ? 'G' : horizontal ? 'X' : 'Y'}
+          title={before ? `Gap between windows ${n - 1} and ${n}` : `Window ${n} from the ${edge.before} of the banknote`}
+          value={w.startMm - from} min={0} max={room} step={WINDOW_STEP} onChange={(mm) => moveTo(from + mm)} />
+      </Measure>
+      <Measure key="after" side={side} from={w.endMm * scale} to={to * scale} align={(to - w.endMm) * scale >= along ? 'center' : 'start'}
+        label={after ? 'Gap' : `From ${edge.after}`}>
+        <LengthField size="sm" className={FIELD} label={after ? 'G' : horizontal ? 'X' : 'Y'}
+          title={after ? `Gap between windows ${n} and ${n + 1}` : `Window ${n} from the ${edge.after} of the banknote`}
+          value={to - w.endMm} min={0} max={room} step={WINDOW_STEP} onChange={(mm) => moveTo(to - mm - size)} />
+      </Measure>
+    </>
   )
 }

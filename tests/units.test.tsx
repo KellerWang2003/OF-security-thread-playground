@@ -192,14 +192,16 @@ describe('the unit menu', () => {
     await user.click(screen.getByRole('tab', { name: 'Thread' }))
     expect(field('W').value).toBe(String(lengthIn(note().thread.widthMm, 'in')))
     expect(field('L').value).toBe(String(lengthIn(note().pattern!.repeatMm, 'in')))
-    // The first window runs 0 to 8 mm
+    // The first window runs 0 to 8 mm: switched off and on, it is picked, its measures on the canvas in inches too
     expect(note().thread.windows.sections[0]).toMatchObject({ startMm: 0, endMm: 8 })
-    await user.click(screen.getByRole('button', { name: 'Window 1, 0–0.315 in' }))
-    const end = screen.getByTitle('Window 1: visible section ends here').querySelector('input')!
-    expect(end.value).toBe('0.315')
-    fireEvent.change(end, { target: { value: '0.4' } })
-    fireEvent.blur(end)
+    await user.click(screen.getByRole('switch', { name: 'Windows' }))
+    await user.click(screen.getByRole('switch', { name: 'Windows' }))
+    const length = screen.getByTitle('Length of window 1', { exact: true }).querySelector('input')!
+    expect(length.value).toBe('0.315')
+    fireEvent.change(length, { target: { value: '0.4' } })
+    fireEvent.blur(length)
     expect(note().thread.windows.sections[0].endMm).toBe(10.16)
+    expect(screen.getByTitle('Gap between windows 1 and 2', { exact: true }).querySelector('input')!.value).toBe(String(lengthIn(14 - 10.16, 'in')))
 
     // Back to mm from any field: nothing ever moved
     await user.click(screen.getAllByRole('button', { name: 'Unit: Inches' })[0])

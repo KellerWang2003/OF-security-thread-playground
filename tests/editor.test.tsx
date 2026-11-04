@@ -162,7 +162,7 @@ describe('username workspace editor', () => {
     expect(tab()).toBe('Banknote')
     expect(screen.queryByText('You can add windows here')).toBeNull()
   })
-  it('edits windows without an edit mode, undoes deletion, and preserves sections when windows are off', async () => {
+  it('edits windows on the canvas with their measures, undoes deletion, and preserves sections when windows are off', async () => {
     vi.stubGlobal('ResizeObserver', class {
       callback: ResizeObserverCallback
       constructor(callback: ResizeObserverCallback) { this.callback = callback }
@@ -178,32 +178,64 @@ describe('username workspace editor', () => {
     await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
     await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
     await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
-    const row = (n: number) => screen.getByRole('button', { name: new RegExp(`^Window ${n},`) })
+    const sections = () => useProjects.getState().demoPreview!.notes[0].thread.windows.sections
+    const field = (title: string) => screen.getByTitle(title, { exact: true }).querySelector('input')!
+    const type = (title: string, value: string) => {
+      fireEvent.change(field(title), { target: { value } })
+      fireEvent.blur(field(title))
+    }
+    const tile = (n: number) => screen.getByRole('button', { name: `Window ${n}`, exact: true })
+    // The card keeps its switch and +; the windows themselves are only on the canvas
     expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
-    await user.click(row(2))
-    expect(screen.getByRole('group', { name: 'Edit thread windows' })).toBeDefined()
-    const start = screen.getByTitle('Window 2: visible section starts here').querySelector('input')!
-    fireEvent.change(start, { target: { value: '16' } })
-    expect(start.value).toBe('16')
-    await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
-    await user.keyboard('{Delete}')
     expect(screen.queryByRole('button', { name: 'Delete window', exact: true })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Show all windows', exact: true })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Add window', exact: true })).toBeDefined()
+    // Switched off, the card says the sponsor requires them; on, the first window is picked to edit on the canvas
+    const windows = screen.getByRole('switch', { name: 'Windows' })
+    await user.click(windows)
+    expect(screen.getByText('Windows are required by our sponsor, Oberthur')).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Add window', exact: true })).toBeNull()
+    await user.click(windows)
+    expect(screen.queryByText('Windows are required by our sponsor, Oberthur')).toBeNull()
+    expect(screen.getByRole('group', { name: 'Edit thread windows' })).toBeDefined()
+    expect(tile(1).getAttribute('aria-pressed')).toBe('true')
+    // Every window's length on the canvas; the picked one's distance from the banknote's edge and to the next window
+    expect([1, 2, 3, 4, 5].map((n) => field(`Length of window ${n}`).value)).toEqual(['8', '8', '8', '8', '8'])
+    expect(field('Window 1 from the top of the banknote').value).toBe('0')
+    expect(field('Gap between windows 1 and 2').value).toBe('6')
+    // A press on another window's measure picks that window, and shows the gaps either side of it
+    fireEvent.pointerDown(screen.getByText('Window 2', { exact: true }), { button: 0, pointerId: 1 })
+    expect(tile(2).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByTitle('Window 1 from the top of the banknote', { exact: true })).toBeNull()
+    expect(field('Gap between windows 2 and 3').value).toBe('6')
+    // A gap typed moves the window, its length kept; a length typed moves its end
+    type('Gap between windows 1 and 2', '8')
+    expect(sections()[1]).toMatchObject({ startMm: 16, endMm: 24 })
+    expect(field('Gap between windows 2 and 3').value).toBe('4')
+    type('Length of window 2', '9')
+    expect(sections()[1]).toMatchObject({ startMm: 16, endMm: 25 })
+    // Delete removes the picked window, and undo brings it back
+    await user.click(tile(2))
+    await user.keyboard('{Delete}')
+    expect(sections()).toHaveLength(4)
     await user.click(screen.getByRole('button', { name: 'Undo', exact: true }))
-    await user.click(screen.getByRole('button', { name: 'Window 2', exact: true }))
-    expect(screen.getByTitle('Window 2: visible section starts here').querySelector('input')!.value).toBe('16')
+    expect(sections()[1]).toMatchObject({ startMm: 16, endMm: 25 })
     // Clicking the banknote away from its windows ends editing and picks the banknote itself, not its thread
     fireEvent.pointerDown(document.querySelector('[data-note-body]')!, { button: 0, pointerId: 1 })
     fireEvent.pointerUp(document.querySelector('[data-note-body]')!, { button: 0, pointerId: 1 })
     expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
     expect(tab()).toBe('Banknote')
+    // Off and on again, the windows are as they were
     await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
-    expect(row(2)).toBeDefined()
     await user.click(screen.getByRole('switch', { name: 'Windows' }))
-    expect(screen.queryByRole('button', { name: /^Window 2,/ })).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
     await user.click(screen.getByRole('switch', { name: 'Windows' }))
     expect(screen.getByRole('group', { name: 'Edit thread windows' })).toBeDefined()
-    await user.click(row(2))
-    expect(screen.getByTitle('Window 2: visible section starts here').querySelector('input')!.value).toBe('16')
+    // Window 2 now sits too close to window 3 for both their lengths to show: only the picked window's always does
+    expect(screen.queryByTitle('Length of window 2', { exact: true })).toBeNull()
+    await user.click(tile(2))
+    expect(field('Length of window 2').value).toBe('9')
+    expect(screen.queryByTitle('Length of window 3', { exact: true })).toBeNull()
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('group', { name: 'Edit thread windows' })).toBeNull()
     expect(saves).not.toHaveBeenCalled()

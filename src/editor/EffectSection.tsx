@@ -280,12 +280,15 @@ function EffectPicker({ note, lens, onChoose }: { note: Note; lens: LensState; o
   )
 }
 
-/** Vertical ridges aren't supported by the sponsor (Keller), so wherever they are chosen this says so, in the warnings' amber */
-function SponsorWarning({ className }: { className?: string }) {
+/**
+ * Vertical ridges aren't supported by the sponsor (Keller), so wherever they are chosen this says so, in the warnings'
+ * amber; so does a thread without windows, which the sponsor requires (`children`)
+ */
+export function SponsorWarning({ className, children = 'Not supported by our sponsor, Oberthur' }: { className?: string; children?: ReactNode }) {
   return (
     <span className={cn('flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500', className)}>
       <TriangleAlert className="size-3.5 shrink-0" />
-      Not supported by our sponsor, Oberthur
+      {children}
     </span>
   )
 }

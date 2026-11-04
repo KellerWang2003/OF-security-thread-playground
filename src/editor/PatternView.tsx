@@ -1,7 +1,7 @@
 import { Maximize, Minus, Plus } from 'lucide-react'
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
-import { IconButton, Labeled, Panel } from '../components/controls'
+import { IconButton, Panel } from '../components/controls'
 import { ThreadArt } from '../components/NoteView'
 import { imageBox, placeOf, uprightBox, type UprightBox } from '../lib/artwork'
 import { clamp } from '../lib/frames'
@@ -21,6 +21,7 @@ import { updateNote } from '../lib/store'
 import type { Note, ThreadPattern, ThreadSection } from '../lib/types'
 import { framesTiltOf, setTilt, springToFlat, useTilt } from '../tilt/tilt'
 import { ImagePlacer } from './ImagePlacer'
+import { Measure } from './Measure'
 import { FitTileButton, ThreadWidthField, TileLengthField } from './ThreadSizeFields'
 import { useElementSize } from './useElementSize'
 
@@ -418,36 +419,6 @@ function zoomAround(v: View, factor: number, cx: number, cy: number, fit: number
   const scale = clamp(v.scale * factor, fit * ZOOM_LIMITS.min, fit * ZOOM_LIMITS.max)
   const k = scale / v.scale
   return { scale, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k }
-}
-
-/**
- * A measurement beside the thread: a bracket over `from` to `to` (px along that side of the strip) and its labelled
- * field beyond it. Presses on it never reach the thread, so scrubbing or typing doesn't tilt it.
- */
-function Measure({ side, from, to, label, action, children }: {
-  side: 'left' | 'right' | 'top' | 'bottom'
-  from: number
-  to: number
-  /** The small label over the field, as over every control in the panels */
-  label: string
-  /** A small control at the label's end */
-  action?: ReactNode
-  children: ReactNode
-}) {
-  const gap = 10
-  const upright = side === 'left' || side === 'right'
-  const place: CSSProperties = upright
-    ? { top: from, height: Math.max(0, to - from), [side === 'left' ? 'right' : 'left']: `calc(100% + ${gap}px)` }
-    : { left: from, width: Math.max(0, to - from), [side === 'top' ? 'bottom' : 'top']: `calc(100% + ${gap}px)` }
-  // The bracket's open side faces the thread
-  const bracket = { left: 'h-full w-1.5 border-y border-l', right: 'h-full w-1.5 border-y border-r', top: 'h-1.5 w-full border-x border-t', bottom: 'h-1.5 w-full border-x border-b' }[side]
-  return (
-    <div className={cn('absolute flex items-center gap-1.5', { left: 'flex-row-reverse', right: 'flex-row', top: 'flex-col-reverse', bottom: 'flex-col' }[side])}
-      style={place} data-measure="" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-      <div className={cn('shrink-0 border-foreground/40', bracket)} />
-      <Labeled label={label} action={action} className="shrink-0 rounded-md bg-background p-1.5 shadow-xs">{children}</Labeled>
-    </div>
-  )
 }
 
 /** Empty thread (no section prints there) as a faint check */

@@ -39,13 +39,12 @@ type Change = (note: Note) => Note
  * time, so the panel never grows with features. Every control has a small label over it (`Labeled`) unless a word in
  * it or beside it already says what it is.
  */
-export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onWindowSelect, onPlace, onAdd, onRemove, windowsTip, onWindowsTipDone }: {
+export function Inspector({ note, noteRef, layer, onLayer, onWindowSelect, onPlace, onAdd, onRemove, windowsTip, onWindowsTipDone }: {
   note: Note
   /** Picks a part of the banknote, as its row in the list does */
   onLayer: (layer: Layer) => void
   noteRef: NoteRef
   layer: Layer
-  selectedWindowId?: string
   /** Selecting a window edits it on the canvas; undefined leaves window editing */
   onWindowSelect: (id: string | undefined) => void
   /** Shows the placed layer the panel shows on the canvas, flat, with its box to place it */
@@ -192,7 +191,7 @@ export function Inspector({ note, noteRef, layer, onLayer, selectedWindowId, onW
           />
           </Labeled>
         </div>
-        <WindowsCard note={note} noteRef={noteRef} selectedWindowId={selectedWindowId} onWindowSelect={onWindowSelect} tip={windowsTip} onTipDone={onWindowsTipDone} />
+        <WindowsCard note={note} noteRef={noteRef} onWindowSelect={onWindowSelect} tip={windowsTip} onTipDone={onWindowsTipDone} />
       </Section>
 
       <TimelineFrame note={note} noteRef={noteRef} />
