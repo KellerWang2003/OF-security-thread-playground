@@ -1,8 +1,8 @@
-import { PAPER, mirrored, sideImageId } from './back'
+import { PAPER, mirrored, showsBackAt, sideImageId, turnDeg, type Side } from './back'
 import { SHADE_DEG } from './frames'
 import { lensMix, type Tilt2 } from './lens'
 import { watermarkOpacity, watermarkReveal } from './light'
-import { lightAt, playbackPlan, tiltAt } from './moves'
+import { lightAt, playbackPlan, tiltAt, turnAt, type PlaybackPlan } from './moves'
 import { loadImageUrl } from './images'
 import { patternMix, playbackLens, playbackTilt, preparePattern, sectionSpans, shownLabel } from './pattern'
 import { SWEEP_SECONDS, playbackEase, playbackSettings } from './playback'
@@ -39,21 +39,53 @@ export function playbackAngles(tilt: Note['tilt'], fps: number, loops = 1) {
   return sweepProgress(tilt, fps, loops).map((k) => Math.max(0, tilt.cycleDeg) * k)
 }
 
-/** The tilt of every video frame for `loops` passes of the project's playback moves, exactly as live playback */
-export function playbackTilts(note: Pick<Note, 'tilt' | 'frames' | 'pattern'>, fps: number, loops = 1): Tilt2[] {
-  const plan = playbackPlan(playbackTilt(note), playbackLens(note))
-  const count = Math.max(1, Math.round(plan.seconds * loops * fps))
-  return Array.from({ length: count }, (_, i) => tiltAt(plan, i / fps))
+type PlaybackNote = Pick<Note, 'tilt' | 'frames' | 'pattern'>
+const planOf = (note: PlaybackNote) => playbackPlan(playbackTilt(note), playbackLens(note))
+
+/**
+ * Video frames in `loops` loops of the project's playback. A playlist that leaves the banknotes on their other side (an
+ * odd number of Flips) plays twice a loop, so a video ends, and a GIF comes round, on the side it began
+ */
+const frameCount = (plan: PlaybackPlan, fps: number, loops: number) =>
+  Math.max(1, Math.round(plan.seconds * loops * (plan.flips.length % 2 ? 2 : 1) * fps))
+
+/** The tilt of every video frame for `loops` loops of the project's playback moves, exactly as live playback */
+export function playbackTilts(note: PlaybackNote, fps: number, loops = 1): Tilt2[] {
+  const plan = planOf(note)
+  return Array.from({ length: frameCount(plan, fps, loops) }, (_, i) => tiltAt(plan, i / fps))
 }
 
 /** How far the banknotes are held to the light at every video frame, matching playbackTilts frame for frame */
-export function playbackLights(note: Pick<Note, 'tilt' | 'frames' | 'pattern'>, fps: number, loops = 1): number[] {
-  const plan = playbackPlan(playbackTilt(note), playbackLens(note))
-  const count = Math.max(1, Math.round(plan.seconds * loops * fps))
-  return Array.from({ length: count }, (_, i) => lightAt(plan, i / fps))
+export function playbackLights(note: PlaybackNote, fps: number, loops = 1): number[] {
+  const plan = planOf(note)
+  return Array.from({ length: frameCount(plan, fps, loops) }, (_, i) => lightAt(plan, i / fps))
 }
 
+/**
+ * How far the banknotes are turned over at every video frame, 0 (front) to 1 (back), matching playbackTilts frame for
+ * frame: from their backs (`back`, as the canvas shows them turned over) or fronts, Flip moves turning them as live
+ */
+export function playbackTurns(note: PlaybackNote, fps: number, loops = 1, back = false): number[] {
+  const plan = planOf(note)
+  return Array.from({ length: frameCount(plan, fps, loops) }, (_, i) => turnAt(plan, i / fps, back))
+}
+
+/** Whether the project's playback turns the banknotes over: its playlist has a Flip */
+export const turnsOver = (note: PlaybackNote) => planOf(note).flips.length > 0
+
 const asTilt = (t: Tilt2 | number): Tilt2 => (typeof t === 'number' ? { x: 0, y: t } : t)
+
+/** What a banknote turns through on screen: its tilt, and turning over added to its side tilt, as NoteView adds it to rotateY */
+const withTurn = (tilt: Tilt2 | number, turn: number): Tilt2 => {
+  const { x, y } = asTilt(tilt)
+  return { x: x + turnDeg(turn), y }
+}
+
+/** What every video frame turns the banknotes through on screen (`withTurn`), for laying them out with room for it */
+export function playbackViews(note: PlaybackNote, fps: number, loops = 1, back = false): Tilt2[] {
+  const turns = playbackTurns(note, fps, loops, back)
+  return playbackTilts(note, fps, loops).map((tilt, i) => withTurn(tilt, turns[i]))
+}
 
 /**
  * CSS rotateX(angle) about the note's centre under `perspective`: where a point `y` px from the centre lands
@@ -97,6 +129,8 @@ export interface NoteAssets {
   /** Magnetic ink's shape, the mask its colours and bar are drawn through (inkMask.ts) */
   ink?: InkMask
 }
+/** A banknote's assets for each side an export shows: the one it shows, or both when playback turns it over */
+export type SideAssets = Partial<Record<Side, NoteAssets>>
 
 function loadImage(url: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -497,18 +531,23 @@ export function exportLayout(notes: Note[], scale: number, angles: (Tilt2 | numb
  */
 export const exportReveal = (light: number, angle: Tilt2 | number, backlit = false) => watermarkReveal(Math.max(light, backlit ? 1 : 0), asTilt(angle))
 
-/** Renders one export frame: the background, then every banknote at tilt `angle`, held to the light by `light` (0 to 1) */
+/**
+ * Renders one export frame: the background, then every banknote at tilt `angle`, held to the light by `light` (0 to 1)
+ * and turned `turn` of the way over (0 front, 1 back), showing its back from halfway as the canvas does
+ */
 export function drawExportFrame(
   ctx: Ctx,
   layout: ReturnType<typeof exportLayout>,
-  assets: Map<string, NoteAssets>,
+  assets: Map<string, SideAssets>,
   faces: Map<string, OffscreenCanvas>,
   scale: number,
   angle: Tilt2 | number,
-  options: Omit<FaceOptions, 'reveal' | 'offsetMm'> & { background?: string; backlit?: boolean; offsets?: Record<string, number> },
+  options: Omit<FaceOptions, 'reveal' | 'offsetMm' | 'back'> & { background?: string; backlit?: boolean; offsets?: Record<string, number> },
   light = 0,
+  turn = 0,
 ) {
   const reveal = exportReveal(light, angle, options.backlit)
+  const back = showsBackAt(turn)
   ctx.clearRect(0, 0, layout.width, layout.height)
   if (options.background) {
     ctx.fillStyle = options.background
@@ -517,12 +556,12 @@ export function drawExportFrame(
   ctx.imageSmoothingQuality = 'high'
   for (const cell of layout.cells) {
     const face = faces.get(cell.note.id)
-    const noteAssets = assets.get(cell.note.id)
+    const noteAssets = assets.get(cell.note.id)?.[back ? 'back' : 'front']
     if (!face || !noteAssets) continue
     const faceCtx = face.getContext('2d')!
     faceCtx.clearRect(0, 0, face.width, face.height)
-    drawFace(faceCtx, cell.note, noteAssets, scale, angle, { ...options, reveal, offsetMm: options.offsets?.[cell.note.id] })
-    drawTilted(ctx, face, cell.cx, cell.cy, options.perspective ? angle : 0, perspectiveFor(cell.note, scale))
+    drawFace(faceCtx, cell.note, noteAssets, scale, angle, { ...options, back, reveal, offsetMm: options.offsets?.[cell.note.id] })
+    drawTilted(ctx, face, cell.cx, cell.cy, options.perspective ? withTurn(angle, turn) : 0, perspectiveFor(cell.note, scale))
   }
 }
 
@@ -551,9 +590,9 @@ export function scaleForHeight(notes: Note[], angles: (Tilt2 | number)[], perspe
 /** The file groups an export makes: one with every banknote side by side, or one per banknote */
 export const exportGroups = (notes: Note[], separate: boolean) => (separate && notes.length > 1 ? notes.map((n) => [n]) : [notes])
 
-export function exportSize(notes: Note[], options: { height: number; fps: number; loops: number; perspective: boolean; separate: boolean }) {
+export function exportSize(notes: Note[], options: { height: number; fps: number; loops: number; perspective: boolean; separate: boolean; back?: boolean }) {
   if (notes.length === 0) return { width: 0, height: 0, seconds: 0 }
-  const angles = playbackTilts(notes[0], options.fps, options.loops)
+  const angles = playbackViews(notes[0], options.fps, options.loops, options.back)
   const layouts = exportGroups(notes, options.separate).map((group) =>
     exportLayout(group, scaleForHeight(group, angles, options.perspective, options.height), angles, options.perspective))
   return { width: Math.max(...layouts.map((l) => l.width)), height: Math.max(...layouts.map((l) => l.height)), seconds: angles.length / options.fps }

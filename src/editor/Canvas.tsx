@@ -112,6 +112,7 @@ export function Canvas({
   onExport,
   onEditWindow,
   onEditThread,
+  inStudio = false,
 }: {
   projectId: string
   notes: Note[]
@@ -137,6 +138,8 @@ export function Canvas({
   onEditWindow?: (noteId: string, windowId: string) => void
   /** A double-click on a thread, or the Edit thread button under the picked one, opens the thread editor; left out while it is open */
   onEditThread?: (noteId: string) => void
+  /** The thread editor is open over the canvas: the thread is only on the front, so playback's Flip moves wait flat, as F does nothing there */
+  inStudio?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const size = useElementSize(ref)
@@ -164,7 +167,7 @@ export function Canvas({
   const lens = useMemo(() => (reference ? playbackLens(reference) : undefined), [reference])
   const loopLens = lens ?? lensState({ cycleDeg: 30, transition: 0 })
   const plan = useMemo(() => playbackPlan(reference ? playbackTilt(reference) : { cycleDeg: 30, transition: 0 }, loopLens), [reference, loopLens])
-  useTiltLoop(plan, loopLens.viewDeg)
+  useTiltLoop(plan, loopLens.viewDeg, !inStudio)
   const offsets = usePatternOffsets((s) => s.offsets)
   const drifts = useCutDrift((s) => s.drifts)
   const unit = useLengthUnit((s) => s.unit)

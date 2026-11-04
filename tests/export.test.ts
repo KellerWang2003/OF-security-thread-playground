@@ -1,12 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
-import { drawFace, drawInk, exportLayout, exportSize, framePx, loadNoteAssets, perspectiveFor, playbackAngles, projectRow, sourceRow, tiltedBounds } from '../src/lib/exportRender'
+import {
+  drawExportFrame, drawFace, drawInk, exportLayout, exportSize, framePx, loadNoteAssets, perspectiveFor, playbackAngles, playbackTurns, playbackViews, projectRow,
+  sourceRow, tiltedBounds, turnsOver,
+} from '../src/lib/exportRender'
 import type { InkMask } from '../src/lib/inkMask'
 import type { Relief } from '../src/lib/relief'
 import { DEFAULT_INK, INK_BAR_LIGHT, INK_ROLL_DEG, barCentre, inkShift } from '../src/lib/magneticInk'
-import { PAPER } from '../src/lib/back'
+import { FLIP_SECONDS, PAPER } from '../src/lib/back'
 import { createNote } from '../src/lib/notes'
 import { SWEEP_SECONDS } from '../src/lib/playback'
 import { copyStarts, imageBox } from '../src/lib/artwork'
+import type { Note, PlaybackMove } from '../src/lib/types'
 
 const loadImageUrl = vi.hoisted(() => vi.fn(async (_id: string, _px?: number): Promise<string | undefined> => undefined))
 vi.mock('../src/lib/images', () => ({ loadImageUrl }))
@@ -217,5 +221,67 @@ describe('the back in an export', () => {
     loadImageUrl.mockClear()
     await loadNoteAssets(note, 10, true)
     expect(loadImageUrl.mock.calls.map(([id]) => id)).toEqual(['back'])
+  })
+})
+
+describe('turning over in an export', () => {
+  const withMoves = (note: Note, moves: PlaybackMove[]): Note => ({ ...note, tilt: { ...note.tilt, moves } })
+  const flip: PlaybackMove = { id: 'f', kind: 'flip' }
+  const swing: PlaybackMove = { id: 'a', kind: 'y', y: 30 }
+
+  it('turns the banknotes over at each Flip, playing twice a loop when that leaves them on their other side', () => {
+    const once = withMoves(makeNote(), [flip])
+    expect(turnsOver(once)).toBe(true)
+    expect(turnsOver(makeNote())).toBe(false)
+    // Over to the back, then round to the front again, so a GIF comes round where it began
+    const turns = playbackTurns(once, 20)
+    expect(turns).toHaveLength(2 * FLIP_SECONDS * 20)
+    expect(turns[0]).toBe(0)
+    expect(turns[5]).toBeCloseTo(0.5)
+    expect(turns[10]).toBeCloseTo(1)
+    expect(turns[15]).toBeCloseTo(0.5)
+    // From the backs, the other way round
+    expect(playbackTurns(once, 20, 1, true)[0]).toBe(1)
+    // Two Flips come round within a loop
+    expect(playbackTurns(withMoves(makeNote(), [flip, { ...flip, id: 'g' }]), 20)).toHaveLength(2 * FLIP_SECONDS * 20)
+    const options = { height: 720, fps: 30, loops: 1, perspective: true, separate: false }
+    expect(exportSize([withMoves(makeNote(), [swing, flip])], options).seconds).toBeCloseTo(Math.round(2 * (2 * SWEEP_SECONDS + FLIP_SECONDS) * 30) / 30)
+  })
+
+  it('makes room for the banknotes turning edge-on, their near edge growing as it comes round', () => {
+    const turning = withMoves(makeNote(150, 75), [swing, flip])
+    expect(Math.max(...playbackViews(turning, 30).map((view) => Math.abs(view.x)))).toBeGreaterThan(85)
+    const options = { height: 1080, fps: 30, loops: 1, perspective: true, separate: false }
+    const still = exportSize([withMoves(makeNote(150, 75), [swing])], options)
+    const turned = exportSize([turning], options)
+    expect(turned.height).toBe(1080)
+    // Drawn smaller to fit the same height
+    expect(turned.width).toBeLessThan(still.width)
+  })
+
+  it('draws each banknote from its back’s assets from halfway round', () => {
+    const drawn: unknown[] = []
+    const ctx = new Proxy({} as Record<string, unknown>, {
+      get(target, key) {
+        if (key in target) return target[key as string]
+        if (key === 'createLinearGradient') return () => ({ addColorStop() {} })
+        return key === 'drawImage' ? (image: unknown) => drawn.push(image) : () => {}
+      },
+      set(target, key, value) {
+        target[key as string] = value
+        return true
+      },
+    }) as unknown as OffscreenCanvasRenderingContext2D
+    const note = makeNote(150, 75)
+    const image = (side: string) => ({ side, naturalWidth: 300, naturalHeight: 150 }) as unknown as HTMLImageElement
+    const assets = new Map([[note.id, { front: { face: image('front'), frames: new Map() }, back: { face: image('back'), frames: new Map() } }]])
+    const faces = new Map([[note.id, { width: 300, height: 150, getContext: () => ctx } as unknown as OffscreenCanvas]])
+    const layout = exportLayout([note], 2, [0], false)
+    for (const [turn, side, other] of [[0.4, 'front', 'back'], [0.6, 'back', 'front']] as const) {
+      drawn.length = 0
+      drawExportFrame(ctx, layout, assets, faces, 2, 0, { sheen: false, perspective: false }, 0, turn)
+      expect(drawn).toContainEqual(expect.objectContaining({ side }))
+      expect(drawn).not.toContainEqual(expect.objectContaining({ side: other }))
+    }
   })
 })

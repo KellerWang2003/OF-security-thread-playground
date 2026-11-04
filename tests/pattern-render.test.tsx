@@ -199,7 +199,7 @@ describe('a thread with sections', () => {
     const face = recorder()
     const faces = new Map([[note.id, { getContext: () => face.ctx, width: 400, height: 400 } as unknown as OffscreenCanvas]])
     const out = recorder()
-    drawExportFrame(out.ctx, layout, new Map([[note.id, assetsFor(note)]]), faces, 1, 0, { sheen: false, perspective: false, offsets: { [note.id]: 1 } })
+    drawExportFrame(out.ctx, layout, new Map([[note.id, { front: assetsFor(note) }]]), faces, 1, 0, { sheen: false, perspective: false, offsets: { [note.id]: 1 } })
     const blocks = face.log.filter((op) => op[0] === 'rect').slice(1)
     // At 1 px per mm the first block starts at the offset, and again one repeat later
     expect(blocks[0]).toEqual(['rect', 0, 1, 4, repeat / 2])

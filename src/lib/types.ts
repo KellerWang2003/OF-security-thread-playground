@@ -118,12 +118,12 @@ export interface Recording {
  * One step of playback. Preset moves go out from flat and back: up/down, side to side, both at once
  * (diagonal), or once round an ellipse (circle). `x`/`y` are the signed angles reached; absent means one full
  * cycle of that tilt. Hold (`hold`) stays flat, a pause once the move before it has come back. Hold to light
- * (`light`) stays flat, fades the light behind the banknote in, holds and fades it out. A gesture is a recording of
- * the tilt pad.
+ * (`light`) stays flat, fades the light behind the banknote in, holds and fades it out. Flip (`flip`) stays flat while
+ * every banknote turns over to its other side, as F does. A gesture is a recording of the tilt pad.
  */
 export interface PlaybackMove {
   id: string
-  kind: 'y' | 'x' | 'diagonal' | 'circle' | 'hold' | 'light' | 'gesture'
+  kind: 'y' | 'x' | 'diagonal' | 'circle' | 'hold' | 'light' | 'flip' | 'gesture'
   x?: number
   y?: number
   /** Up/down and side only: the signed angle the move starts and returns to (flat when absent), so it can swing −12° to +12° */

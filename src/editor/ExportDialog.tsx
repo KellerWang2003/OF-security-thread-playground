@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CheckboxField, ColorField, InlineField, ScrubField, Segmented } from '../components/controls'
 import { reportError } from '../cloud/notices'
 import type { ExportFormat } from '../lib/exportMedia'
-import { RESOLUTIONS, exportSize } from '../lib/exportRender'
+import { RESOLUTIONS, exportSize, turnsOver } from '../lib/exportRender'
 import type { Project } from '../lib/types'
 import { usePatternOffsets } from '../lib/patternOffset'
 import { useTilt } from '../tilt/tilt'
@@ -77,6 +77,8 @@ export function ExportDialog({ project, selectedId, open, onOpenChange }: {
   const options = { format, notes, separate: several && separate, height, fps, loops: format === 'gif' ? 1 : loops, sheen, perspective, frameNumbers, backlit, back,
     background: format === 'gif' && transparent ? undefined : background, offsets }
   const size = exportSize(notes, options)
+  // Turned over, the banknotes export their backs, or start on them when Flip moves turn them over
+  const sides = !back ? '' : notes.length > 0 && turnsOver(notes[0]) ? ' · from the backs' : ' · backs'
   const busy = progress !== undefined
   const files = options.separate ? notes.length : 1
 
@@ -169,7 +171,7 @@ export function ExportDialog({ project, selectedId, open, onOpenChange }: {
             <Progress className="flex-1" value={Math.round(progress * 100)} />
           ) : (
             <span className="text-xs text-muted-foreground tabular-nums">
-              {notes.length > 0 && `${size.width} × ${size.height} · ${size.seconds.toFixed(1)} s${files > 1 ? ` · ${files} files` : ''}${back ? ' · backs' : ''}${backlit ? ' · held to the light' : ''}`}
+              {notes.length > 0 && `${size.width} × ${size.height} · ${size.seconds.toFixed(1)} s${files > 1 ? ` · ${files} files` : ''}${sides}${backlit ? ' · held to the light' : ''}`}
             </span>
           )}
           <div className="flex shrink-0 gap-2">

@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { backOf, designFace, mirrored, sideImageId } from '../src/lib/back'
+import { backOf, designFace, mirrored, sideImageId, turnDeg } from '../src/lib/back'
 import { createNote, createProject, migrateProject } from '../src/lib/notes'
 import type { Note } from '../src/lib/types'
-import { turnDeg } from '../src/tilt/tilt'
 
 // One banknote in place of the project store, and artwork that stores at once
 const held = vi.hoisted(() => ({ note: undefined as Note | undefined, removed: [] as string[] }))

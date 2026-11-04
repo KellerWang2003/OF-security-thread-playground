@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { FLIP_SECONDS } from '../src/lib/back'
 import { playbackTilts } from '../src/lib/exportRender'
 import { lensState } from '../src/lib/lens'
 import {
-  HOLD_LIMITS, HOLD_SECONDS, LIGHT_FADE_SECONDS, LIGHT_HOLD_SECONDS, editableMoves, holdMoveSeconds, lightAt, lightHoldSeconds, moveFromRecording, movesOf,
-  planLitPaths, playbackPlan, recordingFromSamples, swingEnds, tiltAt,
+  HOLD_LIMITS, HOLD_SECONDS, LIGHT_FADE_SECONDS, LIGHT_HOLD_SECONDS, editableMoves, flipsBetween, holdMoveSeconds, lightAt, lightHoldSeconds, moveFromRecording,
+  movesOf, planLitPaths, playbackPlan, recordingFromSamples, swingEnds, tiltAt, turnAt,
 } from '../src/lib/moves'
 import { migrateProject } from '../src/lib/notes'
 import { SWEEP_SECONDS } from '../src/lib/playback'
@@ -149,6 +150,63 @@ describe('hold', () => {
   it('leaves every other move without a pause, whatever hold an older save set for all of them', () => {
     expect(planOf([{ id: 'a', kind: 'y', y: 20 }], { holdSeconds: 0.5 }).seconds).toBeCloseTo(2 * leg)
     expect(planOf([{ id: 'l', kind: 'light' }], { holdSeconds: 0.5 }).seconds).toBeCloseTo(2 * LIGHT_FADE_SECONDS + LIGHT_HOLD_SECONDS)
+  })
+})
+
+describe('flip', () => {
+  it('stays flat in reflected light while the banknotes turn over, as long as F takes, scaled by speed', () => {
+    const plan = planOf([{ id: 'f', kind: 'flip' }])
+    expect(plan.seconds).toBeCloseTo(FLIP_SECONDS)
+    expect(plan.flips).toEqual([0])
+    for (const t of [0, FLIP_SECONDS / 2, FLIP_SECONDS - 0.01]) {
+      expect(tiltAt(plan, t)).toEqual({ x: 0, y: 0 })
+      expect(lightAt(plan, t)).toBe(0)
+    }
+    expect(planOf([{ id: 'f', kind: 'flip' }], { speed: 2 })).toMatchObject({ seconds: FLIP_SECONDS / 2, flipSeconds: FLIP_SECONDS / 2 })
+  })
+
+  it('turns them once the move before it has come back to flat', () => {
+    const plan = planOf([{ id: 'a', kind: 'y', y: 20 }, { id: 'f', kind: 'flip' }, { id: 'b', kind: 'x', x: 30 }])
+    expect(plan.seconds).toBeCloseTo(2 * leg + FLIP_SECONDS + 2 * leg)
+    expect(plan.flips).toEqual([expect.closeTo(2 * leg)])
+    expect(tiltAt(plan, 2 * leg + FLIP_SECONDS / 2)).toEqual({ x: expect.closeTo(0), y: expect.closeTo(0) })
+    expect(tiltAt(plan, 2 * leg + FLIP_SECONDS + leg / 2).x).toBeCloseTo(15)
+  })
+
+  it('turns them to their other side, so a pass with one Flip leaves the next to play on the other side', () => {
+    const plan = planOf([{ id: 'a', kind: 'y', y: 20 }, { id: 'f', kind: 'flip' }])
+    const pass = 2 * leg + FLIP_SECONDS
+    expect(turnAt(plan, 0)).toBe(0)
+    expect(turnAt(plan, leg)).toBe(0)
+    // At a steady rate, turnDeg easing it as it eases F
+    expect(turnAt(plan, 2 * leg + FLIP_SECONDS / 4)).toBeCloseTo(0.25)
+    expect(turnAt(plan, pass)).toBeCloseTo(1)
+    expect(turnAt(plan, pass + leg)).toBe(1)
+    expect(turnAt(plan, pass + 2 * leg + FLIP_SECONDS / 4)).toBeCloseTo(0.75)
+    expect(turnAt(plan, 2 * pass + leg)).toBe(0)
+    // Begun on the backs, the other way round
+    expect(turnAt(plan, leg, true)).toBe(1)
+    expect(turnAt(plan, pass + leg, true)).toBe(0)
+    // Two Flips bring them round within the pass, so every pass begins on the same side
+    const twice = planOf([{ id: 'f', kind: 'flip' }, { id: 'a', kind: 'y', y: 20 }, { id: 'g', kind: 'flip' }])
+    expect(turnAt(twice, FLIP_SECONDS + leg)).toBe(1)
+    expect(turnAt(twice, twice.seconds)).toBe(0)
+    expect(turnAt(twice, twice.seconds + FLIP_SECONDS + leg)).toBe(1)
+    // Without a Flip they stay as they are
+    expect(turnAt(planOf([{ id: 'a', kind: 'y', y: 20 }]), leg, true)).toBe(1)
+  })
+
+  it('counts the Flips that begin between two moments of a pass, round its end too, for live playback to turn as each begins', () => {
+    const plan = planOf([{ id: 'f', kind: 'flip' }, { id: 'a', kind: 'y', y: 20 }, { id: 'g', kind: 'flip' }])
+    const second = FLIP_SECONDS + 2 * leg
+    expect(plan.flips).toEqual([0, expect.closeTo(second)])
+    // From the very start, the first Flip included
+    expect(flipsBetween(plan, undefined, 0)).toBe(1)
+    expect(flipsBetween(plan, 0, second - 0.01)).toBe(0)
+    expect(flipsBetween(plan, second - 0.01, second + 0.01)).toBe(1)
+    // Round the end of the pass into the next, where the first one begins again
+    expect(flipsBetween(plan, plan.seconds - 0.01, 0.01)).toBe(1)
+    expect(flipsBetween(plan, second - 0.01, 0.01)).toBe(2)
   })
 })
 

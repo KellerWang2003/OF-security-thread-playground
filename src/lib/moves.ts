@@ -1,3 +1,4 @@
+import { FLIP_SECONDS } from './back'
 import { clamp } from './frames'
 import { FLAT, SWEEP_MAX, respondsTo, type Axis, type LensState, type Tilt2 } from './lens'
 import { SWEEP_SECONDS, playbackEase, playbackSettings } from './playback'
@@ -7,7 +8,8 @@ import type { PlaybackCurve, PlaybackMove, RecordedPoint, Recording, TiltSetting
  * Playback as a list of moves played in order, each a path on the tilt pad with how far the banknote is held to
  * the light along it. Preset moves start and end flat, in reflected light; a recorded gesture is joined to flat on
  * both sides. Nothing pauses unless a Hold says so: it stays flat, so it pauses after the move before it has come
- * back. Live playback, the pad's path and export all read the same plan, so they always agree.
+ * back. A Flip turns the banknotes over to their other side, flat, as F does. Live playback, the pad's path and export
+ * all read the same plan, so they always agree.
  */
 
 export const MOVE_KINDS: { value: Exclude<PlaybackMove['kind'], 'gesture'>; label: string }[] = [
@@ -15,6 +17,7 @@ export const MOVE_KINDS: { value: Exclude<PlaybackMove['kind'], 'gesture'>; labe
   { value: 'x', label: '↔ Side to side' },
   { value: 'diagonal', label: '⤢ Diagonal' },
   { value: 'circle', label: '◯ Circle' },
+  { value: 'flip', label: '⇄ Flip' },
   { value: 'hold', label: '⏸ Hold' },
   { value: 'light', label: '☀ Hold to light' },
 ]
@@ -78,7 +81,7 @@ export function moveReach(move: PlaybackMove, lens: LensState): Tilt2 {
 export function movesAxes(move: Pick<PlaybackMove, 'kind'>): Axis[] {
   if (move.kind === 'y') return ['y']
   if (move.kind === 'x') return ['x']
-  if (move.kind === 'gesture' || move.kind === 'light' || move.kind === 'hold') return []
+  if (move.kind === 'gesture' || move.kind === 'light' || move.kind === 'hold' || move.kind === 'flip') return []
   return ['x', 'y']
 }
 
@@ -91,11 +94,17 @@ interface Segment {
   at: number[]
   /** How far the banknote is held to the light at each point, 0 to 1; absent means not at all */
   light?: number[]
+  /** A Flip: the banknotes turn over to their other side along it, at a steady rate */
+  flip?: true
 }
 export interface PlaybackPlan {
   segments: Segment[]
   seconds: number
   curve: PlaybackCurve
+  /** When each Flip begins, in seconds into a pass */
+  flips: number[]
+  /** Seconds a Flip takes to turn the banknotes over: FLIP_SECONDS at 1×, scaled by speed as every move is */
+  flipSeconds: number
 }
 
 /** Light at a segment's ends, left out when there is none */
@@ -128,6 +137,8 @@ function moveSegments(move: PlaybackMove, lens: LensState, speed: number): Segme
   }
   // Every move ends flat, so a Hold waits there once the move before it has come back
   if (move.kind === 'hold') return [hold(FLAT, holdMoveSeconds(move) / speed)]
+  // Flat too, while the banknotes turn over
+  if (move.kind === 'flip') return [{ ...hold(FLAT, FLIP_SECONDS / speed), flip: true }]
   if (move.kind === 'light') {
     // Flat the whole time: the light fades in, stays and fades out
     const fade = LIGHT_FADE_SECONDS / speed
@@ -209,8 +220,13 @@ export function playbackPlan(tilt: TiltSettings, lens: LensState): PlaybackPlan 
       ...(distance(last, FLAT) < 0.5 && lightOut === 0 ? [] : [join(last, FLAT, speed, [lightOut, 0])]),
     ]
   })
-  const seconds = segments.reduce((total, s) => total + s.seconds, 0)
-  return { segments, seconds, curve }
+  let seconds = 0
+  const flips: number[] = []
+  for (const segment of segments) {
+    if (segment.flip) flips.push(seconds)
+    seconds += segment.seconds
+  }
+  return { segments, seconds, curve, flips, flipSeconds: FLIP_SECONDS / speed }
 }
 
 /** Where along a segment's points `u` falls: the point before it, and the share of the way to the next one */
@@ -264,6 +280,32 @@ export function tiltAt(plan: PlaybackPlan, seconds: number): Tilt2 {
 export function lightAt(plan: PlaybackPlan, seconds: number): number {
   const at = segmentAt(plan, seconds)
   return at ? lightAlong(at.segment, at.u) : 0
+}
+
+/**
+ * How many Flips begin after `from` seconds into a pass and up to `to`: from the very start of the pass without `from`,
+ * and on round its end into the next when `to` comes before `from`. Live playback turns the banknotes over as each begins
+ */
+export function flipsBetween(plan: PlaybackPlan, from: number | undefined, to: number) {
+  return plan.flips.filter((start) => {
+    if (from === undefined) return start <= to
+    return to < from ? start > from || start <= to : start > from && start <= to
+  }).length
+}
+
+/**
+ * How far the banknotes have turned over `seconds` into playback, 0 (front) to 1 (back), playback having begun on their
+ * backs or not: each Flip turns them to their other side at a steady rate (`turnDeg` eases it, as it eases F), so after
+ * a pass with an odd number of Flips the next one begins on the other side
+ */
+export function turnAt(plan: PlaybackPlan, seconds: number, back = false): number {
+  const passes = plan.seconds > 0 ? Math.floor(seconds / plan.seconds) : 0
+  const t = seconds - passes * plan.seconds
+  const done = plan.flips.filter((start) => start + plan.flipSeconds <= t).length
+  const turning = plan.flips.find((start) => start <= t && t < start + plan.flipSeconds)
+  const onBack = (Number(back) + passes * plan.flips.length + done) % 2 === 1
+  const k = turning === undefined ? 0 : (t - turning) / plan.flipSeconds
+  return onBack ? 1 - k : k
 }
 
 /** Every point the plan passes through, in order, for drawing its path */

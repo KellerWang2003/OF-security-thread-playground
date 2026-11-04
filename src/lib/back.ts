@@ -1,3 +1,4 @@
+import { clamp } from './frames'
 import type { Note, NoteBack } from './types'
 
 /**
@@ -7,6 +8,24 @@ import type { Note, NoteBack } from './types'
  */
 
 export type Side = 'front' | 'back'
+
+/** Seconds the banknotes take to turn over, or back: by F or Front | Back, and by a Flip move at 1× */
+export const FLIP_SECONDS = 0.5
+
+/** Whether banknotes `turn` of the way over (0 front, 1 back) show their backs: from halfway, edge-on, where the face changes */
+export const showsBackAt = (turn: number) => turn >= 0.5
+
+/** Turning over starts and ends gently */
+const turnEase = (turn: number) => turn * turn * (3 - 2 * turn)
+
+/**
+ * The face shown partway through turning over, as rotateY degrees about the banknote's upright middle: the front from 0
+ * to 90 as its right edge goes away, then, edge-on, the back from −90 to 0 as it comes round
+ */
+export const turnDeg = (turn: number) => {
+  const deg = 180 * turnEase(clamp(turn, 0, 1))
+  return showsBackAt(turn) ? deg - 180 : deg
+}
 
 /**
  * The paper every banknote is printed on, very light grey: what a side without a design shows, front or back, and what

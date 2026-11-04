@@ -695,6 +695,23 @@ describe('username workspace editor', () => {
     expect(screen.getByRole('button', { name: 'Playback settings', exact: true })).toBeDefined()
     expect(saves).not.toHaveBeenCalled()
   })
+  it('adds a Flip from the playback settings, a move of its own in every banknote’s playlist', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('of-thread-workspace', 'flip-move-ui-test')
+    render(<TooltipProvider><App /></TooltipProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Playback settings', exact: true }))
+    const dialog = await screen.findByRole('dialog', { name: 'Playback settings' })
+    await user.click(within(dialog).getByRole('button', { name: 'Flip', exact: true }))
+    for (const note of useProjects.getState().demoPreview!.notes) expect(note.tilt.moves?.map((m) => m.kind)).toEqual(['y', 'flip'])
+    // In the playlist after the default Up/down, with nothing to set
+    const rows = within(dialog).getAllByRole('listitem').filter((row) => row.closest('ol'))
+    expect(rows).toHaveLength(2)
+    expect(rows[1].textContent).toBe('2Flip')
+    expect(rows[1].querySelector('input')).toBeNull()
+    expect(saves).not.toHaveBeenCalled()
+  })
   it('records a move from the playback settings: the list closes, the tilt pad opens to drag on, and Escape cancels', async () => {
     const user = userEvent.setup()
     setTiltPadOpen(false)

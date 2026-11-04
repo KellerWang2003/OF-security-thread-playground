@@ -128,6 +128,56 @@ describe('flat-to-upward playback', () => {
   })
 })
 
+describe('turning over in playback', () => {
+  const state = () => useTilt.getState()
+  // Up/down to 30° and back, a second each way, then a Flip
+  const flipPlan = (settings: Partial<TiltSettings> = {}) =>
+    planFor(30, { curve: 'linear', moves: [{ id: 'a', kind: 'y', y: 30 }, { id: 'f', kind: 'flip' }], ...settings })
+  beforeEach(() => setTilt({ flipped: false, turn: 0 }))
+  afterEach(() => setTilt({ flipped: false, turn: 0 }))
+
+  it('turns the banknotes over, flat, as a Flip begins, as F does, and back round at the next', () => {
+    renderHook(() => useTiltLoop(flipPlan()))
+    setTilt({ source: 'wobble' })
+    tick(20)
+    advance(1900)
+    expect(state()).toMatchObject({ flipped: false, turn: 0 })
+    advance(200)
+    // Under way, at F's half a second for the whole turn
+    expect(state().flipped).toBe(true)
+    expect(state().turn).toBeGreaterThan(0.1)
+    expect(state().turn).toBeLessThan(0.5)
+    expect(state().angle).toBe(0)
+    advance(500)
+    expect(state().turn).toBe(1)
+    // The next pass plays on the backs, until its Flip turns them back round
+    advance(500)
+    expect(state()).toMatchObject({ flipped: true, turn: 1 })
+    expect(state().angle).toBeGreaterThan(0)
+    advance(1500)
+    expect(state().flipped).toBe(false)
+    advance(500)
+    expect(state().turn).toBe(0)
+  })
+
+  it('turns them at playback’s speed, so a Flip takes its move’s time', () => {
+    renderHook(() => useTiltLoop(flipPlan({ speed: 2 })))
+    setTilt({ source: 'wobble' })
+    tick(20)
+    // At 2× the Flip begins a second in and takes a quarter of a second; at 1× pace it would be halfway round
+    advance(1300)
+    expect(state()).toMatchObject({ flipped: true, turn: 1 })
+  })
+
+  it('leaves them as they are while turning over is off, as in Thread Studio, where F does nothing either', () => {
+    renderHook(() => useTiltLoop(flipPlan(), undefined, false))
+    setTilt({ source: 'wobble' })
+    tick(20)
+    advance(2600)
+    expect(state()).toMatchObject({ flipped: false, turn: 0 })
+  })
+})
+
 describe('scrubbing a banknote’s timeline', () => {
   it('shows that banknote’s frames where it was scrubbed, without tilting, and every tilt syncs them all again', () => {
     setTilt({ source: 'wobble', angle: 12, target: 12, angleX: 0, targetX: 0 })

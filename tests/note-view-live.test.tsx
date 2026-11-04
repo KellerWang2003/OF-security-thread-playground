@@ -2,11 +2,12 @@
 import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NoteView } from '../src/components/NoteView'
+import { turnDeg } from '../src/lib/back'
 import { WATERMARK_TILTED, watermarkOpacity, watermarkReveal } from '../src/lib/light'
 import { DEFAULT_INK, INK_ROLL_DEG, INK_SHIFT_DEG, barShift, inkShift } from '../src/lib/magneticInk'
 import { createNote } from '../src/lib/notes'
 import type { MagneticInk, Note } from '../src/lib/types'
-import { setTilt, turnDeg } from '../src/tilt/tilt'
+import { setTilt } from '../src/tilt/tilt'
 
 // The watermark's light layer is worked out from its image on a canvas, which jsdom lacks: each is named for what it
 // was drawn from, and painting one onto the watermark's canvas notes its name there

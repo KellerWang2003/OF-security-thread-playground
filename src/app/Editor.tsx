@@ -328,7 +328,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
         </div>
       ) : (
         <Canvas projectId={project.id} notes={project.notes} selectedId={note?.id} layer={shownLayer} onSelect={selectNote} onSelectLayer={selectLayer} onExitWindows={exitWindows} focus={focus} editingWindows={editingWindows} selectedWindowId={selectedWindowId} onWindowSelect={setSelectedWindowId} onExport={threadNote ? undefined : () => setExporting(true)}
-          placing={placing} onExitPlacing={exitPlacing} onEditThread={threadNote ? undefined : editThread}
+          placing={placing} onExitPlacing={exitPlacing} onEditThread={threadNote ? undefined : editThread} inStudio={inStudio}
           onEditWindow={(noteId, windowId) => {
             selectLayer(noteId, 'thread')
             setEditingNoteId(noteId)

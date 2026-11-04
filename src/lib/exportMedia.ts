@@ -1,7 +1,8 @@
 import { zipSync } from 'fflate'
 import { GIFEncoder, applyPalette, quantize } from 'gifenc'
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, QUALITY_HIGH, WebMOutputFormat, getFirstEncodableVideoCodec } from 'mediabunny'
-import { drawExportFrame, exportGroups, exportLayout, loadNoteAssets, playbackLights, playbackTilts, scaleForHeight, type NoteAssets } from './exportRender'
+import type { Side } from './back'
+import { drawExportFrame, exportGroups, exportLayout, loadNoteAssets, playbackLights, playbackTilts, playbackTurns, playbackViews, scaleForHeight, turnsOver, type SideAssets } from './exportRender'
 import type { Note } from './types'
 
 export type ExportFormat = 'mp4' | 'gif'
@@ -24,7 +25,7 @@ export interface ExportOptions {
   frameNumbers?: boolean
   /** The whole video held up to the light (the watermark clear throughout), as the lamp switch on the canvas; otherwise only Hold to light moves are */
   backlit?: boolean
-  /** Every banknote's back, as the canvas shows them turned over */
+  /** Every banknote's back, as the canvas shows them turned over: the video starts on the backs, Flip moves turning them as on the canvas */
   back?: boolean
   /** Where each banknote's thread pattern starts along its thread (mm, by banknote id), as the canvas previews it */
   offsets?: Record<string, number>
@@ -32,17 +33,20 @@ export interface ExportOptions {
 
 const safeName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Banknote'
 
-async function renderFile(notes: Note[], assets: Map<string, NoteAssets>, options: ExportOptions, onFrame: () => void, signal: AbortSignal) {
+async function renderFile(notes: Note[], assets: Map<string, SideAssets>, options: ExportOptions, onFrame: () => void, signal: AbortSignal) {
   // Every banknote shares the project-wide cycle and playback settings
   const loops = options.format === 'gif' ? 1 : options.loops
   const angles = playbackTilts(notes[0], options.fps, loops)
   const lights = playbackLights(notes[0], options.fps, loops)
-  const scale = scaleForHeight(notes, angles, options.perspective, options.height)
-  const layout = exportLayout(notes, scale, angles, options.perspective)
+  const turns = playbackTurns(notes[0], options.fps, loops, options.back)
+  // Laid out with room for what the banknotes turn through on screen, turning over included
+  const views = playbackViews(notes[0], options.fps, loops, options.back)
+  const scale = scaleForHeight(notes, views, options.perspective, options.height)
+  const layout = exportLayout(notes, scale, views, options.perspective)
   const canvas = new OffscreenCanvas(layout.width, layout.height)
   const ctx = canvas.getContext('2d', { willReadFrequently: options.format === 'gif' })!
   const faces = new Map(notes.map((n) => [n.id, new OffscreenCanvas(Math.ceil(n.widthMm * scale), Math.ceil(n.heightMm * scale))]))
-  const draw = (i: number) => drawExportFrame(ctx, layout, assets, faces, scale, angles[i], options, lights[i] ?? 0)
+  const draw = (i: number) => drawExportFrame(ctx, layout, assets, faces, scale, angles[i], options, lights[i] ?? 0, turns[i] ?? 0)
 
   if (options.format === 'gif') {
     const gif = GIFEncoder()
@@ -101,11 +105,18 @@ export async function exportTilt(projectName: string, options: ExportOptions, on
   // The scale each banknote is drawn at, as renderFile works it out, so its images load only as big as they are drawn
   const scales = new Map<string, number>()
   for (const group of groups) {
-    const angles = playbackTilts(group[0], options.fps, options.format === 'gif' ? 1 : options.loops)
+    const angles = playbackViews(group[0], options.fps, options.format === 'gif' ? 1 : options.loops, options.back)
     const scale = scaleForHeight(group, angles, options.perspective, options.height)
     for (const note of group) scales.set(note.id, Math.max(scales.get(note.id) ?? 0, scale))
   }
-  const assets = new Map(await Promise.all(notes.map(async (n) => [n.id, await loadNoteAssets(n, scales.get(n.id), options.back)] as const)))
+  // What the side the banknotes show needs, or both sides when playback turns them over
+  const sides: Side[] = turnsOver(notes[0]) ? ['front', 'back'] : [options.back ? 'back' : 'front']
+  const loadSides = async (note: Note) => {
+    const loaded: SideAssets = {}
+    await Promise.all(sides.map(async (side) => { loaded[side] = await loadNoteAssets(note, scales.get(note.id), side === 'back') }))
+    return loaded
+  }
+  const assets = new Map(await Promise.all(notes.map(async (n) => [n.id, await loadSides(n)] as const)))
   const framesEach = playbackTilts(notes[0], options.fps, options.format === 'gif' ? 1 : options.loops).length
   const total = framesEach * groups.length
   let done = 0

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
-import { PAPER, backOf, mirrored, type Side } from '../lib/back'
+import { PAPER, backOf, mirrored, turnDeg, type Side } from '../lib/back'
 import { SHADE_DEG, TILT_LIMIT } from '../lib/frames'
 import { lensMix } from '../lib/lens'
 import { watermarkOpacity, watermarkReveal } from '../lib/light'
@@ -13,7 +13,7 @@ import { paintRelief, reliefPixels, useRelief } from '../lib/relief'
 import { useInkMask } from '../lib/inkMask'
 import { INK_BAR_LIGHT, barShift, inkRoll, inkShift } from '../lib/magneticInk'
 import { hasThread, type PlacedLayer } from '../lib/layers'
-import { framesTiltOf, showsBack, turnDeg, useTilt } from '../tilt/tilt'
+import { framesTiltOf, showsBack, useTilt } from '../tilt/tilt'
 import { DesignTiles } from './DesignTiles'
 
 // Height ÷ width of each image, once loaded
