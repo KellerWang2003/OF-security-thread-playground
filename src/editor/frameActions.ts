@@ -3,7 +3,7 @@ import { backOf } from '../lib/back'
 import { DEFAULT_LENGTH, MAX_FRAMES, MIN_FRAMES, colorFrame } from '../lib/notes'
 import { imageAspect, removeImage, storeImage } from '../lib/images'
 import { findNote, updateNote } from '../lib/store'
-import type { Frame, Note, NoteBack } from '../lib/types'
+import type { Frame, Note } from '../lib/types'
 
 // Every action addresses one note inside one project
 export interface NoteRef {
@@ -101,17 +101,12 @@ export async function deleteFrame({ projectId, noteId }: NoteRef, frameId: strin
 export async function setFaceImage({ projectId, noteId }: NoteRef, file: File | undefined) {
   const old = findNote(projectId, noteId)?.faceImageId
   const faceImageId = file ? await storeImage(file) : undefined
-  // Uploading a design switches the background to it; removing it falls back to the solid colour
+  // Uploading a design switches the background to it; removing it leaves plain paper
   updateNote(projectId, noteId, (n) => ({ ...n, faceImageId, background: faceImageId ? 'image' : 'solid' }))
   if (old) await removeImage(old)
 }
 
-/** Changes the banknote's back, saving it from then on (until set, it shows the front's paper) */
-export function updateBack({ projectId, noteId }: NoteRef, patch: Partial<NoteBack>) {
-  updateNote(projectId, noteId, (n) => ({ ...n, back: { ...backOf(n), ...patch } }))
-}
-
-/** Uploads the back's design, which it then shows, or removes it, the back falling back to its colour */
+/** Uploads the back's design, which it then shows (saving the back from then on), or removes it, back to plain paper */
 export async function setBackImage(ref: NoteRef, file: File | undefined) {
   const note = findNote(ref.projectId, ref.noteId)
   const old = note && backOf(note).imageId

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NoteView } from '../src/components/NoteView'
 import { drawExportFrame, drawFace, playbackTilts, type NoteAssets } from '../src/lib/exportRender'
 import { settleArtwork } from '../src/lib/artwork'
+import { PAPER } from '../src/lib/back'
 import type { Tilt2 } from '../src/lib/lens'
 import { DEFAULT_TILT, createNote, migrateProject } from '../src/lib/notes'
 import { patternMix, playbackLens, preparePattern } from '../src/lib/pattern'
@@ -32,7 +33,8 @@ const imageFrames = (count: number): Frame[] => colourFrames(count).map((f) => (
 
 /** Banknotes as saved before thread patterns: no `pattern` field */
 function legacyNotes(): Note[] {
-  const base = createNote({ name: 'Plain', x: 0, y: 0, widthMm: 150, heightMm: 70, color: '#112233' })
+  // On plain paper, the only paper banknotes show now, so the old renderer's own colour matches
+  const base = createNote({ name: 'Plain', x: 0, y: 0, widthMm: 150, heightMm: 70, color: PAPER })
   const { pattern: _drop, ...rest } = base
   // With the windows banknotes started with then
   const plain = { ...rest, thread: { ...rest.thread, windows: { ...rest.thread.windows, enabled: true } } }

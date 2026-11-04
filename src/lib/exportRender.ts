@@ -1,4 +1,4 @@
-import { backOf, mirrored, sideImageId } from './back'
+import { PAPER, mirrored, sideImageId } from './back'
 import { SHADE_DEG } from './frames'
 import { lensMix, type Tilt2 } from './lens'
 import { watermarkOpacity, watermarkReveal } from './light'
@@ -172,7 +172,7 @@ export function drawFace(ctx: Ctx, note: Note, assets: NoteAssets, scale: number
   ctx.save()
   roundedRect(ctx, width, height, mm(1.5))
   ctx.clip()
-  ctx.fillStyle = options.back ? backOf(note).color : note.color
+  ctx.fillStyle = PAPER
   ctx.fillRect(0, 0, width, height)
 
   const face = assets.face

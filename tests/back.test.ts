@@ -15,13 +15,13 @@ vi.mock('../src/lib/images', () => ({
   removeImage: async (id: string) => { held.removed.push(id) },
   imageAspect: async () => 1,
 }))
-const { setBackImage, updateBack } = await import('../src/editor/frameActions')
+const { setBackImage } = await import('../src/editor/frameActions')
 
 const note = createNote({ name: 'N', x: 0, y: 0, widthMm: 150, heightMm: 75, color: '#86AD96' })
 const back = { background: 'image' as const, color: '#F0EAD6', imageId: 'back' }
 
 describe("a banknote's back", () => {
-  it('is plain paper of the front’s colour until it is set', () => {
+  it('is plain paper until it is set', () => {
     expect(backOf(note)).toEqual({ background: 'solid', color: '#86AD96' })
     expect(sideImageId({ ...note, background: 'image', faceImageId: 'front' }, 'front')).toBe('front')
     expect(sideImageId({ ...note, background: 'image', faceImageId: 'front' }, 'back')).toBeUndefined()
@@ -52,17 +52,15 @@ describe("a banknote's back", () => {
     expect('back' in migrateProject({ ...createProject('P'), notes: [note] }).notes[0]).toBe(false)
   })
 
-  it('is saved once set, its design shown at once and removed again, back to its colour', async () => {
+  it('is saved once its design is set, shown at once, and removed again, back to plain paper', async () => {
     held.note = note
     held.removed = []
-    updateBack({ projectId: 'p', noteId: note.id }, { color: '#F0EAD6' })
-    expect(held.note.back).toEqual({ background: 'solid', color: '#F0EAD6' })
     await setBackImage({ projectId: 'p', noteId: note.id }, new File(['x'], 'back.png', { type: 'image/png' }))
-    expect(held.note.back).toEqual({ background: 'image', color: '#F0EAD6', imageId: 'stored-back.png' })
+    expect(held.note.back).toEqual({ background: 'image', color: '#86AD96', imageId: 'stored-back.png' })
     await setBackImage({ projectId: 'p', noteId: note.id }, new File(['x'], 'other.png', { type: 'image/png' }))
     expect(held.removed).toEqual(['stored-back.png'])
     await setBackImage({ projectId: 'p', noteId: note.id }, undefined)
-    expect(held.note.back).toEqual({ background: 'solid', color: '#F0EAD6' })
+    expect(held.note.back).toEqual({ background: 'solid', color: '#86AD96' })
     expect(held.removed).toEqual(['stored-back.png', 'stored-other.png'])
   })
 })

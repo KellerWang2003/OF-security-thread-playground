@@ -4,12 +4,10 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { reportError } from '../cloud/notices'
 import { ColorField, IconButton, Labeled, SwitchField } from '../components/controls'
-import { backOf, type Side } from '../lib/back'
 import { THUMB_PX, pickFiles, useImageUrl } from '../lib/images'
 import { updateNote } from '../lib/store'
 import type { Frame, Note } from '../lib/types'
-import { turnOver } from '../tilt/tilt'
-import { replaceFrameImage, setBackImage, setFaceImage, updateBack, updateFrame, type NoteRef } from './frameActions'
+import { replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
 
 /** A fill as it is laid out: whether it shows an image, the image's picture once loaded, and the colour that shows without one */
 interface Fill {
@@ -25,8 +23,6 @@ interface FillEdits {
   addImage: (file: File) => Promise<unknown>
   /** Drops the image, the colour showing again */
   removeImage: () => void
-  /** The image card before there is an image */
-  uploadLabel?: string
   /** The colour under every one of the thread's frames, and setting it (none lets the banknote show through) */
   background?: { color?: string; set: (color: string | undefined) => void }
 }
@@ -35,10 +31,9 @@ interface FillEdits {
  * The image's card: what it says before there is an image (Upload), then the image itself (its picture once loaded)
  * with Replace, and × beside it. It never asks for a file on its own (Keller); its button does.
  */
-function ImageCard({ image, url, uploadLabel = 'Upload image', onAdd, onRemove }: {
+function ImageCard({ image, url, onAdd, onRemove }: {
   image: boolean
   url?: string
-  uploadLabel?: string
   onAdd: (file: File) => Promise<unknown>
   onRemove: () => void
 }) {
@@ -63,7 +58,7 @@ function ImageCard({ image, url, uploadLabel = 'Upload image', onAdd, onRemove }
             {!image && <ImageUp />}
           </span>
         )}
-        {image ? 'Replace' : uploadLabel}
+        {image ? 'Replace' : 'Upload image'}
       </Button>
       {image && (
         <IconButton label="Remove image" onClick={onRemove}>
@@ -75,16 +70,15 @@ function ImageCard({ image, url, uploadLabel = 'Upload image', onAdd, onRemove }
 }
 
 /**
- * A fill meant for an image, laid out where it is set rather than in a panel of its own (Keller, 4 November: the upload
- * hid a level down and testers never found it): the image first, as its card (`label` naming it), then the colour,
- * always the secondary choice. What shows is the image when there is one, else the colour. A frame's fill also holds
- * the thread's Background colour, in a section of its own under it.
+ * A frame's fill, laid out where it is set rather than in a panel of its own (Keller, 4 November: the upload hid a level
+ * down and testers never found it): the image first, as its card, then the colour, always the secondary choice. What
+ * shows is the image when there is one, else the colour. It also holds the thread's Background colour, in a section of
+ * its own under it.
  */
-function FillFields({ label, fill, edits }: { label?: string; fill: Fill; edits: FillEdits }) {
-  const card = <ImageCard image={fill.image} url={fill.url} uploadLabel={edits.uploadLabel} onAdd={edits.addImage} onRemove={edits.removeImage} />
+function FillFields({ fill, edits }: { fill: Fill; edits: FillEdits }) {
   return (
     <>
-      {label ? <Labeled label={label}>{card}</Labeled> : card}
+      <ImageCard image={fill.image} url={fill.url} onAdd={edits.addImage} onRemove={edits.removeImage} />
       <Labeled label="Colour">
         <ColorField value={fill.color} onChange={edits.setColor} />
       </Labeled>
@@ -141,32 +135,5 @@ export function FrameFillPanel({ note, noteRef, frame, trigger, side = 'left', a
         <FillFields {...frameFill(note, noteRef, frame, url)} />
       </PopoverContent>
     </Popover>
-  )
-}
-
-/**
- * A side of the banknote's background, laid out as a frame's fill is (Keller: the same everywhere): its design, an
- * uploaded image that can be removed again, and under it its colour, which shows without one. Working on either side
- * turns the banknotes to it, so what changes is in sight.
- */
-export function BackgroundFill({ note, noteRef, side }: { note: Note; noteRef: NoteRef; side: Side }) {
-  const back = side === 'back' ? backOf(note) : undefined
-  const face = back ?? { background: note.background, imageId: note.faceImageId, color: note.color }
-  const url = useImageUrl(face.background === 'image' ? face.imageId : undefined, THUMB_PX)
-  const setImage = back ? setBackImage : setFaceImage
-  const turn = () => turnOver(side === 'back')
-  return (
-    <div className="flex flex-col gap-3" onPointerDownCapture={turn} onFocusCapture={turn}>
-      <FillFields
-        label={back ? 'Back' : 'Front'}
-        fill={{ image: face.background === 'image' && !!face.imageId, url, color: face.color }}
-        edits={{
-          setColor: (color) => (back ? updateBack(noteRef, { color }) : updateNote(noteRef.projectId, noteRef.noteId, (n) => ({ ...n, color }))),
-          addImage: (file) => setImage(noteRef, file),
-          removeImage: () => void setImage(noteRef, undefined).catch(reportError),
-          uploadLabel: 'Upload design',
-        }}
-      />
-    </div>
   )
 }

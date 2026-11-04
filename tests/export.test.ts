@@ -3,6 +3,7 @@ import { drawFace, drawInk, exportLayout, exportSize, framePx, loadNoteAssets, p
 import type { InkMask } from '../src/lib/inkMask'
 import type { Relief } from '../src/lib/relief'
 import { DEFAULT_INK, INK_BAR_LIGHT, INK_ROLL_DEG, barCentre, inkShift } from '../src/lib/magneticInk'
+import { PAPER } from '../src/lib/back'
 import { createNote } from '../src/lib/notes'
 import { SWEEP_SECONDS } from '../src/lib/playback'
 import { copyStarts, imageBox } from '../src/lib/artwork'
@@ -197,7 +198,8 @@ describe('the back in an export', () => {
     }
     const light = 'light' as unknown as HTMLCanvasElement
     drawFace(ctx, note, { frames: new Map(), relief: { canvas: light } as Relief, ink: { canvas: 'mask' } as unknown as InkMask }, 2, 20, { sheen: true, perspective: true, back: true })
-    expect(calls).toContainEqual(['=', 'fillStyle', '#F0EAD6'])
+    // Plain paper, as on every banknote: a back's old colour no longer shows (Keller: they have to use the design)
+    expect(calls).toContainEqual(['=', 'fillStyle', PAPER])
     // 150 − 10 − 30 = 110 mm: drawn from its right edge, at 140 mm, flipped
     expect(calls).toContainEqual(['translate', 280, 20])
     expect(calls).toContainEqual(['scale', -1, 1])

@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, FlipHorizontal2, Lamp, Lock, LockOpen, RotateCcw } from 'lucide-react'
+import { ChevronDown, ChevronUp, Lamp, Lock, LockOpen, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -10,7 +10,7 @@ import type { LensState } from '../lib/lens'
 import { moveFromRecording, nextRecordingName, planLitPaths, planPath, playbackPlan, recordingFromSamples } from '../lib/moves'
 import { setTiltPadOpen, useTiltPad } from '../lib/tiltPad'
 import type { RecordedPoint, TiltSettings } from '../lib/types'
-import { setRecording, setTilt, turnOver, useTilt } from '../tilt/tilt'
+import { setRecording, setTilt, useTilt } from '../tilt/tilt'
 import { saveTilt } from './playbackActions'
 
 /** Width and height of the pad, in px */
@@ -21,7 +21,7 @@ export const TILT_PANEL_PX = PAD_PX + 2 * 6 + 2
 /** Keys pressed while a dialog or menu is open are its own */
 const POPUP = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'
 
-/** The lamp and Show the back, on the card's top row */
+/** The lamp, on the card's top row */
 const ROW_TOGGLE = 'size-6 min-w-6 rounded-[min(var(--radius-md),10px)] bg-background/95 p-0 aria-pressed:bg-primary aria-pressed:text-primary-foreground'
 
 type Axis = 'x' | 'y'
@@ -46,15 +46,13 @@ function holdAt(next: { x?: number; y?: number }, limit: number, respectLocks = 
  * that keeps the pad and canvas drag off it. The chevron at the right of the card's top row opens a pad you press and
  * drag in any direction to tilt them (up/down vertically, side to side horizontally), held where you let go; the pad
  * folds away by default (Keller), and the browser remembers which. On that row, so they work folded, the lamp holds every
- * banknote up to the light, the button after it turns every banknote over to its back (on the canvas), and back to flat,
- * just left of the chevron, shows once tilted.
+ * banknote up to the light, and back to flat, just left of the chevron, shows once tilted. Turning the banknotes over
+ * is the Front | Back switch at the top of the canvas (`SideSwitch`).
  */
-export function TiltRail({ limit = TILT_LIMIT, playback, flip = false }: {
+export function TiltRail({ limit = TILT_LIMIT, playback }: {
   limit?: number
   /** The project's playback, drawn on the pad and added to by recording; absent in tests of the pad alone */
   playback?: { projectId: string; tilt: TiltSettings; lens: LensState }
-  /** Offers turning the banknotes over; not in Thread Studio, as the thread is only on the front */
-  flip?: boolean
 }) {
   const recording = useTilt((s) => s.recording)
   const open = useTiltPad((s) => s.open)
@@ -74,12 +72,9 @@ export function TiltRail({ limit = TILT_LIMIT, playback, flip = false }: {
   return (
     <Panel className="absolute bottom-[108px] left-3 p-1.5">
       <div role="group" aria-label="Tilt" className="flex flex-col gap-1.5" style={{ width: PAD_PX }}>
-        {/* The lamp and Show the back on the left; back to flat on the right, then the chevron at the row's end (Keller) */}
+        {/* The lamp on the left; back to flat on the right, then the chevron at the row's end (Keller) */}
         <div className="flex h-6 items-center justify-between">
-          <div className="flex gap-1">
-            <LampToggle />
-            {flip && <FlipToggle />}
-          </div>
+          <LampToggle />
           <div className="flex items-center gap-1">
             <BackToFlat />
             <IconButton label={open ? 'Fold the tilt pad away' : 'Open the tilt pad'} size="icon-xs" className="text-muted-foreground"
@@ -125,21 +120,6 @@ function LampToggle() {
         <Lamp className="size-3" />
       </TooltipTrigger>
       <TooltipContent>{backlit ? 'Back to reflected light (tap L, or hold to peek)' : 'Hold up to the light (tap L, or hold to peek)'}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-/** Built as the lamp is: every banknote turned over, side to side, until pressed again */
-function FlipToggle() {
-  const flipped = useTilt((s) => s.flipped)
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={<Toggle aria-label="Show the back" variant="outline" size="sm" pressed={flipped} onPressedChange={(on) => turnOver(on)} className={ROW_TOGGLE} />}
-      >
-        <FlipHorizontal2 className="size-3" />
-      </TooltipTrigger>
-      <TooltipContent>{flipped ? 'Back to the front (F)' : 'Turn over to the back (F)'}</TooltipContent>
     </Tooltip>
   )
 }

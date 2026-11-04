@@ -130,10 +130,12 @@ describe('username workspace editor', () => {
     expect(document.querySelector('[data-thread]')).toBeNull()
     expect(screen.queryByText('You can add windows here')).toBeNull()
 
-    // Every feature is added from one Add menu, on the banknote's row and at the end of the tabs, each with a line on
-    // what it is. The project's first thread opens on its tab, without windows, with the tip by Windows until the next click
+    // Every feature is added from one Add menu, on the banknote's row, the row under the selected banknote's features and
+    // at the end of the tabs, each with a line on what it is. The project's first thread opens on its tab, without
+    // windows, with the tip by Windows until the next click
     const add = () => screen.getAllByRole('button', { name: 'Add security feature' })
-    expect(add()).toHaveLength(2)
+    expect(add()).toHaveLength(3)
+    expect(add()[1].textContent).toBe('Add security feature')
     await user.click(add()[1])
     expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual([
       expect.stringMatching(/^Security thread/), expect.stringMatching(/^Watermark/), expect.stringMatching(/^Magnetic ink/)])
@@ -429,7 +431,7 @@ describe('username workspace editor', () => {
     expect(shown()).toEqual(before)
     act(() => setTilt({ frameNumbers: false }))
   })
-  it('names the thread’s size by its direction, leaves an image’s place to Thread Studio, and fills the background as a frame', async () => {
+  it('names the thread’s size by its direction, leaves an image’s place to Thread Studio, and shows each side’s design as a card', async () => {
     const user = userEvent.setup()
     localStorage.setItem('of-thread-workspace', 'thread-size-ui-test')
     render(<TooltipProvider><App /></TooltipProvider>)
@@ -437,15 +439,12 @@ describe('username workspace editor', () => {
     await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
     const note = () => useProjects.getState().demoPreview!.notes[0]
 
-    // The banknote's background is laid out as a frame's fill is (Keller: the same everywhere), right on the panel
-    // (Keller, 4 November): each side's design to upload first, then its colour, the secondary choice
-    expect(screen.getByText('Front', { exact: true })).toBeDefined()
-    expect(screen.getByText('Back', { exact: true })).toBeDefined()
-    expect(screen.getAllByRole('button', { name: 'Upload design' })).toHaveLength(2)
-    expect(screen.queryByRole('button', { name: 'Image', exact: true })).toBeNull()
-    fireEvent.change(hexFields()[0], { target: { value: '#abcdef' } })
-    expect(note().color).toBe('#abcdef')
-    expect(note().background).toBe('solid')
+    // Front and Back side by side, each a card to upload its design (Keller, 4 November), and no colour: a side without
+    // a design is plain paper
+    for (const side of ['Front', 'Back']) {
+      expect(within(screen.getByRole('group', { name: side })).getByRole('button', { name: 'Upload design' })).toBeDefined()
+    }
+    expect(screen.queryAllByDisplayValue(/^#[0-9a-f]{6}$/i)).toHaveLength(0)
 
     // Across the thread: its Width when it runs down the banknote, its Height when it runs across
     await user.click(screen.getByRole('button', { name: 'Security thread', exact: true }))
@@ -1137,15 +1136,15 @@ describe('username workspace editor', () => {
     const shown = (selector: string) => document.querySelector(`[data-note-body] ${selector}`)
     // Turning over takes a moment, the loop easing it round; here it is done at once
     const finishTurn = () => act(() => setTilt({ turn: useTilt.getState().flipped ? 1 : 0 }))
-    const flip = () => screen.getByRole('button', { name: 'Show the back' })
+    // Front | Back at the top of the canvas (Keller, 4 November: on the tilt card it was too hidden)
+    const side = (name: 'Front' | 'Back') => screen.getByRole('button', { name, exact: true })
+    expect(screen.queryByRole('button', { name: 'Show the back' })).toBeNull()
+    expect(side('Front').getAttribute('aria-pressed')).toBe('true')
 
-    // Each side's background is laid out on its own; until set, the back is the front's paper
-    expect(hexFields().map((f) => f.value)).toEqual(['#123456', '#123456'])
-
-    // F turns every banknote over, as the button under the lamp shows: the back has no thread, the watermark mirrored
+    // F turns every banknote over, as the switch shows: the back has no thread, the watermark mirrored
     fireEvent.keyDown(window, { key: 'f' })
     expect(useTilt.getState().flipped).toBe(true)
-    expect(flip().getAttribute('aria-pressed')).toBe('true')
+    expect(side('Back').getAttribute('aria-pressed')).toBe('true')
     finishTurn()
     expect(shown('[data-back]')).not.toBeNull()
     expect(shown('[data-thread]')).toBeNull()
@@ -1172,20 +1171,16 @@ describe('username workspace editor', () => {
     expect(shown('[data-thread]')).not.toBeNull()
     expect(document.querySelector('[data-side-label]')).toBeNull()
     // Turned over again, the thread can't stay picked: the banknote itself is
-    await user.click(flip())
+    await user.click(side('Back'))
     expect(useTilt.getState().flipped).toBe(true)
     expect(tab()).toBe('Banknote')
     finishTurn()
 
-    // Working on the front's background turns the banknotes to the front, and on the back's to the back, whose colour is
-    // its own once set
-    fireEvent.pointerDown(hexFields()[0])
+    // Working on the front's design card turns the banknotes to the front, and on the back's to the back
+    fireEvent.pointerDown(within(screen.getByRole('group', { name: 'Front' })).getByRole('button', { name: 'Upload design' }))
     expect(useTilt.getState().flipped).toBe(false)
-    fireEvent.pointerDown(hexFields()[1])
+    fireEvent.pointerDown(within(screen.getByRole('group', { name: 'Back' })).getByRole('button', { name: 'Upload design' }))
     expect(useTilt.getState().flipped).toBe(true)
-    fireEvent.change(hexFields()[1], { target: { value: '#654321' } })
-    expect(note().back).toEqual({ background: 'solid', color: '#654321' })
-    expect(note().color).toBe('#123456')
     finishTurn()
 
     // An export of the banknotes turned over is of their backs

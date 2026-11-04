@@ -8,7 +8,14 @@ import type { Note, NoteBack } from './types'
 
 export type Side = 'front' | 'back'
 
-/** The back as it shows: as saved, or on a banknote whose back was never set, plain paper of the front's colour */
+/**
+ * The paper every banknote is printed on, very light grey: what a side without a design shows, front or back, and what
+ * shows through a design's transparent parts. Banknotes have no background colour of their own (Keller, 4 November:
+ * "they have to use the design"); a colour saved before stays in its save but no longer shows
+ */
+export const PAPER = '#E5E5E5'
+
+/** The back as saved, or on a banknote whose back was never set, plain paper */
 export const backOf = (note: Pick<Note, 'back' | 'color'>): NoteBack => note.back ?? { background: 'solid', color: note.color }
 
 /** Where a box on the banknote lies seen from its back: left and right swap, as the banknote turns over side to side */

@@ -246,10 +246,11 @@ describe("a NoteView's back", () => {
     magneticInk: { imageId: 'ink', xMm: 100, yMm: 10, widthMm: 20, heightMm: 20, ...DEFAULT_INK },
   })
 
-  it('shows its own paper and the watermark through it the other way round, and no thread or magnetic ink', () => {
+  it('shows plain paper and the watermark through it the other way round, and no thread or magnetic ink', () => {
     const { container } = render(<NoteView note={twoSided()} scale={2} side="back" selected="watermark" hovered="thread" />)
     const root = container.firstElementChild as HTMLElement
-    expect(root.style.backgroundColor).toBe('rgb(240, 234, 214)')
+    // Plain paper: a back's old colour no longer shows (Keller: they have to use the design)
+    expect(root.style.backgroundColor).toBe('rgb(229, 229, 229)')
     expect(root.hasAttribute('data-back')).toBe(true)
     expect(container.querySelector('[data-thread]')).toBeNull()
     expect(container.querySelector('[data-magnetic-ink]')).toBeNull()

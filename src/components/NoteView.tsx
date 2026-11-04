@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
-import { backOf, mirrored, type Side } from '../lib/back'
+import { PAPER, backOf, mirrored, type Side } from '../lib/back'
 import { SHADE_DEG, TILT_LIMIT } from '../lib/frames'
 import { lensMix } from '../lib/lens'
 import { watermarkOpacity, watermarkReveal } from '../lib/light'
@@ -285,7 +285,6 @@ export function NoteView({
   const back = live ? liveBack : side === 'back'
   const shownBack = back ? backOf(note) : undefined
   const design = shownBack ? (shownBack.background === 'image' ? shownBack.imageId : undefined) : note.background === 'image' ? note.faceImageId : undefined
-  const paper = shownBack?.color ?? note.color
   const face = useImageUrl(design, designPx(note, scale))
   // Live notes re-render only when this changes, not on every animation frame
   const liveShown = useTilt((s) => (live ? shownKey(note, framesTiltOf(s, note.id).y, framesTiltOf(s, note.id).x) : ''))
@@ -369,14 +368,14 @@ export function NoteView({
       style={{
         width: mm(note.widthMm),
         height: mm(note.heightMm),
-        backgroundColor: paper,
+        backgroundColor: PAPER,
         borderRadius: mm(1.5),
         transform: perspective && still ? still.rotate : undefined,
         willChange: live && perspective ? 'transform' : undefined,
       }}
     >
       {face && (faceShiftMm
-        ? <DesignTiles url={face} width={mm(note.widthMm)} height={mm(note.heightMm)} color={paper} shift={{ x: mm(faceShiftMm.x), y: mm(faceShiftMm.y) }} />
+        ? <DesignTiles url={face} width={mm(note.widthMm)} height={mm(note.heightMm)} color={PAPER} shift={{ x: mm(faceShiftMm.x), y: mm(faceShiftMm.y) }} />
         : <img src={face} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />)}
 
       {watermarkBox && watermark?.imageId && (

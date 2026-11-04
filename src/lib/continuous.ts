@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { create } from 'zustand'
-import { mirrored, type Side } from './back'
+import { PAPER, mirrored, type Side } from './back'
 import { clamp } from './frames'
 import { loadImageUrl } from './images'
 import { pictureOf, type Picture } from './imageWork'
@@ -76,12 +76,11 @@ export function setCutDrift(noteId: string, drift: CutDrift | undefined) {
 export const driftWithin = (drift: CutDrift | undefined, cutMm: number): CutDrift =>
   ({ x: clamp(drift?.x ?? 0, -cutMm, cutMm), y: clamp(drift?.y ?? 0, -cutMm, cutMm) })
 
-/** What decides how the design reads: the image, and the banknote's size and colour under it */
+/** What decides how the design reads: the image, and the banknote's size */
 interface DesignLook {
   imageId: string
   widthMm: number
   heightMm: number
-  color: string
 }
 
 /** The design as it shows on the banknote, RGBA, read at about READ_PX_PER_MM */
@@ -158,15 +157,15 @@ async function readDesign(look: DesignLook): Promise<DesignPixels | undefined> {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return undefined
   const { sx, sy, sw, sh, crop } = coverCrop(imageWidth, imageHeight, look.widthMm, look.heightMm)
-  // Transparent parts show the banknote's colour, as on the canvas
-  ctx.fillStyle = look.color
+  // Transparent parts show the paper, as on the canvas
+  ctx.fillStyle = PAPER
   ctx.fillRect(0, 0, width, height)
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(picture.source, sx, sy, sw, sh, 0, 0, width, height)
   return { data: ctx.getImageData(0, 0, width, height).data, width, height, widthMm: look.widthMm, heightMm: look.heightMm, crop }
 }
 
-const lookKey = ({ imageId, widthMm, heightMm, color }: DesignLook) => `${imageId}|${widthMm}|${heightMm}|${color}`
+const lookKey = ({ imageId, widthMm, heightMm }: DesignLook) => `${imageId}|${widthMm}|${heightMm}`
 const designs = new Map<string, Promise<DesignPixels | undefined>>()
 const readDesigns = new Map<string, DesignPixels>()
 
@@ -187,13 +186,13 @@ function loadDesign(look: DesignLook) {
 }
 
 /**
- * The banknote's uploaded design as it shows, once read; nothing for a solid background. While a new size or colour is
- * read, the last reading of the same design stands in.
+ * The banknote's uploaded design as it shows, once read; nothing for a side without one. While a new size is read,
+ * the last reading of the same design stands in.
  */
-export function useDesign(note: Pick<Note, 'background' | 'faceImageId' | 'widthMm' | 'heightMm' | 'color'>): DesignPixels | undefined {
+export function useDesign(note: Pick<Note, 'background' | 'faceImageId' | 'widthMm' | 'heightMm'>): DesignPixels | undefined {
   const imageId = note.background === 'image' ? note.faceImageId : undefined
-  const { widthMm, heightMm, color } = note
-  const key = imageId ? lookKey({ imageId, widthMm, heightMm, color }) : undefined
+  const { widthMm, heightMm } = note
+  const key = imageId ? lookKey({ imageId, widthMm, heightMm }) : undefined
   const [loaded, setLoaded] = useState<{ key: string; imageId: string; design?: DesignPixels }>()
   const exact = key ? readDesigns.get(key) ?? (loaded?.key === key ? loaded.design : undefined) : undefined
   const previous = imageId && loaded?.imageId === imageId ? loaded.design : undefined
@@ -201,13 +200,13 @@ export function useDesign(note: Pick<Note, 'background' | 'faceImageId' | 'width
   useEffect(() => {
     if (!imageId || !key || exact) return
     let live = true
-    void loadDesign({ imageId, widthMm, heightMm, color }).then((design) => {
+    void loadDesign({ imageId, widthMm, heightMm }).then((design) => {
       if (live) setLoaded({ key, imageId, design })
     })
     return () => {
       live = false
     }
-  }, [imageId, widthMm, heightMm, color, key, exact])
+  }, [imageId, widthMm, heightMm, key, exact])
   return exact ?? previous
 }
 

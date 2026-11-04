@@ -1,4 +1,5 @@
 import { DesignTiles } from '../components/DesignTiles'
+import { PAPER } from '../lib/back'
 import { edgeBreaks, useDesign, type CutDrift } from '../lib/continuous'
 import { designPx, useImageUrl } from '../lib/images'
 import type { Note } from '../lib/types'
@@ -57,7 +58,7 @@ export function NeighbourRing({ note, scale, drift, quiet }: { note: Note; scale
       style={{ left: -margin, top: -margin, width: width + 2 * margin, height: height + 2 * margin, opacity: shown ? 1 : 0,
         maskImage: mask, WebkitMaskImage: mask, maskComposite: 'intersect', WebkitMaskComposite: 'source-in' }}>
       <div className="absolute" style={{ left: margin, top: margin }}>
-        <DesignTiles url={url} width={width} height={height} color={note.color} shift={{ x: drift.x * scale, y: drift.y * scale }} />
+        <DesignTiles url={url} width={width} height={height} color={PAPER} shift={{ x: drift.x * scale, y: drift.y * scale }} />
       </div>
     </div>
   )

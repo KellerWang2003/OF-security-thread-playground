@@ -4,6 +4,7 @@ import {
   WATERMARK_FAINT, WATERMARK_TILTED, WATERMARK_TILT_DEG, offAxisDeg, tiltReveal, watermarkOpacity, watermarkReveal,
 } from '../src/lib/light'
 import { lensState } from '../src/lib/lens'
+import { PAPER } from '../src/lib/back'
 import { createNote } from '../src/lib/notes'
 import { lightAt, playbackPlan, tiltAt } from '../src/lib/moves'
 import type { TiltSettings } from '../src/lib/types'
@@ -116,7 +117,7 @@ describe('exported light', () => {
     // Colour-dodged, so it only brightens the design, at how much light comes through
     expect(watermark).toMatchObject({ blend: 'color-dodge', alpha: watermarkOpacity(0.6, 0), at: [20, 10, 40, 60] })
     // The paper first, then the watermark, then the thread (frames are colours here), all drawn normally
-    expect(flat.map((c) => c.what).slice(0, 2)).toEqual(['fill #336699', 'watermark'])
+    expect(flat.map((c) => c.what).slice(0, 2)).toEqual([`fill ${PAPER}`, 'watermark'])
     expect(flat.filter((c) => c.what !== 'watermark').every((c) => c.blend === 'source-over' && c.alpha === 1)).toBe(true)
     expect(draw(undefined, 20).find((c) => c.what === 'watermark')!.alpha).toBeCloseTo(watermarkOpacity(0.6, watermarkReveal(0, { x: 0, y: 20 })))
     expect(draw(1).find((c) => c.what === 'watermark')!.alpha).toBeCloseTo(0.6)

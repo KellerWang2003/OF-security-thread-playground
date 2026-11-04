@@ -17,7 +17,7 @@ import { showsBack, useTilt } from '../tilt/tilt'
 import { AddFeatureMenu } from './AddFeatureMenu'
 import { ChecksDrawer, ContinuousSection } from './DesignChecks'
 import { EffectSection, LensMenu, LensPreview, ThreadPrint, type SetLens } from './EffectSection'
-import { BackgroundFill } from './FillPicker'
+import { DesignCards } from './DesignCards'
 import { FramePanel } from './FramePanel'
 import { MagneticInkPanel } from './MagneticInkPanel'
 import { PanelResizer } from './PanelResizer'
@@ -144,14 +144,9 @@ export function Inspector({ note, noteRef, layer, onLayer, onWindowSelect, onPla
         </div>
       </Section>
 
-      {/* Each side's background laid out as a frame's fill is (Keller: the same everywhere), its design to upload first and
-          its colour under it; working on one turns the banknotes to that side. One above the other, as two image cards
-          don't fit side by side */}
+      {/* Front and Back side by side, each its design and nothing else (Keller): working on one turns the banknotes to it */}
       <Section nested>
-        <BackgroundFill note={note} noteRef={noteRef} side="front" />
-      </Section>
-      <Section nested>
-        <BackgroundFill note={note} noteRef={noteRef} side="back" />
+        <DesignCards note={note} noteRef={noteRef} />
       </Section>
       {hasDesign && <ContinuousSection note={note} noteRef={noteRef} />}
       </Group>

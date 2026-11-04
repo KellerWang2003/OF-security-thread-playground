@@ -30,8 +30,9 @@ const THUMB = 28
 
 /**
  * Top-left: back to the projects, the project's name, and its banknotes as a collapsible list. Each banknote opens
- * to its security features (its thread, watermark and magnetic ink, as it has them: each added from the + on its row,
- * the Add menu, and removed from the bin on its own row); the selected one opens by itself.
+ * to its security features (its thread, watermark and magnetic ink, as it has them: each added from the Add menu, on
+ * the + on its row or, for the selected one, the "Add security feature" row under its features, and removed from the
+ * bin on its own row); the selected one opens by itself.
  */
 export function ProjectPanel({
   project,
@@ -208,6 +209,12 @@ export function ProjectPanel({
                       />
                     ))}
                   </ul>
+                )}
+                {/* Under the selected banknote's features, the way to add more (Keller) */}
+                {expanded && selected && canAdd && (
+                  <div className="ml-[52px] pt-0.5">
+                    <AddFeatureMenu note={note} row={{ onBlock: picked }} onAdd={(feature) => onAddLayer(note.id, feature)} />
+                  </div>
                 )}
               </li>
               )
