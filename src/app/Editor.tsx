@@ -343,7 +343,7 @@ export function Editor({ project, isDemo = false }: { project: Project; isDemo?:
         <>
           {tiltPad && <TiltRail limit={lens?.viewDeg} playback={reference && lens ? { projectId: project.id, tilt: playbackTilt(reference), lens } : undefined} />}
           {/* Front | Back, where it can't be missed (Keller); F does the same */}
-          {!isEmpty && <SideSwitch />}
+          {!isEmpty && <SideSwitch besidePanel={note !== undefined} />}
           <ProjectPanel isDemo={isDemo} project={project} selectedId={note?.id} layer={shownLayer} onSelect={selectFromList} onAdd={() => setAdding(true)} aboveTilt={tiltPad}
             onAddLayer={addFrom} onRemoveLayer={dropLayer} />
           {!isEmpty && (
