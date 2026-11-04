@@ -28,6 +28,9 @@ import { TILT_PANEL_PX } from './TiltRail'
 import { addEmptyFrame, addImageFrames, deleteFrame, moveFrameTo, updateFrame, type NoteRef } from './frameActions'
 
 const PAD = 12
+/** The + after the last frame: its gap from the last clip and its width, px */
+const ADD_GAP = 4
+const ADD_PX = 28
 /** Height of one tilt-reach lane above the frames, in px */
 const LANE = 9
 /** Height of the band above the frames to scrub on when there are no lanes there, px */
@@ -231,7 +234,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
         <div
           ref={track}
           className="relative h-full touch-none overflow-hidden select-none"
-          style={{ width: x(totalLength) + PAD }}
+          style={{ width: x(totalLength) + ADD_GAP + ADD_PX + PAD }}
           onPointerDown={(e) => {
             const el = e.target as HTMLElement
             if (e.button !== 0 || el.closest('button') || el.closest('[role=menu]')) return
@@ -378,43 +381,42 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
           </div>
 
           <Playhead noteId={note.id} lens={lens} left={x(0)} width={totalLength * pxPerUnit} />
+
+          {/* Just after the last frame, as tall as the clips, rather than at the bar's far end (Keller) */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="Add frame"
+                  disabled={frames.length >= MAX_FRAMES && !frames.every((f) => f.kind !== 'image')}
+                  className="absolute bottom-1 flex items-center justify-center rounded-sm border border-dashed border-foreground/25 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                  style={{ top: framesTop, left: x(totalLength) + ADD_GAP, width: ADD_PX }}
+                />
+              }
+            >
+              <Plus className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-44" side="top" align="start">
+              <DropdownMenuItem
+                onClick={async () => {
+                  try {
+                    const files = await pickFiles({ multiple: true })
+                    if (files.length) await addImageFrames(noteRef, files)
+                  } catch (error) { reportError(error) }
+                }}
+              >
+                <ImagePlus />
+                Upload images
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={frames.length >= MAX_FRAMES} onClick={() => addEmptyFrame(noteRef)}>
+                <SquareDashed />
+                Empty frame
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
-
-      {(
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                aria-label="Add frame"
-                disabled={frames.length >= MAX_FRAMES && !frames.every((f) => f.kind !== 'image')}
-                className="flex w-10 shrink-0 items-center justify-center rounded-lg border border-dashed text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-              />
-            }
-          >
-            <Plus className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-44" side="top" align="end">
-            <DropdownMenuItem
-              onClick={async () => {
-                try {
-                  const files = await pickFiles({ multiple: true })
-                  if (files.length) await addImageFrames(noteRef, files)
-                } catch (error) { reportError(error) }
-              }}
-            >
-              <ImagePlus />
-              Upload images
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={frames.length >= MAX_FRAMES} onClick={() => addEmptyFrame(noteRef)}>
-              <SquareDashed />
-              Empty frame
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-
     </>
   )
 }
