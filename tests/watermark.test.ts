@@ -158,6 +158,19 @@ describe('the watermark relief', () => {
     expect(speckled.spread).toBeCloseTo((1.4826 * 2) / 255, 4)
   })
 
+  it('takes transparency for plain paper wherever the image is cut out of it, though most of its edges are opaque', () => {
+    const corner = (x: number, y: number) => (x === 0 || x === 7) && (y === 0 || y === 5)
+    // A white card with rounded corners runs to the edges: only its corners show through
+    const card = paint(8, 6, (x, y) => (corner(x, y) ? CLEAR : WHITE))
+    expect(paperOf(card, 8, 6).clear).toBe(true)
+    // so it is a shape that glows, its corners plain paper, where its own white was taken for the paper and nothing glowed
+    expect(values(thinness(card, 8, 6))).toEqual(Array.from({ length: 48 }, (_, p) => (corner(p % 8, Math.floor(p / 8)) ? 0 : 255)))
+    // A shape cropped tight, every edge pixel opaque, with a hole in it
+    expect(paperOf(paint(8, 6, (x, y) => (x === 3 && y === 2 ? CLEAR : GREY)), 8, 6).clear).toBe(true)
+    // A line of half-covered pixels along an edge, as an export can leave, cuts nothing out
+    expect(paperOf(paint(8, 6, (x) => (x === 7 ? grey(255, 100) : WHITE)), 8, 6)).toEqual({ clear: false, level: 1, spread: 0 })
+  })
+
   it('reads the light parts as thinner paper, as far as they are lighter than the background, which stays plain', () => {
     expect(values(thinness(image(BLACK, WHITE, GREY), 4, 3))).toEqual([0, 0, 0, 0, 0, 255, 128, 0, 0, 0, 0, 0])
     // Darker than the background is plain paper too: a watermark is never thicker

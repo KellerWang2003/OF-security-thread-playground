@@ -25,9 +25,25 @@ const median = (values: number[]) => {
 }
 
 /**
- * The plain paper of a watermark image, from its edge pixels: mostly transparent edges mean transparency is plain paper
- * (`clear`); otherwise it is the median brightness of the opaque edge pixels, and `spread` how far they stray from it
- * (a JPEG's speckle, a scan's grain), as a robust standard deviation.
+ * Whether an image is cut out of transparency though most of its edges are opaque: all four corners show through, as
+ * rounded corners leave them, or some pixel inside its outermost ones does, as a shape cropped tight or a hole leaves.
+ * A line of half-covered pixels along an edge or two, which exports can leave, is no cutout.
+ */
+function cutOut(data: Uint8ClampedArray, width: number, height: number) {
+  const clearAt = (x: number, y: number) => data[(y * width + x) * 4 + 3] < 128
+  if (clearAt(0, 0) && clearAt(width - 1, 0) && clearAt(0, height - 1) && clearAt(width - 1, height - 1)) return true
+  for (let y = 1; y < height - 1; y++) {
+    for (let i = (y * width + 1) * 4 + 3, end = i + (width - 2) * 4; i < end; i += 4) if (data[i] < 128) return true
+  }
+  return false
+}
+
+/**
+ * The plain paper of a watermark image (magnetic ink's background too). An image cut out of transparency has it for
+ * plain paper (`clear`): one whose edges are mostly transparent, or a cutout that runs to its edges, such as a card with
+ * rounded corners (read by its edges alone, such an image's own colour was taken for the paper, and the shape lost its
+ * corners: Keller). Otherwise it is the median brightness of the opaque edge pixels, and `spread` how far they stray
+ * from it (a JPEG's speckle, a scan's grain), as a robust standard deviation.
  */
 export function paperOf(data: Uint8ClampedArray, width: number, height: number) {
   const levels: number[] = []
@@ -45,7 +61,7 @@ export function paperOf(data: Uint8ClampedArray, width: number, height: number) 
     visit(0, y)
     if (width > 1) visit(width - 1, y)
   }
-  if (levels.length === 0 || clear > levels.length) return { clear: true, level: 0.5, spread: 0 }
+  if (levels.length === 0 || clear > levels.length || cutOut(data, width, height)) return { clear: true, level: 0.5, spread: 0 }
   const level = median(levels)
   return { clear: false, level, spread: 1.4826 * median(levels.map((l) => Math.abs(l - level))) }
 }

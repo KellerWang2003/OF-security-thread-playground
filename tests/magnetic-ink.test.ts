@@ -103,6 +103,16 @@ describe("magnetic ink's shape", () => {
     expect(Array.from(inkCoverage(cutout, 4, 4))).toEqual([0, 0, 0, 0, 0, 255, 255, 0, 0, 255, 128, 0, 0, 0, 0, 0])
   })
 
+  it('follows a cutout that runs to its edges, rounded corners and all', () => {
+    // A red card with rounded corners: only its corners show through, its own red no background to stand out from
+    const corner = (x: number, y: number) => (x === 0 || x === 5) && (y === 0 || y === 3)
+    const card = paint(6, 4, (x, y) => (corner(x, y) ? grey(0, 0) : [200, 40, 40, 255]))
+    const shape = Array.from({ length: 24 }, (_, p) => (corner(p % 6, Math.floor(p / 6)) ? 0 : 255))
+    expect(Array.from(inkCoverage(card, 6, 4))).toEqual(shape)
+    // Inverted, only the corners take ink
+    expect(Array.from(inkCoverage(card, 6, 4, true))).toEqual(shape.map((v) => 255 - v))
+  })
+
   it('is whatever is darker or lighter than an opaque background, as far as it is', () => {
     // On white, black takes full ink and mid-grey about half
     const onWhite = paint(4, 4, (x, y) => (x === 1 && y === 1 ? grey(0) : x === 2 && y === 1 ? grey(128) : grey(255)))
