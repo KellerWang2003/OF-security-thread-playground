@@ -82,6 +82,8 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 /** The right panel's open tab, the part of the banknote picked: Banknote, Thread or Watermark */
 const tab = () => screen.queryByRole('tab', { selected: true })?.textContent
 /** The colours' hex fields laid out in the right panel, in order (each beside its swatch, which is an input too) */
+/** The Add menu's + on the banknote's row in the list (the tabs end with another) */
+const addFeature = () => screen.getAllByRole('button', { name: 'Add security feature' })[0]
 const hexFields = () => (screen.getAllByDisplayValue(/^#[0-9a-f]{6}$/i) as HTMLInputElement[]).filter((input) => input.type === 'text')
 
 describe('username workspace editor', () => {
@@ -107,7 +109,7 @@ describe('username workspace editor', () => {
     expect(screen.getAllByText('1 banknote')).toHaveLength(2)
   })
 
-  it('opens a new project’s first banknote on its thread, without windows, with a tip by Windows until the next click', async () => {
+  it('starts a banknote with no security feature, adds and removes its thread from the Add menu, the first with a tip by Windows', async () => {
     const user = userEvent.setup()
     localStorage.setItem('of-thread-workspace', 'windows-tip-ui-test')
     render(<TooltipProvider><App /></TooltipProvider>)
@@ -115,9 +117,30 @@ describe('username workspace editor', () => {
     await user.type(await screen.findByPlaceholderText('Untitled project'), 'Tip project')
     await user.click(screen.getByRole('button', { name: 'Create', exact: true }))
     await screen.findByPlaceholderText('Banknote 1')
+    // New banknote asks only for a name and size (Keller, 4 November)
+    expect(screen.queryByText('Colour', { exact: true })).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Add', exact: true }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    // It comes as plain light grey paper with no security feature, not even a thread, and shows itself
+    const project = () => useProjects.getState().projects.find((p) => p.name === 'Tip project')!
+    expect(project().notes[0]).toMatchObject({ color: '#E5E5E5', noThread: true })
+    expect(tab()).toBe('Banknote')
+    expect(screen.queryByRole('tab', { name: 'Thread' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Security thread', exact: true })).toBeNull()
+    expect(document.querySelector('[data-thread]')).toBeNull()
+    expect(screen.queryByText('You can add windows here')).toBeNull()
+
+    // Every feature is added from one Add menu, on the banknote's row and at the end of the tabs, each with a line on
+    // what it is. The project's first thread opens on its tab, without windows, with the tip by Windows until the next click
+    const add = () => screen.getAllByRole('button', { name: 'Add security feature' })
+    expect(add()).toHaveLength(2)
+    await user.click(add()[1])
+    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual([
+      expect.stringMatching(/^Security thread/), expect.stringMatching(/^Watermark/), expect.stringMatching(/^Magnetic ink/)])
+    await user.click(screen.getByRole('menuitem', { name: /^Security thread/ }))
+    expect(project().notes[0].noThread).toBeUndefined()
     expect(screen.getByRole('tab', { name: 'Thread' }).getAttribute('aria-selected')).toBe('true')
+    expect(document.querySelector('[data-thread]')).not.toBeNull()
     const windows = screen.getByRole('switch', { name: 'Windows' })
     expect(windows.getAttribute('aria-checked')).toBe('false')
     expect(await screen.findByText('You can add windows here')).toBeDefined()
@@ -126,11 +149,17 @@ describe('username workspace editor', () => {
     expect(windows.getAttribute('aria-checked')).toBe('true')
     await waitFor(() => expect(screen.queryByText('You can add windows here')).toBeNull())
 
+    // It is removed as every feature is, from the bin by its tab, and the banknote itself shows again
+    await user.click(screen.getAllByRole('button', { name: 'Remove security thread' }).at(-1)!)
+    expect(project().notes[0].noThread).toBe(true)
+    expect(tab()).toBe('Banknote')
+    expect(document.querySelector('[data-thread]')).toBeNull()
+
     // The next banknote shows itself, with no tip
     await user.click(screen.getByRole('button', { name: 'Add banknote', exact: true }))
     await user.click(await screen.findByRole('button', { name: 'Add', exact: true }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-    expect(screen.getByRole('tab', { name: 'Banknote' }).getAttribute('aria-selected')).toBe('true')
+    expect(tab()).toBe('Banknote')
     expect(screen.queryByText('You can add windows here')).toBeNull()
   })
   it('edits windows without an edit mode, undoes deletion, and preserves sections when windows are off', async () => {
@@ -838,8 +867,8 @@ describe('username workspace editor', () => {
     expect(tab()).toBe('Thread')
 
     // Adding the watermark selects it and shows the banknote flat with it clear, with its box to place; the tilt pad steps aside
-    await user.click(screen.getByRole('button', { name: 'Add layer' }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Watermark' }))
+    await user.click(addFeature())
+    await user.click(await screen.findByRole('menuitem', { name: /^Watermark/ }))
     expect(watermark()).toBeDefined()
     expect(tab()).toBe('Watermark')
     expect(placing()).not.toBeNull()
@@ -1019,8 +1048,8 @@ describe('username workspace editor', () => {
     render(<TooltipProvider><App /></TooltipProvider>)
     await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
     await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
-    await user.click(screen.getByRole('button', { name: 'Add layer' }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Watermark' }))
+    await user.click(addFeature())
+    await user.click(await screen.findByRole('menuitem', { name: /^Watermark/ }))
     const notes = () => useProjects.getState().demoPreview!.notes
     const original = notes()[0].watermark
 
@@ -1068,9 +1097,9 @@ describe('username workspace editor', () => {
 
     // The + lists every layer the banknote doesn't have yet; adding the ink selects it and shows its box to place, the
     // banknote laid flat and the tilt pad stepping aside, as for the watermark
-    await user.click(screen.getByRole('button', { name: 'Add layer' }))
-    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual(['Watermark', 'Magnetic ink'])
-    await user.click(screen.getByRole('menuitem', { name: 'Magnetic ink' }))
+    await user.click(addFeature())
+    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual([expect.stringMatching(/^Watermark/), expect.stringMatching(/^Magnetic ink/)])
+    await user.click(screen.getByRole('menuitem', { name: /^Magnetic ink/ }))
     expect(ink()).toBeDefined()
     expect(tab()).toBe('Magnetic ink')
     expect(screen.getByRole('button', { name: 'Magnetic ink', exact: true }).classList.contains('bg-muted')).toBe(true)
@@ -1150,12 +1179,12 @@ describe('username workspace editor', () => {
     await user.click(await screen.findByRole('button', { name: 'Demo', exact: true }))
     await user.click(await screen.findByRole('button', { name: 'Demo banknote', exact: true }))
     const notes = () => useProjects.getState().demoPreview!.notes
-    await user.click(screen.getByRole('button', { name: 'Add layer' }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Magnetic ink' }))
-    await user.click(screen.getByRole('button', { name: 'Add layer' }))
-    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual(['Watermark'])
-    await user.click(screen.getByRole('menuitem', { name: 'Watermark' }))
-    expect(screen.queryByRole('button', { name: 'Add layer' })).toBeNull()
+    await user.click(addFeature())
+    await user.click(await screen.findByRole('menuitem', { name: /^Magnetic ink/ }))
+    await user.click(addFeature())
+    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual([expect.stringMatching(/^Watermark/)])
+    await user.click(screen.getByRole('menuitem', { name: /^Watermark/ }))
+    expect(screen.queryAllByRole('button', { name: 'Add security feature' })).toHaveLength(0)
     // Listed under the thread in the order they draw, as tabs in the same order
     expect(within(screen.getByRole('list', { name: 'Layers of Demo banknote' })).getAllByRole('listitem').map((row) => row.textContent))
       .toEqual(['Security thread', 'Watermark', 'Magnetic ink'])
@@ -1174,8 +1203,8 @@ describe('username workspace editor', () => {
     expect(notes()[0].magneticInk).toEqual(original)
     expect(tab()).toBe('Banknote')
     // The + is back, for the ink alone
-    await user.click(screen.getByRole('button', { name: 'Add layer' }))
-    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual(['Magnetic ink'])
+    await user.click(addFeature())
+    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual([expect.stringMatching(/^Magnetic ink/)])
     await user.keyboard('{Escape}')
 
     await user.click(screen.getByRole('button', { name: 'Undo', exact: true }))
