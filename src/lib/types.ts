@@ -183,8 +183,8 @@ export interface ContinuousDesign {
 
 /**
  * Magnetic ink printed in a shape, with the look of SICPA's SPARK Flow PRIME: its colour shifts from Flat to Tilted as
- * the banknote turns away from the viewer, and a bright bar rolls across the shape on one tilt. The shape is whatever
- * stands out from its image's background (`inkCoverage` in inkMask.ts); the magnetism itself isn't shown. Placed by its
+ * the banknote turns away from the viewer, and a bright bar rolls across the shape on one tilt. The shape is its image
+ * read as a stencil (`inkCoverage` in inkMask.ts); the magnetism itself isn't shown. Placed by its
  * top-left corner in mm from the banknote's top-left; its height follows the image's proportions.
  */
 export interface MagneticInk {

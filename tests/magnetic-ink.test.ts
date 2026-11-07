@@ -96,11 +96,36 @@ describe("magnetic ink's shape", () => {
     new Uint8ClampedArray(Array.from({ length: width * height }, (_, i) => at(i % width, Math.floor(i / width))).flat())
   const grey = (level: number, alpha = 255) => [level, level, level, alpha]
   const inside = (x: number, y: number, size = 4) => x > 0 && y > 0 && x < size - 1 && y < size - 1
-  /** Transparent all round; inside, white, black and red, and a white half see-through */
-  const cutout = paint(4, 4, (x, y) => (!inside(x, y) ? grey(0, 0) : [[255, 255, 255, 255], [0, 0, 0, 255], [255, 0, 0, 255], [255, 255, 255, 128]][(y - 1) * 2 + (x - 1)]))
+  /** Keller's 15 strip in miniature: magenta with rounded corners, its 15 drawn in the paper's cream */
+  const MAGENTA = [198, 0, 86, 255]
+  const CREAM = [246, 222, 210, 255]
+  const stripCorner = (x: number, y: number) => (x === 0 || x === 5) && (y === 0 || y === 7)
+  const fifteen = (x: number, y: number) => (x === 2 || x === 3) && (y === 3 || y === 4)
+  const strip = (fill = MAGENTA, drawn = CREAM, at = fifteen) => paint(6, 8, (x, y) => (stripCorner(x, y) ? grey(0, 0) : at(x, y) ? drawn : fill))
+  const stripInk = (drawnInk: number, fillInk = 255, outside = 0) =>
+    Array.from({ length: 48 }, (_, p) => (stripCorner(p % 6, Math.floor(p / 6)) ? outside : fifteen(p % 6, Math.floor(p / 6)) ? drawnInk : fillInk))
 
-  it('is whatever is opaque on transparency, whatever its colour', () => {
-    expect(Array.from(inkCoverage(cutout, 4, 4))).toEqual([0, 0, 0, 0, 0, 255, 255, 0, 0, 255, 128, 0, 0, 0, 0, 0])
+  it('takes the shape cut out of transparency, less whatever is drawn on it in another colour', () => {
+    // The strip takes the ink and its 15 is left open, so the banknote shows through it
+    expect(Array.from(inkCoverage(strip(), 6, 8))).toEqual(stripInk(0))
+    // Darker or lighter makes no difference: a cream strip with a magenta 15 prints the same way round
+    expect(Array.from(inkCoverage(strip(CREAM, MAGENTA), 6, 8))).toEqual(stripInk(0))
+  })
+
+  it('prints a shape of one colour solid, whatever its colour, as far as it is opaque', () => {
+    // A white logo cut out of transparency, one of its pixels half see-through
+    const logo = (level: number) => paint(4, 4, (x, y) => (!inside(x, y) ? grey(0, 0) : grey(level, x === 2 && y === 2 ? 128 : 255)))
+    for (const level of [255, 0, 120]) expect(Array.from(inkCoverage(logo(level), 4, 4))).toEqual([0, 0, 0, 0, 0, 255, 255, 0, 0, 255, 128, 0, 0, 0, 0, 0])
+  })
+
+  it('keeps soft parts as thinner ink, so clean art comes out crisp and soft art as drawn', () => {
+    // A pixel halfway between the strip's magenta and the 15's cream, as a soft edge leaves, takes about half the ink
+    const soft = strip()
+    soft.set([222, 111, 148, 255], (2 * 6 + 2) * 4)
+    const coverage = Array.from(inkCoverage(soft, 6, 8))
+    expect(coverage[2 * 6 + 2]).toBeGreaterThan(110)
+    expect(coverage[2 * 6 + 2]).toBeLessThan(145)
+    expect(coverage.filter((_, p) => p !== 2 * 6 + 2)).toEqual(stripInk(0).filter((_, p) => p !== 2 * 6 + 2))
   })
 
   it('follows a cutout that runs to its edges, rounded corners and all', () => {
@@ -132,7 +157,8 @@ describe("magnetic ink's shape", () => {
   })
 
   it('goes round the shape instead when inverted', () => {
-    expect(Array.from(inkCoverage(cutout, 4, 4, true))).toEqual([255, 255, 255, 255, 255, 0, 0, 255, 255, 0, 127, 255, 255, 255, 255, 255])
+    // Round the strip and in its 15
+    expect(Array.from(inkCoverage(strip(), 6, 8, true))).toEqual(stripInk(255, 0, 255))
   })
 })
 

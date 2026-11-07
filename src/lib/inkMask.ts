@@ -10,42 +10,93 @@ import type { MagneticInk } from './types'
  */
 
 /**
- * How much ink each pixel takes, 0 (none) to 255 (full), one byte a pixel. The shape is whatever stands out from the
- * image's background, read from its edges as the watermark's plain paper is (`paperOf`): on transparency, whatever is
- * opaque, whatever its colour; on an opaque background, whatever is lighter or darker than it, as far as it is, past the
- * background's own speckle (so a JPEG's stays clear), with the strongest part, bar a few stray pixels, at full ink, so a
- * faint scan prints solid. Only brightness counts, as for the watermark. Inverted, the ink goes round the shape instead.
+ * How much ink each pixel takes, 0 (none) to 255 (full), one byte a pixel: the image read as the stencil the ink is
+ * printed through. On an opaque background, read from its edges as the watermark's plain paper is (`paperOf`), the ink
+ * is whatever is lighter or darker than it, as far as it is, past the background's own speckle (so a JPEG's stays
+ * clear). Cut out of transparency, the shape takes the ink, rounded corners and all, less whatever is drawn on it in
+ * another colour, as far as that stands out from the shape's own main colour: a strip with its 15 drawn in the paper's
+ * colour prints with the 15 left open, and a shape of one colour, whatever it is, prints solid (Keller, 6 November: his
+ * 15 strip came out one flat bar while a cutout was read by its outline alone). Either way the strongest part, bar a few
+ * stray pixels, counts in full, so a faint scan prints solid, and soft parts stay soft, as thinner ink: clean art (an
+ * SVG, pure black and white, a clean cutout) comes out crisp by itself, and soft art as drawn (Keller chose this over a
+ * hard limit at each spot). Only brightness counts, as for the watermark. Inverted, the ink goes round the shape instead.
  */
 export function inkCoverage(data: Uint8ClampedArray, width: number, height: number, invert = false) {
   const paper = paperOf(data, width, height)
   const n = width * height
-  const out = new Uint8ClampedArray(n)
+  let out: Uint8ClampedArray
   if (paper.clear) {
-    for (let p = 0; p < n; p++) out[p] = data[p * 4 + 3]
+    const drawn = standingOut(data, n, shapeColour(data, n), true)
+    out = new Uint8ClampedArray(n)
+    for (let p = 0; p < n; p++) out[p] = Math.round((data[p * 4 + 3] * (255 - drawn[p])) / 255)
   } else {
-    const floor = SPECKLE_SPREADS * paper.spread
-    // As far as it can stand out either way, past the speckle
-    const room = Math.max(paper.level, 1 - paper.level) - floor
-    const counts = new Uint32Array(256)
-    for (let p = 0, i = 0; p < n; p++, i += 4) {
-      const off = Math.abs(luma(data[i], data[i + 1], data[i + 2]) - paper.level) - floor
-      const v = off > 0 && room > 0 ? Math.round(clamp(off / room, 0, 1) * data[i + 3]) : 0
-      out[p] = v
-      counts[v]++
-    }
-    // The strongest part, bar a few stray pixels, takes full ink; too few pixels stand out to tell, and it is left as read
-    const shown = n - counts[0]
-    let strongest = 255
-    if (shown >= AUTO_MIN_SHARE * n) {
-      let skip = AUTO_CLIP * shown
-      for (; strongest > 1; strongest--) {
-        skip -= counts[strongest]
-        if (skip < 0) break
-      }
-    }
-    if (strongest < 255) for (let p = 0; p < n; p++) out[p] = Math.round((out[p] * 255) / strongest)
+    out = standingOut(data, n, paper, false)
   }
   if (invert) for (let p = 0; p < n; p++) out[p] = 255 - out[p]
+  return out
+}
+
+/** Brightness steps the main colour of a cutout is counted in, so a big image needs no sorting */
+const SHAPE_BINS = 4096
+
+/**
+ * The main colour of a shape cut out of transparency, as `paperOf` reads an opaque image's background from its edges:
+ * the middle brightness of the shape's opaque pixels, and `spread`, how far they stray from it (a scan's grain), as a
+ * robust standard deviation.
+ */
+function shapeColour(data: Uint8ClampedArray, n: number) {
+  const bin = (level: number) => Math.min(SHAPE_BINS - 1, Math.floor(level * SHAPE_BINS))
+  const levels = new Uint32Array(SHAPE_BINS)
+  let count = 0
+  for (let i = 0; i < n * 4; i += 4) {
+    if (data[i + 3] < 128) continue
+    levels[bin(luma(data[i], data[i + 1], data[i + 2]))]++
+    count++
+  }
+  const middle = (counts: Uint32Array) => {
+    for (let b = 0, seen = 0; b < SHAPE_BINS; b++) {
+      seen += counts[b]
+      if (seen * 2 > count) return b
+    }
+    return 0
+  }
+  const level = (middle(levels) + 0.5) / SHAPE_BINS
+  const offs = new Uint32Array(SHAPE_BINS)
+  for (let i = 0; i < n * 4; i += 4) if (data[i + 3] >= 128) offs[bin(Math.abs(luma(data[i], data[i + 1], data[i + 2]) - level))]++
+  return { level, spread: (1.4826 * middle(offs)) / SHAPE_BINS }
+}
+
+/**
+ * How far each pixel stands out from a brightness (an opaque image's background, or a cutout's own main colour), 0 to
+ * 255, past `SPECKLE_SPREADS` of its spread, with the strongest part, bar a few stray pixels, at 255. Against a
+ * background each pixel counts as far as it is opaque; within a cutout only its opaque pixels count, and the rest stay 0.
+ */
+function standingOut(data: Uint8ClampedArray, n: number, { level, spread }: { level: number; spread: number }, cutout: boolean) {
+  const floor = SPECKLE_SPREADS * spread
+  // As far as it can stand out either way, past the speckle
+  const room = Math.max(level, 1 - level) - floor
+  const out = new Uint8ClampedArray(n)
+  const counts = new Uint32Array(256)
+  let counted = 0
+  for (let p = 0, i = 0; p < n; p++, i += 4) {
+    if (cutout && data[i + 3] < 128) continue
+    const off = Math.abs(luma(data[i], data[i + 1], data[i + 2]) - level) - floor
+    const v = off > 0 && room > 0 ? Math.round(clamp(off / room, 0, 1) * (cutout ? 255 : data[i + 3])) : 0
+    out[p] = v
+    counts[v]++
+    counted++
+  }
+  // The strongest part, bar a few stray pixels, counts in full; too few pixels stand out to tell, and it is left as read
+  const shown = counted - counts[0]
+  let strongest = 255
+  if (shown > 0 && shown >= AUTO_MIN_SHARE * counted) {
+    let skip = AUTO_CLIP * shown
+    for (; strongest > 1; strongest--) {
+      skip -= counts[strongest]
+      if (skip < 0) break
+    }
+  }
+  if (strongest < 255) for (let p = 0; p < n; p++) out[p] = Math.round((out[p] * 255) / strongest)
   return out
 }
 
