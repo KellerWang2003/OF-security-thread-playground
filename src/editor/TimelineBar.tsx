@@ -18,6 +18,7 @@ import { clamp, cyclePhase } from '../lib/frames'
 import { cyclePosition, flatLabel, flatStep, lensState, reachSpans, respondsTo, revealLevelAt, revealReaches, tiltForPosition, tiltReach, type Axis, type LensState } from '../lib/lens'
 import { pickFiles } from '../lib/images'
 import { DEFAULT_TILT, LENGTH_LIMITS, MAX_FRAMES, MIN_FRAMES } from '../lib/notes'
+import { usePasteImages } from '../lib/pasteImages'
 import { setTiltPadOpen } from '../lib/tiltPad'
 import { framesMissed, patternOf, playbackLens, playbackTilt, sectionMix, setSectionLens, timelineSection } from '../lib/pattern'
 import { updateNote } from '../lib/store'
@@ -173,6 +174,8 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
   >(null)
   const [drag, setDrag] = useState<ClipDrag>()
   const [pxPerUnit, setPxPerUnit] = useState(ZOOM.initial)
+  // Images pasted while the pointer is over the + come in as frames, as Upload images brings them
+  const pasteFrames = usePasteImages((files) => addImageFrames(noteRef, files))
   const { frames } = note
   // One section's lens (the first, or the one picked in the thread editor); a plain thread's is the banknote's
   const followed = timelineSection(note, sectionId)
@@ -423,6 +426,7 @@ function FrameTrack({ note, noteRef, sectionId, onScrub }: { note: Note; noteRef
             <DropdownMenuTrigger
               render={
                 <button
+                  {...pasteFrames}
                   type="button"
                   aria-label="Add frame"
                   disabled={frames.length >= MAX_FRAMES && !frames.every((f) => f.kind !== 'image')}

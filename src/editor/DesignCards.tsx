@@ -4,6 +4,7 @@ import { reportError } from '../cloud/notices'
 import { IconButton, Labeled } from '../components/controls'
 import { sideImageId, type Side } from '../lib/back'
 import { THUMB_PX, pickFiles, useImageUrl } from '../lib/images'
+import { usePasteImage } from '../lib/pasteImages'
 import type { Note } from '../lib/types'
 import { turnOver } from '../tilt/tilt'
 import { setBackImage, setFaceImage, type NoteRef } from './frameActions'
@@ -35,6 +36,11 @@ function DesignCard({ note, noteRef, side }: { note: Note; noteRef: NoteRef; sid
     } catch (error) { reportError(error) }
   }
   const turn = () => turnOver(side === 'back')
+  // A design pasted over the card is working on its side too
+  const paste = usePasteImage((file) => {
+    turn()
+    return set(file)
+  })
   return (
     <div role="group" aria-label={name} className="min-w-0" onPointerDownCapture={turn} onFocusCapture={turn}>
       <Labeled
@@ -46,6 +52,7 @@ function DesignCard({ note, noteRef, side }: { note: Note; noteRef: NoteRef; sid
         ) : undefined}
       >
         <Button
+          {...paste}
           variant="outline"
           className="h-[104px] w-full flex-col gap-1.5 overflow-hidden rounded-[calc(var(--radius-sm)+7px)] p-1.5 text-xs font-medium"
           onClick={() => void upload()}

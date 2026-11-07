@@ -5,13 +5,14 @@ import { cn } from '@/lib/utils'
 import { IconButton, Labeled, LengthField } from '../components/controls'
 import { reportError } from '../cloud/notices'
 import { THUMB_PX, pickFiles, useImageUrl } from '../lib/images'
+import { usePasteImage } from '../lib/pasteImages'
 import { PLACE_MIN_MM, PLACE_STEP, type PlacedBox, boxRange, maxBoxWidth, resizeBox } from '../lib/placed'
 import type { Note } from '../lib/types'
 import { showsBack, useTilt } from '../tilt/tilt'
 
 /**
- * A placed layer's one image (the watermark's, magnetic ink's): Upload image, or Replace beside its thumbnail, and
- * Remove image after it
+ * A placed layer's one image (the watermark's, magnetic ink's): Upload image, or Replace beside its thumbnail (either
+ * also takes an image pasted while the pointer is over it), and Remove image after it
  */
 export function LayerImage({ imageId, grayscale = false, onUpload, onRemove }: {
   imageId: string | undefined
@@ -21,10 +22,12 @@ export function LayerImage({ imageId, grayscale = false, onUpload, onRemove }: {
   onRemove: () => void
 }) {
   const image = useImageUrl(imageId, THUMB_PX)
+  const paste = usePasteImage(onUpload)
   return (
     <Labeled label="Image">
       <div className="flex items-center gap-2">
         <Button
+          {...paste}
           variant="outline"
           size="sm"
           className="h-[58px] flex-1 justify-start gap-2 overflow-hidden rounded-[calc(var(--radius-sm)+7px)] p-1.5"

@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { reportError } from '../cloud/notices'
 import { ColorField, IconButton, Labeled, SwitchField } from '../components/controls'
 import { THUMB_PX, pickFiles, useImageUrl } from '../lib/images'
+import { usePasteImage } from '../lib/pasteImages'
 import { updateNote } from '../lib/store'
 import type { Frame, Note } from '../lib/types'
 import { replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
@@ -29,7 +30,8 @@ interface FillEdits {
 
 /**
  * The image's card: what it says before there is an image (Upload), then the image itself (its picture once loaded)
- * with Replace, and × beside it. It never asks for a file on its own (Keller); its button does.
+ * with Replace, and × beside it. It never asks for a file on its own (Keller); its button does, and an image pasted
+ * while the pointer is over it goes in too (`usePasteImage`).
  */
 function ImageCard({ image, url, onAdd, onRemove }: {
   image: boolean
@@ -43,9 +45,11 @@ function ImageCard({ image, url, onAdd, onRemove }: {
       if (file) await onAdd(file)
     } catch (error) { reportError(error) }
   }
+  const paste = usePasteImage(onAdd)
   return (
     <div className="flex items-center gap-2">
       <Button
+        {...paste}
         variant="outline"
         size="sm"
         className="h-[58px] min-w-0 flex-1 justify-start gap-2 overflow-hidden rounded-[calc(var(--radius-sm)+7px)] p-1.5"
