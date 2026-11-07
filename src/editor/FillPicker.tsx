@@ -1,6 +1,7 @@
 import { ImageUp, X } from 'lucide-react'
 import type { ReactElement } from 'react'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { reportError } from '../cloud/notices'
 import { ColorField, IconButton, Labeled, SwitchField } from '../components/controls'
@@ -10,10 +11,13 @@ import { updateNote } from '../lib/store'
 import type { Frame, Note } from '../lib/types'
 import { replaceFrameImage, updateFrame, type NoteRef } from './frameActions'
 
-/** A fill as it is laid out: whether it shows an image, the image's picture once loaded, and the colour that shows without one */
+/**
+ * A fill as it is laid out: whether it shows an image, the image's picture once loaded (undefined while on its way, null
+ * if it couldn't be had), and the colour that shows without one
+ */
 interface Fill {
   image: boolean
-  url?: string
+  url?: string | null
   color: string
 }
 
@@ -35,7 +39,7 @@ interface FillEdits {
  */
 function ImageCard({ image, url, onAdd, onRemove }: {
   image: boolean
-  url?: string
+  url?: string | null
   onAdd: (file: File) => Promise<unknown>
   onRemove: () => void
 }) {
@@ -57,6 +61,9 @@ function ImageCard({ image, url, onAdd, onRemove }: {
       >
         {image && url ? (
           <img src={url} alt="" className="h-11 w-11 shrink-0 rounded object-contain" />
+        ) : image && url === undefined ? (
+          // The image still on its way: its place shimmers
+          <Skeleton className="size-11 shrink-0 rounded" />
         ) : (
           <span className="flex size-11 shrink-0 items-center justify-center rounded bg-muted">
             {!image && <ImageUp />}
@@ -100,7 +107,7 @@ function FillFields({ fill, edits }: { fill: Fill; edits: FillEdits }) {
 }
 
 /** A frame's fill and how to change it, with the thread's background; removing its image shows its colour again */
-function frameFill(note: Note, noteRef: NoteRef, frame: Frame, url: string | undefined): { fill: Fill; edits: FillEdits } {
+function frameFill(note: Note, noteRef: NoteRef, frame: Frame, url: string | null | undefined): { fill: Fill; edits: FillEdits } {
   return {
     fill: { image: frame.kind === 'image' && !!frame.imageId, url, color: frame.color },
     edits: {

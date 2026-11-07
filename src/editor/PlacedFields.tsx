@@ -1,6 +1,7 @@
 import { ImageUp, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { IconButton, Labeled, LengthField } from '../components/controls'
 import { reportError } from '../cloud/notices'
@@ -40,12 +41,15 @@ export function LayerImage({ imageId, grayscale = false, onUpload, onRemove }: {
         >
           {image ? (
             <img src={image} alt="" className={cn('h-11 w-11 shrink-0 rounded bg-muted object-contain', grayscale && 'grayscale')} />
+          ) : imageId && image === undefined ? (
+            // The image still on its way: its place shimmers
+            <Skeleton className="size-11 shrink-0 rounded" />
           ) : (
             <span className="flex size-11 shrink-0 items-center justify-center rounded bg-muted">
               <ImageUp />
             </span>
           )}
-          {image ? 'Replace' : 'Upload image'}
+          {imageId ? 'Replace' : 'Upload image'}
         </Button>
         {imageId && (
           <IconButton label="Remove image" onClick={onRemove}>

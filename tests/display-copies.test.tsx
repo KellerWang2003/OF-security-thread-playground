@@ -12,7 +12,14 @@ const made = vi.hoisted(() => vi.fn(async (_blob: Blob, steps: number[]) => ({
 const offThread = vi.hoisted(() => ({ value: true }))
 vi.mock('../src/lib/imageWork', () => ({ canWorkOffThread: () => offThread.value, makeCopies: made }))
 const original = vi.hoisted(() => ({ type: 'image/png' }))
-vi.mock('../src/cloud/repository', () => ({ downloadArtwork: async () => new Blob([], { type: original.type }) }))
+const unreachable = vi.hoisted(() => ({ value: false }))
+vi.mock('../src/cloud/repository', () => ({
+  downloadArtwork: async () => {
+    if (unreachable.value) throw new Error('Couldn’t reach the workspace. Please retry.')
+    return new Blob([], { type: original.type })
+  },
+}))
+vi.mock('../src/cloud/notices', () => ({ reportError: () => {} }))
 vi.mock('../src/cloud/cache', () => ({ readArtwork: async () => undefined, writeArtwork: async () => {} }))
 
 import { loadImageUrl, setImageWorkspace, stepFor, storeImage, useImageUrl } from '../src/lib/images'
@@ -35,6 +42,7 @@ beforeEach(() => {
   made.mockClear()
   offThread.value = true
   original.type = 'image/png'
+  unreachable.value = false
   // A fresh session each time: nothing known yet
   setImageWorkspace(`test-${crypto.randomUUID()}`)
 })
@@ -76,6 +84,38 @@ describe('display copies', () => {
     offThread.value = false
     expect(await shown(crypto.randomUUID(), 120)).toBe('blob:image/png')
     expect(made).not.toHaveBeenCalled()
+  })
+
+  it('says an image is on its way until it comes, and that it couldn’t be had once it can’t, so nothing loads for ever', async () => {
+    const id = crypto.randomUUID()
+    const states: (string | null | undefined)[] = []
+    function Watch() {
+      states.push(useImageUrl(id, 300))
+      return null
+    }
+    unreachable.value = true
+    render(<Watch />)
+    // Undefined while on its way (a view shows it loading), then null: no image, and no longer loading
+    expect(states[0]).toBeUndefined()
+    await waitFor(() => expect(states.at(-1)).toBeNull())
+    cleanup()
+    // Drawn again, it is tried again
+    unreachable.value = false
+    expect(await shown(id, 300)).toBe('blob:image/copy-512')
+  })
+
+  it('keeps showing the biggest copy while a view waits for the original, rather than going back to loading', async () => {
+    const id = crypto.randomUUID()
+    // Its copies made (by a view at 1000 px), but not yet its original's address
+    expect(await shown(id, 1000)).toBe('blob:image/copy-1024')
+    const first: (string | null | undefined)[] = []
+    function Zoomed() {
+      first.push(useImageUrl(id, 9000))
+      return null
+    }
+    render(<Zoomed />)
+    expect(first[0]).toBe('blob:image/copy-2048')
+    await waitFor(() => expect(first.at(-1)).toBe('blob:image/png'))
   })
 
   it('starts on an upload’s copies as soon as it is stored', async () => {

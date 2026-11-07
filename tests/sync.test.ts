@@ -191,6 +191,38 @@ describe('durable cloud saving', () => {
     expect(sync.status).toBe('saved')
   })
 
+  it('knows once the cloud has answered with its projects, or failed to, and not before', async () => {
+    const f = fixture()
+    const sync = f.engine()
+    let answer: (() => void) | undefined
+    const list = f.repository.list
+    f.repository.list = () => new Promise((resolve, reject) => { answer = () => void list().then(resolve, reject) })
+    const opening = sync.initialize([])
+    await vi.waitFor(() => expect(answer).toBeDefined())
+    // Asked but not answered: no projects yet doesn't mean none
+    expect(sync.listed).toBe(false)
+    answer?.()
+    await opening
+    expect(sync.listed).toBe(true)
+
+    // Offline from the start, the answer is the error, so nothing waits for ever
+    const offline = fixture()
+    offline.offline()
+    const failed = offline.engine()
+    await failed.initialize([])
+    expect(failed.status).toBe('error')
+    expect(failed.listed).toBe(true)
+
+    // A save going wrong before any list was asked for says nothing about the projects
+    const saving = fixture()
+    const quiet = saving.engine()
+    saving.offline()
+    quiet.put(createProject('Unsent'))
+    await quiet.flush()
+    expect(quiet.status).toBe('error')
+    expect(quiet.listed).toBe(false)
+  })
+
   it('does not publish an old workspace’s results after the workspace closes', async () => {
     const f = fixture()
     const notify = vi.fn()

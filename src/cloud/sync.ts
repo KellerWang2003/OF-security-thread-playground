@@ -32,6 +32,11 @@ export class ProjectSync {
   records: CachedProject[] = []
   status: SyncStatus = 'saved'
   error = ''
+  /**
+   * Whether the cloud has answered once with its list of projects (or failed to): until then, a device with nothing of
+   * the workspace's cached can't tell no projects from projects still on their way, so it shows their skeletons
+   */
+  listed = false
   private running?: Promise<void>
   private persistence: Promise<void> = Promise.resolve()
   private diskError = false
@@ -132,6 +137,7 @@ export class ProjectSync {
       this.diskError = false
       if (refresh) {
         this.merge(await this.repository.list())
+        this.listed = true
         if (this.stopped) return
         await this.checkpoint()
         this.emit()
@@ -165,6 +171,8 @@ export class ProjectSync {
     } catch (error) {
       this.status = 'error'
       this.error = errorMessage(error, 'Couldn’t save. Your edits remain on this device.')
+      // An answer of a kind: what is on this device shows, with the error, rather than loading for ever
+      if (refresh) this.listed = true
     }
     this.emit()
   }

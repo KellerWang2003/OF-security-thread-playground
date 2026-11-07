@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { PAPER, backOf, mirrored, turnDeg, type Side } from '../lib/back'
 import { SHADE_DEG, TILT_LIMIT } from '../lib/frames'
@@ -19,7 +20,7 @@ import { DesignTiles } from './DesignTiles'
 // Height ÷ width of each image, once loaded
 const aspects = new Map<string, number>()
 
-function useImageAspect(url: string | undefined) {
+function useImageAspect(url: string | null | undefined) {
   const [loaded, setLoaded] = useState<{ url: string; aspect: number }>()
   const aspect = url ? aspects.get(url) ?? (loaded?.url === url ? loaded.aspect : undefined) : undefined
   // Rendered without it: measure it, even if another view did since this one rendered (the browser has it by then)
@@ -35,6 +36,29 @@ function useImageAspect(url: string | undefined) {
     img.src = url
   }, [url, aspect])
   return aspect
+}
+
+/**
+ * In place of a part of a banknote whose image is still on its way (its design, a frame's image, magnetic ink's shape):
+ * a shimmer, so it reads as loading rather than missing. Sweeping across its own box, as it turns with the banknote. On
+ * screen only, like the outlines: export waits for every image
+ */
+function Loading({ style }: { style?: CSSProperties }) {
+  return <Skeleton data-loading="" className="pointer-events-none absolute inset-0 rounded-none bg-foreground/5 bg-scroll" style={style} />
+}
+
+/**
+ * A banknote's shape before its project is here, at `scale` px per mm: plain paper under the same shimmer a banknote
+ * whose design is still loading shows, so a skeleton turns into the banknotes without changing its look (the project
+ * list's and the editor's skeletons)
+ */
+export function NoteSkeleton({ widthMm, heightMm, scale }: { widthMm: number; heightMm: number; scale: number }) {
+  return (
+    <div aria-hidden="true" data-note-skeleton="" className="relative shrink-0 overflow-hidden shadow-note"
+      style={{ width: widthMm * scale, height: heightMm * scale, backgroundColor: PAPER, borderRadius: 1.5 * scale }}>
+      <Skeleton className="absolute inset-0 rounded-none bg-foreground/5" />
+    </div>
+  )
 }
 
 /**
@@ -69,12 +93,15 @@ export function FrameFill({
 }) {
   const imageId = frame.kind === 'image' ? frame.imageId : undefined
   // Frames from before their proportions were recorded are measured once, from the original
-  const measured = useImageAspect(useImageUrl(frame.aspect ? undefined : imageId))
+  const original = useImageUrl(frame.aspect ? undefined : imageId)
+  const measured = useImageAspect(original)
   const aspect = frame.aspect ?? measured
   const box = aspect ? imageBox(frame.place, aspect, repeatMm, thicknessMm, direction) : undefined
   // The display copy with as many pixels as the image shows with on this screen, however large the upload
   const url = useImageUrl(box && imageId, box && devicePx(Math.max(box.acrossSize, box.alongSize) * scale))
   if (frame.kind === 'color') return <div className="absolute inset-0" style={{ opacity, backgroundColor: frame.color }} />
+  // Still on its way (for a frame from before proportions were kept, its proportions first): a shimmer along the thread
+  if (imageId && (box ? url === undefined : original !== null)) return <Loading style={{ opacity }} />
   if (frame.kind !== 'image' || !url || !box) return null
   const vertical = direction === 'vertical'
   return (
@@ -88,9 +115,15 @@ export function FrameFill({
   )
 }
 
-/** A frame as a thumbnail: the uploaded image whole, or its colour; an empty one shows the thread's background */
+/**
+ * A frame as a thumbnail: the uploaded image whole, or its colour; an empty one shows the thread's background, and one
+ * whose image is still on its way a shimmer
+ */
 export function FrameThumb({ frame, backgroundColor }: { frame: Frame; backgroundColor?: string }) {
   const url = useImageUrl(frame.kind === 'image' ? frame.imageId : undefined, THUMB_PX)
+  if (frame.kind === 'image' && frame.imageId && url === undefined) {
+    return <div className="absolute inset-0" style={{ backgroundColor }}><Loading /></div>
+  }
   if (frame.kind !== 'image' || !url) {
     return <div className="absolute inset-0" style={{ backgroundColor: frame.kind === 'color' ? frame.color : backgroundColor }} />
   }
@@ -377,6 +410,8 @@ export function NoteView({
       {face && (faceShiftMm
         ? <DesignTiles url={face} width={mm(note.widthMm)} height={mm(note.heightMm)} color={PAPER} shift={{ x: mm(faceShiftMm.x), y: mm(faceShiftMm.y) }} />
         : <img src={face} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />)}
+      {/* The design still on its way: the paper shimmers where it will show, under everything drawn over it */}
+      {design && face === undefined && <Loading />}
 
       {watermarkBox && watermark?.imageId && (
         // Light through thinner paper (relief.ts, through its levels), colour-dodged over the design: it only ever
@@ -388,6 +423,9 @@ export function NoteView({
           className={cn('absolute', live && depth > 0 ? 'cursor-move' : 'pointer-events-none')}
           {...part('watermark', back ? { ...watermarkBox, mixBlendMode: 'color-dodge', transform: 'scaleX(-1)' } : { ...watermarkBox, mixBlendMode: 'color-dodge' })} />
       )}
+
+      {/* Magnetic ink's shape still being had or worked out: a shimmer in its box meanwhile */}
+      {!back && inkBox && magneticInk?.imageId && inkMask === undefined && <Loading style={inkBox} />}
 
       {!back && inkBox && magneticInk?.imageId && inkShape && inkBar && (
         // Magnetic ink, printed over the design and the watermark, under the thread: its Flat colour, the Tilted one fading

@@ -181,9 +181,10 @@ export async function exportInkMask(imageId: string, invert: boolean | undefined
 /**
  * Magnetic ink's mask for the canvas, once worked out: in more detail once it shows `shownPx` device pixels across, past
  * what the usual reading has. Switching Invert, or zooming in, keeps the last mask showing until the new one is ready,
- * so the ink never blinks out.
+ * so the ink never blinks out. Undefined while the first one is on its way (a loading state), null if it can't be
+ * worked out (its image couldn't be had or read), so it never shows as loading for ever.
  */
-export function useInkMask(ink: Pick<MagneticInk, 'imageId' | 'invert'> | undefined, shownPx?: number): InkMask | undefined {
+export function useInkMask(ink: Pick<MagneticInk, 'imageId' | 'invert'> | undefined, shownPx?: number): InkMask | null | undefined {
   const imageId = ink?.imageId
   const invert = ink?.invert === true
   const detail = canvasDetail(shownPx)
@@ -202,5 +203,6 @@ export function useInkMask(ink: Pick<MagneticInk, 'imageId' | 'invert'> | undefi
       live = false
     }
   }, [imageId, invert, key, exact, detail])
+  if (key && !exact && loaded?.key === key && !loaded.mask) return null
   return exact ?? previous
 }

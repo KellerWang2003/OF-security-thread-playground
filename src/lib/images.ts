@@ -200,29 +200,47 @@ export async function copyImage(id: string) {
 // Removing an image reference never deletes another device's pending artwork.
 export async function removeImage(_id: string) {}
 
+/** The biggest copy of an image already made, to keep showing while a bigger size is on its way */
+function largestCopy(id: string) {
+  const made = copies.get(id)
+  if (!made?.urls.size) return undefined
+  return made.urls.get(Math.max(...made.urls.keys()))
+}
+
 /**
  * An image's object URL to draw it with: given `px`, the device pixels it is drawn across, its display copy for that
- * size (the original past the largest copy); without, the original. Fetches or makes it as needed.
+ * size (the original past the largest copy); without, the original. Fetches or makes it as needed. Undefined while it
+ * is still on its way, which views show as a loading state (`Skeleton`), and null once it couldn't be had (it is tried
+ * again the next time a view draws it), so nothing shows as loading for ever. A sized view waiting for a bigger size of
+ * an image it already has (zooming in past the copies) keeps showing the biggest copy meanwhile, and if that size can't
+ * be had, never going back to loading or to nothing.
  */
-export function useImageUrl(id: string | undefined, px?: number) {
+export function useImageUrl(id: string | undefined, px?: number): string | null | undefined {
   const step = px === undefined ? undefined : stepFor(px)
   const key = `${id}@${step}`
-  const [loaded, setLoaded] = useState<{ key: string; url?: string }>()
+  const [loaded, setLoaded] = useState<{ key: string; url?: string; failed?: boolean }>()
   const url = id ? knownUrl(id, step) ?? (loaded?.key === key ? loaded.url : undefined) : undefined
+  const failed = !url && loaded?.key === key && loaded.failed === true
 
   // Rendered without it: fetch or make it, or pick it up if another view did since this one rendered
   useEffect(() => {
-    if (!id || url) return
+    if (!id || url || failed) return
     let live = true
     void resolveImage(id, step).then((next) => {
       if (live) setLoaded({ key: `${id}@${step}`, url: next })
-    }).catch((error: unknown) => { if (live) reportError(error) })
+    }).catch((error: unknown) => {
+      if (!live) return
+      reportError(error)
+      setLoaded({ key: `${id}@${step}`, failed: true })
+    })
     return () => {
       live = false
     }
-  }, [id, step, url])
+  }, [id, step, url, failed])
 
-  return url
+  if (!id || url) return url
+  const meanwhile = step === undefined ? undefined : largestCopy(id)
+  return meanwhile ?? (failed ? null : undefined)
 }
 
 /**

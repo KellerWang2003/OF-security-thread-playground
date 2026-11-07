@@ -1,5 +1,6 @@
 import { ImageUp, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { reportError } from '../cloud/notices'
 import { IconButton, Labeled } from '../components/controls'
 import { sideImageId, type Side } from '../lib/back'
@@ -59,6 +60,9 @@ function DesignCard({ note, noteRef, side }: { note: Note; noteRef: NoteRef; sid
         >
           {imageId && url ? (
             <img src={url} alt="" className="min-h-0 w-full flex-1 rounded object-contain" />
+          ) : imageId && url === undefined ? (
+            // The design still on its way: its place shimmers
+            <Skeleton className="min-h-0 w-full flex-1 rounded" />
           ) : (
             <span className="flex min-h-0 w-full flex-1 items-center justify-center rounded bg-muted">
               {!imageId && <ImageUp className="size-4" />}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Analytics } from '@vercel/analytics/react'
 import { Button } from '@/components/ui/button'
 import { Editor } from './app/Editor'
+import { EditorSkeleton } from './app/EditorSkeleton'
 import { ProjectList } from './app/ProjectList'
 import { OpenWorkspace } from './app/OpenWorkspace'
 import { cloudConfigured } from './cloud/client'
@@ -22,7 +23,7 @@ function useHash() {
 
 function Workspace({ name }: { name: string }) {
   const hash = useHash()
-  const { projects, demoPreview, loaded, error } = useWorkspace()
+  const { projects, demoPreview, demoLoading, loaded, listed, error } = useWorkspace()
   useEffect(() => {
     void openWorkspace(name)
     const unwatch = watchWorkspace()
@@ -31,14 +32,19 @@ function Workspace({ name }: { name: string }) {
   useEffect(() => {
     if (hash !== '#/demo' && location.hash !== '#/demo') clearDemoPreview()
   }, [hash])
-  if (!loaded) return <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-    <span role={error ? 'alert' : 'status'}>{error || 'Loading projects…'}</span>
-    {error && <div className="flex gap-2"><Button onClick={() => runAction(Promise.resolve(retrySync()))}>Retry</Button><Button variant="ghost" onClick={() => runAction(signOut())}>Sign out</Button></div>}
+  if (!loaded && error) return <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+    <span role="alert">{error}</span>
+    <div className="flex gap-2"><Button onClick={() => runAction(Promise.resolve(retrySync()))}>Retry</Button><Button variant="ghost" onClick={() => runAction(signOut())}>Sign out</Button></div>
   </div>
   const projectId = hash.match(/^#\/p\/(.+)$/)?.[1]
   const project = hash === '#/demo' ? demoPreview : projects.find((p) => p.id === projectId)
+  // Nothing says it is loading in words (Keller): until the projects are here, the page they go on shows its layout as
+  // skeletons. A project's link shows the editor's until its project comes, from this device or the cloud (the project
+  // list once the cloud has answered without it), and so does the demo while it is made; the project list shows its
+  // cards' itself (`ProjectList`)
+  const waiting = !project && ((projectId !== undefined && (!loaded || !listed)) || (hash === '#/demo' && demoLoading))
   return <>
-    {project ? <Editor key={project.id} project={project} isDemo={hash === '#/demo'} /> : <ProjectList />}
+    {project ? <Editor key={project.id} project={project} isDemo={hash === '#/demo'} /> : waiting ? <EditorSkeleton isDemo={hash === '#/demo'} /> : <ProjectList />}
     <ConflictDialog />
   </>
 }

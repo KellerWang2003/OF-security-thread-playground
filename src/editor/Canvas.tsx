@@ -43,7 +43,7 @@ const COMMIT_MS = 120
 /** Background dot spacing at `scale` px per mm: every 10 mm, else 50 mm, else 500 mm, at least 12 px apart */
 const gridStep = (scale: number) => scale * (scale * 10 >= 12 ? 10 : scale * 50 >= 12 ? 50 : 500)
 /** The dots, in a little of the text colour so they show (Keller: in the border colour they were all but invisible) */
-const DOTS = 'radial-gradient(circle, color-mix(in oklab, var(--foreground) 18%, transparent) 1px, transparent 1.2px)'
+export const DOTS = 'radial-gradient(circle, color-mix(in oklab, var(--foreground) 18%, transparent) 1px, transparent 1.2px)'
 
 /** Zoom level and where the canvas origin (0, 0 mm) sits on screen, in px */
 interface View {

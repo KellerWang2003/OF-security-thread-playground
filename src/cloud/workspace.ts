@@ -12,7 +12,12 @@ import type { Project } from '../lib/types'
 interface WorkspaceState {
   projects: Project[]
   demoPreview?: Project
+  /** The demo is being made (its artwork drawn, a moment the first time): the editor's skeleton shows meanwhile */
+  demoLoading: boolean
+  /** This device's copy of the workspace has been read: projects can be shown and edited */
   loaded: boolean
+  /** The cloud has answered once with its projects (or failed to), so an empty list means no projects (`ProjectSync.listed`) */
+  listed: boolean
   status: SyncStatus
   error: string
   conflicts: string[]
@@ -21,7 +26,7 @@ interface WorkspaceState {
   importing: boolean
 }
 export const useWorkspace = create<WorkspaceState>(() => ({
-  projects: [], loaded: false, status: 'saving', error: '', conflicts: [], legacyProjects: [], importing: false,
+  projects: [], demoLoading: false, loaded: false, listed: false, status: 'saving', error: '', conflicts: [], legacyProjects: [], importing: false,
 }))
 let sync: ProjectSync | undefined
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -33,13 +38,13 @@ export async function openWorkspace(workspace: string) {
   sync?.stop()
   clearTimeout(timer)
   setImageWorkspace(workspace)
-  useWorkspace.setState({ projects: [], demoPreview: undefined, loaded: false, status: 'saving', error: '', conflicts: [], workspace, legacyProjects: [] })
+  useWorkspace.setState({ projects: [], demoPreview: undefined, demoLoading: false, loaded: false, listed: false, status: 'saving', error: '', conflicts: [], workspace, legacyProjects: [] })
   const repository = createRepository(workspace)
   const engine = new ProjectSync(repository, (records) => writeCache(workspace, records), () => {
     if (token !== generation) return
     useWorkspace.setState({
       projects: engine.records.filter((r) => !r.deleted).map((r) => r.project),
-      status: engine.status, error: engine.error,
+      listed: engine.listed, status: engine.status, error: engine.error,
       conflicts: engine.records.filter((r) => r.conflict).map((r) => r.project.id),
     })
   })
@@ -66,17 +71,26 @@ export async function openWorkspace(workspace: string) {
 
 /**
  * A fresh demo exists only in memory and never enters the save queue. It comes with the app (`createDemoProject`),
- * built with fresh ids each time; the shared template in Supabase is no longer read.
+ * built with fresh ids each time; the shared template in Supabase is no longer read. It opens straight away, on the
+ * editor's skeleton while it is made; left meanwhile (back to Projects), it isn't opened once made.
  */
 export async function openDemoPreview() {
   const { workspace } = useWorkspace.getState()
   const token = generation
   if (!workspace) throw new Error('Open a workspace first.')
-  const project = await createDemoProject()
-  if (token !== generation) throw new Error('The workspace changed. Try again.')
-  useWorkspace.setState({ demoPreview: project })
+  useWorkspace.setState({ demoLoading: true })
   location.hash = '#/demo'
-  return project
+  try {
+    const project = await createDemoProject()
+    if (token !== generation) throw new Error('The workspace changed. Try again.')
+    if (location.hash === '#/demo') useWorkspace.setState({ demoPreview: project })
+    return project
+  } catch (error) {
+    if (location.hash === '#/demo') location.hash = ''
+    throw error
+  } finally {
+    if (token === generation) useWorkspace.setState({ demoLoading: false })
+  }
 }
 
 export function clearDemoPreview() {
@@ -116,7 +130,7 @@ export function closeWorkspace() {
   sync = undefined
   clearTimeout(timer)
   setImageWorkspace(undefined)
-  useWorkspace.setState({ projects: [], demoPreview: undefined, loaded: false, workspace: undefined, conflicts: [], error: '', legacyProjects: [], importing: false })
+  useWorkspace.setState({ projects: [], demoPreview: undefined, demoLoading: false, loaded: false, listed: false, workspace: undefined, conflicts: [], error: '', legacyProjects: [], importing: false })
 }
 
 export async function importBrowserProjects() {

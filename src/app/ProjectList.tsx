@@ -29,22 +29,58 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { IconButton } from '../components/controls'
 import { CloudStatus } from '../components/CloudStatus'
 import { importBrowserProjects, useWorkspace, openDemoPreview, signOut } from '../cloud/workspace'
 import { runAction, reportError } from '../cloud/notices'
-import { NoteView } from '../components/NoteView'
+import { NoteSkeleton, NoteView } from '../components/NoteView'
 import { createProject } from '../lib/notes'
 import { updateProject, useProjects } from '../lib/store'
-import type { Project } from '../lib/types'
+import type { Note, Project } from '../lib/types'
 
 const open = (id: string) => (location.hash = `#/p/${id}`)
 
+const GRID = 'grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4'
+
+type Size = Pick<Note, 'widthMm' | 'heightMm'>
+
+/**
+ * The banknotes the skeleton cards show while the projects are on their way, as projects tend to hold them: a series
+ * growing with its value, one alone, a pair, a series of four
+ */
+const SERIES: Size[][] = [
+  [{ widthMm: 120, heightMm: 62 }, { widthMm: 127, heightMm: 66 }, { widthMm: 133, heightMm: 70 }],
+  [{ widthMm: 150, heightMm: 70 }],
+  [{ widthMm: 140, heightMm: 70 }, { widthMm: 150, heightMm: 75 }],
+  [{ widthMm: 120, heightMm: 62 }, { widthMm: 127, heightMm: 65 }, { widthMm: 133, heightMm: 68 }, { widthMm: 140, heightMm: 72 }],
+]
+const SKELETON_CARDS = [0, 1, 2, 3, 2, 0, 3, 1].map((i) => SERIES[i])
+
+/** A card's thumbnail: its first four banknotes side by side, at one scale so they keep their relative sizes */
+function thumbnail<T extends Size>(notes: T[]) {
+  const shown = notes.slice(0, 4)
+  const totalWidth = shown.reduce((sum, n) => sum + n.widthMm, 0) + 6 * Math.max(0, shown.length - 1)
+  const tallest = Math.max(...shown.map((n) => n.heightMm), 1)
+  return { shown, scale: Math.min(150 / tallest, 190 / Math.max(totalWidth, 1)) }
+}
+
 export function ProjectList() {
   const projects = useProjects((s) => s.projects)
-  const { legacyProjects, importing } = useWorkspace()
+  const { legacyProjects, importing, loaded, listed } = useWorkspace()
   const [creating, setCreating] = useState(false)
+  // Copies on their way (their artwork is copied first, from the cloud where this device hasn't it): each holds the place
+  // its card will take, first in the list, with the banknotes it is copying
+  const [copying, setCopying] = useState<{ key: string; notes: Note[] }[]>([])
   const sorted = [...projects].sort((a, b) => b.updatedAt - a.updatedAt)
+  // Until the cloud has answered, a device with none of the workspace's projects can't tell none from still on their
+  // way: their cards' skeletons show rather than No projects yet (as they do while this device's copy is read)
+  const loading = !loaded || (!listed && projects.length === 0)
+  const duplicate = (project: Project) => {
+    const key = crypto.randomUUID()
+    setCopying((all) => [...all, { key, notes: project.notes }])
+    runAction(useProjects.getState().duplicate(project.id).finally(() => setCopying((all) => all.filter((copy) => copy.key !== key))))
+  }
 
   return (
     <div className="flex h-full flex-col bg-muted/40">
@@ -61,7 +97,12 @@ export function ProjectList() {
           <main className="flex min-w-0 flex-col gap-4">
             <div className="flex items-center justify-between gap-4">
               <h1 className="font-heading text-lg font-semibold">
-                Projects <span className="font-normal text-muted-foreground tabular-nums">{projects.length}</span>
+                Projects{' '}
+                {loading ? (
+                  <Skeleton className="inline-block h-4 w-3.5 rounded-sm align-[-1px]" />
+                ) : (
+                  <span className="font-normal text-muted-foreground tabular-nums">{projects.length}</span>
+                )}
               </h1>
               <div className="flex items-center gap-2">
                 <Button
@@ -98,10 +139,19 @@ export function ProjectList() {
               </div>
             )}
 
-            {sorted.length > 0 ? (
-              <ul className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+            {loading ? (
+              <ul aria-busy="true" aria-label="Loading projects" className={GRID}>
+                {SKELETON_CARDS.map((notes, i) => (
+                  <ProjectCardSkeleton key={i} notes={notes} />
+                ))}
+              </ul>
+            ) : sorted.length > 0 || copying.length > 0 ? (
+              <ul className={GRID}>
+                {copying.map((copy) => (
+                  <ProjectCardSkeleton key={copy.key} notes={copy.notes} />
+                ))}
                 {sorted.map((project) => (
-                  <ProjectCard key={project.id} project={project} />
+                  <ProjectCard key={project.id} project={project} onDuplicate={() => duplicate(project)} />
                 ))}
               </ul>
             ) : (
@@ -156,6 +206,8 @@ function AccountMenu() {
 function NewProjectDialog({ open: isOpen, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [name, setName] = useState('')
   const nameRef = useRef<HTMLInputElement>(null)
+  // A project can be added once this device's copy of the workspace has been read (a moment after it opens)
+  const loaded = useWorkspace((s) => s.loaded)
 
   return (
     <Dialog
@@ -170,6 +222,7 @@ function NewProjectDialog({ open: isOpen, onOpenChange }: { open: boolean; onOpe
           className="contents"
           onSubmit={(e) => {
             e.preventDefault()
+            if (!loaded) return
             const project = createProject(name.trim() || 'Untitled project')
             useProjects.getState().add(project)
             onOpenChange(false)
@@ -181,7 +234,7 @@ function NewProjectDialog({ open: isOpen, onOpenChange }: { open: boolean; onOpe
           </DialogHeader>
           <Input ref={nameRef} placeholder="Untitled project" value={name} onChange={(e) => setName(e.target.value)} aria-label="Project name" />
           <DialogFooter>
-            <Button type="submit">Create</Button>
+            <Button type="submit" disabled={!loaded}>Create</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -189,14 +242,40 @@ function NewProjectDialog({ open: isOpen, onOpenChange }: { open: boolean; onOpe
   )
 }
 
-function ProjectCard({ project }: { project: Project }) {
+/**
+ * A project's card while it is on its way: its banknotes as plain paper shimmering, as a banknote whose design is still
+ * loading shows, and bars for its name and count, at the card's own sizes, so the card takes its place unchanged
+ */
+function ProjectCardSkeleton({ notes }: { notes: Size[] }) {
+  const { shown, scale } = thumbnail(notes)
+  return (
+    <li aria-hidden="true" data-card-skeleton="">
+      <Card className="gap-0 rounded-lg py-0">
+        <div className="flex h-[196px] items-center justify-center bg-muted/50">
+          <div className="flex items-end gap-1.5">
+            {shown.map((note, i) => (
+              <NoteSkeleton key={i} widthMm={note.widthMm} heightMm={note.heightMm} scale={scale} />
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col px-3 py-2">
+          <div className="flex h-5 items-center">
+            <Skeleton className="h-3 w-28 rounded-sm" />
+          </div>
+          <div className="flex h-4 items-center">
+            <Skeleton className="h-2.5 w-16 rounded-sm" />
+          </div>
+        </div>
+      </Card>
+    </li>
+  )
+}
+
+function ProjectCard({ project, onDuplicate }: { project: Project; onDuplicate: () => void }) {
   const [renaming, setRenaming] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const shown = project.notes.slice(0, 4)
   // Thumbnails share one scale so the notes keep their relative sizes
-  const totalWidth = shown.reduce((sum, n) => sum + n.widthMm, 0) + 6 * Math.max(0, shown.length - 1)
-  const tallest = Math.max(...shown.map((n) => n.heightMm), 1)
-  const scale = Math.min(150 / tallest, 190 / Math.max(totalWidth, 1))
+  const { shown, scale } = thumbnail(project.notes)
 
   return (
     <li>
@@ -226,7 +305,7 @@ function ProjectCard({ project }: { project: Project }) {
           <IconButton label="Rename" onClick={() => setRenaming(true)}>
             <Pencil />
           </IconButton>
-          <IconButton label="Duplicate" onClick={() => runAction(useProjects.getState().duplicate(project.id))}>
+          <IconButton label="Duplicate" onClick={onDuplicate}>
             <Copy />
           </IconButton>
           <IconButton label="Delete" onClick={() => setDeleting(true)}>

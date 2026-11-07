@@ -143,3 +143,34 @@ html,
 body {
   overscroll-behavior: none;
 }
+
+/*
+ * Skeletons (`Skeleton`, src/components/ui/skeleton.tsx): while something is still on its way from the cloud, its place
+ * shows its shape, with a soft light sweeping across it. Fixed to the window by default, so every skeleton on screen
+ * shares one wave; inside anything that turns or zooms (a banknote) it sweeps across its own box instead (`bg-scroll`).
+ */
+@utility skeleton-sweep {
+  background-image: linear-gradient(
+    105deg,
+    transparent 42%,
+    color-mix(in oklab, var(--background) 70%, transparent) 50%,
+    transparent 58%
+  );
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-sweep 1.8s ease-in-out infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    background-image: none;
+  }
+}
+
+@keyframes skeleton-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}

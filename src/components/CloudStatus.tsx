@@ -1,16 +1,21 @@
 import { Cloud, CloudAlert, CloudUpload, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useWorkspace, retrySync, signOut, resolveConflict } from '../cloud/workspace'
 import { runAction } from '../cloud/notices'
 
 export function CloudStatus({ showWorkspace = false, isDemo = false }: { showWorkspace?: boolean; isDemo?: boolean }) {
-  const { status, error, workspace } = useWorkspace()
+  const { status, error, workspace, listed } = useWorkspace()
   const title = isDemo ? 'Temporary demo; changes are discarded when you leave' : error || (status === 'conflict' ? 'A project changed on another device' : 'Projects and artwork are saved to this workspace')
+  // Until the cloud first answers there is nothing saved or saving to tell: its place shimmers rather than say Saving…
+  const finding = !isDemo && !listed
   return <div className="flex min-w-0 items-center gap-1">
     <span className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground" role="status" title={title}>
-      {status === 'saved' ? <Cloud className="size-3.5" /> : status === 'saving' ? <CloudUpload className="size-3.5" /> : <CloudAlert className="size-3.5 text-destructive" />}
-      {isDemo ? 'Preview' : status === 'saved' ? 'Saved' : status === 'saving' ? 'Saving…' : status === 'conflict' ? 'Conflict' : 'Couldn’t save'}
+      {finding ? <Skeleton className="h-3.5 w-14 rounded-sm" /> : <>
+        {status === 'saved' ? <Cloud className="size-3.5" /> : status === 'saving' ? <CloudUpload className="size-3.5" /> : <CloudAlert className="size-3.5 text-destructive" />}
+        {isDemo ? 'Preview' : status === 'saved' ? 'Saved' : status === 'saving' ? 'Saving…' : status === 'conflict' ? 'Conflict' : 'Couldn’t save'}
+      </>}
     </span>
     {!isDemo && status === 'error' && <Button variant="ghost" size="xs" onClick={() => runAction(Promise.resolve(retrySync()))}>Retry</Button>}
     {showWorkspace && <><span className="ml-2 min-w-0 max-w-24 truncate text-xs text-muted-foreground" title={workspace}>{workspace}</span><Button variant="ghost" size="sm" onClick={() => runAction(signOut())}><LogOut />Sign out</Button></>}
